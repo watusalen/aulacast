@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AulaCast}/src",
+            "name": "Debug AulaCastTestRunner (src)",
+            "target": "AulaCastTestRunner",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AulaCastTestRunner (src)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AulaCast}/src",
+            "name": "Release AulaCastTestRunner (src)",
+            "target": "AulaCastTestRunner",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AulaCastTestRunner (src)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AulaCast}/src",
+            "name": "Debug AulaCast (src)",
+            "target": "AulaCast",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AulaCast (src)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:AulaCast}/src",
+            "name": "Release AulaCast (src)",
+            "target": "AulaCast",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AulaCast (src)"
+        }
+    ]
+}

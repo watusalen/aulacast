@@ -1,0 +1,31 @@
+# Artefatos de build do Swift Package Manager (centenas de MB, regeráveis)
+.build/
+*.o
+*.dSYM/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Configuração local do Claude Code (específica desta máquina)
+.claude/settings.local.json
+
+# Editores
+*.swp
+*.swo
+*~
+.idea/
+
+# Node (usado apenas para rodar os testes do cliente web)
+node_modules/
+npm-debug.log*

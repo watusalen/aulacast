@@ -1,0 +1,81 @@
+import Foundation
+
+/// Gerenciador com responsabilidade unica de armazenar e processar a lista de alunos e duvidas (SRP).
+public final class ClientManagerService: ObservableObject {
+    @Published public private(set) var clients: [ConnectedClient] = []
+    @Published public private(set) var handRaisedCount: Int = 0
+
+    public init() {}
+
+    /// Registra o aluno preservando o id da conexão. É esse id que o servidor usa depois
+    /// para levantar/abaixar a mão — gerar um id novo aqui faria a busca nunca casar.
+    public func addOrUpdateClient(_ client: ConnectedClient) {
+        if let index = clients.firstIndex(where: { $0.id == client.id }) {
+            clients[index].name = client.name
+            clients[index].ipAddress = client.ipAddress
+            clients[index].isHandRaised = client.isHandRaised
+        } else {
+            clients.append(client)
+        }
+        recalculateHandRaises()
+    }
+
+    public func addOrUpdateClient(name: String, ip: String = "192.168.1.X", isHandRaised: Bool) {
+        if let index = clients.firstIndex(where: { $0.name == name }) {
+            clients[index].isHandRaised = isHandRaised
+            if !ip.contains("X") {
+                clients[index].ipAddress = ip
+            }
+            recalculateHandRaises()
+        } else {
+            addOrUpdateClient(ConnectedClient(name: name, ipAddress: ip, isHandRaised: isHandRaised))
+        }
+    }
+
+    /// Remove um cliente buscando tanto por UUID (id) quanto por nome.
+    public func removeClient(id: String) {
+        if let index = clients.firstIndex(where: { $0.id == id }) {
+            clients.remove(at: index)
+        } else if let index = clients.firstIndex(where: { $0.name == id }) {
+            clients.remove(at: index)
+        }
+        recalculateHandRaises()
+    }
+
+    /// Levanta ou abaixa a mão de um aluno já conectado, identificado pela conexão.
+    /// Só o próprio aluno aciona isto (o professor apenas observa), então o nome exibido
+    /// é atualizado de passagem, caso ele tenha se identificado depois de entrar.
+    public func setHandRaised(clientId: String, displayName: String, isRaised: Bool) {
+        guard let index = clients.firstIndex(where: { $0.id == clientId }) else { return }
+
+        clients[index].isHandRaised = isRaised
+        if !displayName.isEmpty {
+            clients[index].name = displayName
+        }
+        recalculateHandRaises()
+    }
+
+    /// Registra a identificação do aluno (nome + matrícula) na entrada da aula.
+    public func identify(clientId: String, name: String, matricula: String) {
+        guard let index = clients.firstIndex(where: { $0.id == clientId }) else { return }
+        if !name.isEmpty {
+            clients[index].name = name
+        }
+        clients[index].matricula = MatriculaIFPI.normalizar(matricula)
+    }
+
+    /// Marca se a aba do aluno está visível na tela dele.
+    public func setWatching(clientId: String, isWatching: Bool) {
+        guard let index = clients.firstIndex(where: { $0.id == clientId }) else { return }
+        clients[index].isWatching = isWatching
+    }
+
+    /// Quantos alunos estão de fato com a transmissão à vista.
+    public var watchingCount: Int {
+        clients.filter { $0.isWatching }.count
+    }
+
+    private func recalculateHandRaises() {
+        handRaisedCount = clients.filter { $0.isHandRaised }.count
+    }
+}

@@ -1,0 +1,796 @@
+/* AulaCast - UI limpa, profissional, 100% offline */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #111;
+  color: #e8e8e8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid #5a9cf5;
+  outline-offset: 2px;
+}
+
+/* O atributo [hidden] do HTML perde para qualquer `display` declarado aqui.
+   Sem esta regra, os overlays (reconectando, desconectado, pausado, avisos)
+   ficam todos visíveis sobre o vídeo ao mesmo tempo. */
+[hidden] {
+  display: none !important;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
+
+/* Portaria de entrada */
+.entry-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 0%, #16181d 0%, #0b0b0c 70%);
+}
+
+.entry-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  border-radius: 14px;
+  background: #161618;
+  border: 1px solid #2a2a2e;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+
+.entry-brand {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: #5a9cf5;
+  margin-bottom: 14px;
+}
+
+.entry-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f2f2f4;
+  margin-bottom: 6px;
+}
+
+.entry-sub {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #8b8b91;
+  margin-bottom: 22px;
+}
+
+.entry-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c8c8cc;
+  margin-bottom: 6px;
+}
+
+.entry-input {
+  height: 42px;
+  font-size: 15px;
+  margin-bottom: 16px;
+}
+
+/* Matrícula em monoespaçada: o formato tem posição fixa e fica mais fácil de conferir. */
+.entry-matricula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.entry-hint {
+  font-size: 12px;
+  color: #7b7b82;
+  margin: -10px 0 18px;
+}
+
+.entry-hint b {
+  color: #9a9aa2;
+  font-weight: 600;
+}
+
+.entry-error {
+  font-size: 13px;
+  color: #ff8080;
+  background: rgba(200,50,50,.1);
+  border: 1px solid rgba(204,68,68,.4);
+  border-radius: 6px;
+  padding: 9px 11px;
+  margin-bottom: 14px;
+}
+
+.entry-input.invalid {
+  border-color: #c44;
+}
+
+/* Seletor com o pai para vencer a regra genérica `.btn`, definida mais abaixo. */
+.entry-card .btn-entry {
+  height: 46px;
+  justify-content: center;
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-size: 15px;
+}
+
+.entry-card .btn-entry:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.entry-card .btn-entry[disabled] {
+  opacity: .55;
+  cursor: progress;
+}
+
+/* Layout */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background: #1a1a1a;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.header-sep {
+  width: 1px;
+  height: 16px;
+  background: #333;
+}
+
+.prof-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.student-badge {
+  font-size: 13px;
+  color: #a8c6f5;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Menu hamburguer (mobile) */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 5px;
+  border: 1px solid #2a2a2a;
+  background: #1c1c1c;
+  cursor: pointer;
+}
+
+.menu-toggle span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: #c8c8cc;
+}
+
+/* Badge de status */
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #222;
+}
+
+.badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.badge.connected { background: rgba(40,167,69,.12); color: #5cb85c; border: 1px solid rgba(92,184,92,.45); }
+.badge.connected .dot { background: #5cb85c; }
+.badge.connecting { background: rgba(220,160,0,.1); color: #c9a500; border: 1px solid rgba(201,165,0,.4); }
+.badge.connecting .dot { background: #c9a500; }
+.badge.reconnecting { background: rgba(220,160,0,.1); color: #c9a500; border: 1px solid rgba(201,165,0,.4); }
+.badge.reconnecting .dot { background: #c9a500; animation: pulseDot 1.4s ease-in-out infinite; }
+.badge.disconnected { background: rgba(200,50,50,.1); color: #e06a6a; border: 1px solid rgba(204,68,68,.5); }
+.badge.disconnected .dot { background: #c44; }
+
+/* Conteudo principal */
+.content {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  flex: 1;
+  overflow: hidden;
+}
+
+@media (max-width: 860px) {
+  .content {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(320px, 84vw);
+    z-index: 20;
+    transform: translateX(100%);
+    transition: transform .2s ease;
+    box-shadow: -20px 0 40px rgba(0,0,0,.4);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+/* Area de video */
+.video-area {
+  display: flex;
+  background: #000;
+  position: relative;
+}
+
+.video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Preto sólido atrás do vídeo: a textura diagonal poluía as bordas do stream.
+     Ela fica só nos estados vazios, onde ajuda a indicar "sem imagem ainda". */
+  background: #0a0a0b;
+}
+
+.video-wrap:has(.placeholder:not([hidden])),
+.video-wrap:has(.reconnect-overlay:not([hidden])) {
+  background: repeating-linear-gradient(135deg, #141416 0 10px, #191a1c 10px 20px);
+}
+
+.stream {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+  position: relative;
+  z-index: 1;
+  background: #000;
+}
+
+.stream.active {
+  display: block;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.placeholder-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #888;
+}
+
+.placeholder-sub {
+  font-size: 13px;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #222;
+  border-top-color: #5a9cf5;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  margin-bottom: 16px;
+}
+
+.spinner-amber {
+  border-top-color: #c9a500;
+}
+
+/* Overlay de reconexao */
+.reconnect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: rgba(10,10,10,.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 32px;
+}
+
+.reconnect-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e8e8e8;
+}
+
+.reconnect-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #999;
+  max-width: 380px;
+}
+
+.reconnect-attempt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #c9a500;
+  margin-top: 4px;
+}
+
+/* Estado firme de desconexao */
+.disconnected-state {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: #0d0d0d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 28px;
+}
+
+.disconnected-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #c44;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: #e06a6a;
+}
+
+.disconnected-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e8e8e8;
+}
+
+.disconnected-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #999;
+  max-width: 340px;
+}
+
+.btn-retry {
+  background: #1e2c44;
+  border-color: #3a4a63;
+  color: #a8c6f5;
+  font-weight: 600;
+}
+
+.btn-retry:hover {
+  background: #24344f;
+}
+
+/* Overlay pausado */
+.paused-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: rgba(10,10,10,.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 28px;
+}
+
+.paused-icon {
+  display: flex;
+  gap: 6px;
+}
+
+.paused-icon span {
+  width: 8px;
+  height: 28px;
+  background: #e8e8e8;
+  border-radius: 2px;
+}
+
+.paused-title {
+  font-size: 19px;
+  font-weight: 600;
+  color: #e8e8e8;
+}
+
+.paused-sub {
+  font-size: 13px;
+  color: #999;
+}
+
+/* Banner de mao levantada */
+.hand-banner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  background: rgba(220,160,0,.16);
+  border: 1px solid rgba(201,165,0,.5);
+  font-size: 13px;
+  font-weight: 600;
+  color: #e8c53a;
+}
+
+.hand-banner .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9a500;
+}
+
+
+
+
+
+.controls {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(18,18,20,.82);
+  border: 1px solid rgba(255,255,255,.1);
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: .55;
+  transition: opacity .18s ease;
+  z-index: 5;
+}
+
+/* Some de vista durante a aula e reaparece ao aproximar o mouse ou navegar por teclado,
+   para não tampar o conteúdo que o professor está explicando. */
+.video-wrap:hover .controls,
+.controls:focus-within {
+  opacity: 1;
+}
+
+/* Botoes */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #3a3a3a;
+  background: #202022;
+  color: #e2e2e4;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+
+.btn:hover {
+  background: #2a2a2d;
+  border-color: #4a4a4a;
+}
+
+.btn:active {
+  transform: scale(.97);
+}
+
+.btn-send {
+  background: #1e2c44;
+  border-color: #3a4a63;
+  color: #a8c6f5;
+  font-weight: 600;
+}
+
+.btn-send:hover {
+  background: #24344f;
+}
+
+.btn-hand {
+  background: #1f1f1f;
+  border-color: #3a3a3a;
+}
+
+.hand-dot {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9a500;
+}
+
+.btn-hand.raised {
+  background: rgba(220,160,0,.18);
+  border-color: #c9a500;
+  color: #e8c53a;
+  font-weight: 700;
+}
+
+.btn-hand.raised .hand-dot {
+  display: inline-block;
+}
+
+/* Botão de tela cheia no canto inferior direito do vídeo (padrão YouTube). */
+.fs-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 18px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(18,18,20,.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
+  color: #e2e2e4;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .18s ease, background .15s, transform .1s;
+}
+
+.video-wrap:hover .fs-btn,
+.fs-btn:focus-visible {
+  opacity: 1;
+}
+
+.fs-btn:hover {
+  background: rgba(38,38,42,.9);
+}
+
+.fs-btn:active {
+  transform: scale(.94);
+}
+
+/* Alterna entre os ícones de entrar e sair de tela cheia. */
+.fs-icon-exit { display: none; }
+.video-wrap:fullscreen .fs-icon-enter { display: none; }
+.video-wrap:fullscreen .fs-icon-exit { display: inline; }
+
+/* Em tela cheia o vídeo ocupa tudo e os controles continuam por cima. */
+.video-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+/* Sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: #1a1a1a;
+  border-left: 1px solid #2a2a2a;
+  overflow: hidden;
+}
+
+/* Título fixo do painel: substitui a barra de abas, que não fazia mais sentido
+   com o chat sendo a única seção. */
+.sidebar-head {
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8e8e8;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+
+
+
+
+
+/* Paineis */
+.panel {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel.active {
+  display: flex;
+}
+
+/* Mensagens */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 88%;
+  word-break: break-word;
+}
+
+.chat-bubble.own {
+  align-self: flex-end;
+  padding-left: 0;
+  border-left: none;
+  border-right: 2px solid #5a9cf5;
+  padding-right: 10px;
+  align-items: flex-end;
+}
+
+.chat-bubble.prof {
+  padding-left: 10px;
+  border-left: 2px solid #5a9cf5;
+}
+
+.chat-author {
+  font-size: 12px;
+  font-weight: 600;
+  color: #777;
+}
+
+.chat-bubble.prof .chat-author {
+  color: #8fb6ef;
+}
+
+.chat-text {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #e8e8e8;
+}
+
+.sys-msg {
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #888;
+  padding: 10px 12px;
+  background: #151515;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+}
+
+/* Formulario de chat */
+.chat-form {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.input {
+  width: 100%;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  background: #111;
+  color: #e8e8e8;
+  font-size: 15px;
+}
+
+.input:focus {
+  border-color: #5a9cf5;
+  outline: none;
+}
+
+.input::placeholder {
+  color: #666;
+}
+
+.send-row {
+  display: flex;
+  gap: 8px;
+}
+
+.input-msg {
+  flex: 1;
+}
+
+
+
+
+
+
+
+
+
