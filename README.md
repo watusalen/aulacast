@@ -95,6 +95,82 @@ docs/                       # Especificação, casos de uso, histórias de usuá
 - **Servidor HTTP/WebSocket próprio** (`Network.framework`) — mantém o projeto sem dependências externas, alinhado ao uso offline.
 - **Validação da matrícula também no servidor** — o registro de presença não pode confiar apenas na checagem do navegador.
 
+## Sobre o desenvolvimento: pair programming com IA
+
+Este projeto foi construído **inteiramente em pair programming com IA** (Claude). Registro isso
+de forma explícita porque considero que a autoria precisa ser transparente.
+
+**Eu não domino Swift.** Não escrevi o código deste repositório. O que fiz foi:
+
+- levantar os requisitos a partir de um problema real das aulas no IFPI;
+- decidir o que o sistema deveria fazer e o que ficaria de fora;
+- **validar cada entrega rodando o aplicativo** e apontando o que estava errado;
+- rejeitar o que não servia — muitas vezes.
+
+A IA fez a implementação: arquitetura, código Swift, cliente web, testes e documentação.
+
+### Crítica honesta: as telas geradas por IA
+
+A parte visual foi, de longe, a mais frustrante do processo, e é onde a limitação apareceu com
+mais clareza.
+
+**A IA não enxerga o que produz.** Ela escreve código de interface sem ter noção do resultado.
+As primeiras telas saíram genéricas — aquele visual de template que não diz nada. Precisei
+repetir "está feio" várias vezes, com pouca evolução, porque *"feio"* não é acionável para quem
+não vê a tela. A situação só destravou quando passei a fornecer **mockups concretos** e a IA
+passou a **tirar prints do app e olhar o próprio resultado**. Aí sim ela convergiu.
+
+Alguns defeitos visuais reais que passaram e precisaram ser apontados por mim:
+
+| O que aconteceu | Causa |
+| :--- | :--- |
+| Botões de ícone viraram "pílulas" verticais estreitas | Largura aplicada por fora do estilo; o fundo encolhia até o ícone |
+| Cards da grade se sobrepunham e não redimensionavam | A imagem em `scaledToFill` ditava o tamanho do card, estourando a coluna |
+| A tela inteira rolava, em vez de só a lista de fontes | `ScrollView` no lugar errado da hierarquia |
+| O card "Abra um app para vê-lo aqui" aparecia duplicado | Lógica preenchia a linha toda em vez de mostrar um convite só |
+| A Central de Controle aparecia como "janela" para transmitir | Faltava filtrar por camada de janela |
+| O VS Code sumia da lista | A API omitia janelas em outra Área de Trabalho |
+| Textos sem acento ("Levantar a Mao", "transmissao") | Descuido de digitação num projeto em português |
+
+E o pior de todos: **a tela do aluno ficou completamente quebrada** por um detalhe de CSS. Os
+avisos de "Reconectando", "Sem conexão" e "Transmissão pausada" apareciam todos ao mesmo tempo
+sobre o vídeo, porque o atributo `hidden` do HTML perde para um `display: flex` declarado na
+folha de estilos. A IA escreveu o bug e não percebeu — quem percebeu fui eu, abrindo a página.
+
+### O que funcionou muito bem
+
+O contraste com a parte visual é grande. Em **lógica, protocolo e concorrência**, a IA foi
+consistentemente melhor do que eu conseguiria avaliar sozinho:
+
+- Encontrou uma **falha de segurança real** que já estava no código: a verificação contra
+  *directory traversal* usava comparação de prefixo de texto, então uma pasta irmã de nome
+  parecido (`web-assets-secreto`) passava como se fosse interna.
+- Diagnosticou por que a transmissão travava: o contexto de renderização estava sendo recriado
+  a cada quadro, e quadros atrasados se acumulavam sem limite.
+- Identificou que o vídeo e o chat trafegam em **conexões separadas**, e que só o chat
+  reconectava — o vídeo podia congelar para sempre enquanto a interface dizia "Conectado".
+- Descobriu que frames de WebSocket colados no mesmo pacote TCP faziam mensagens de chat
+  serem **descartadas em silêncio**.
+
+Em vários desses casos ela **reverteu a própria correção para provar que o teste falhava sem
+ela** — o que uma vez revelou que um teste que eu teria aceitado não cobria nada de fato.
+
+### O que aprendi sobre o processo
+
+1. **A IA também erra, e erra calada.** Vários bugs corrigidos aqui foram introduzidos por ela
+   em rodadas anteriores. A diferença é a velocidade com que são encontrados e corrigidos
+   quando você aponta o sintoma.
+2. **Validar rodando é indispensável.** Quase todo defeito relevante apareceu ao usar o app, não
+   ao ler o código. Sem alguém abrindo a tela e dizendo "isto está errado", o projeto teria
+   ficado bonito no papel e quebrado na prática.
+3. **Feedback vago custa caro.** "Está feio" gerou rodadas perdidas. "O botão de pausa está
+   virando uma pílula estreita" foi resolvido de primeira.
+4. **Não saber Swift deixou de ser a barreira** — mas saber o que eu queria, e conseguir
+   reconhecer quando não era aquilo, passou a ser a habilidade que realmente importa.
+
+É um processo assombroso, e por isso mesmo exige mais atenção, não menos: a facilidade de gerar
+código funcional esconde o quanto ainda depende de alguém disposto a conferir cada entrega.
+
 ## Licença
 
 Projeto acadêmico desenvolvido no IFPI — Campus Piripiri.
