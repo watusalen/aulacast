@@ -64,46 +64,57 @@ Cenário: Transmitir apenas uma janela específica
 #### Critérios de Aceite (Gherkin):
 ```gherkin
 Cenário: Aluno sinaliza dúvida ao professor
-  Dado que estou assistindo à aula pelo player web
+  Dado que já me identifiquei e estou assistindo à aula pelo player web
   Quando eu clicar no botão "Levantar a Mão"
-  E digitar meu nome "Carlos - Computador 04"
-  Então o botão deve mudar de estado para "Mão Levantada (Clique para cancelar)"
-  E o professor deve receber uma notificação visual e um indicador sonoro suave no Mac.
+  Então o botão deve mudar de estado para "Mão Levantada"
+  E devo ver o aviso "O professor foi avisado da sua dúvida"
+  E meu nome deve aparecer destacado na lista do professor, com o ícone de mão levantada.
 ```
 
 ---
 
-### US-05: Gestão de Dúvidas pelo Professor
+### US-05: Acompanhar Dúvidas da Turma
 - **Como** Professor,
-- **Eu quero** ver um painel com a lista de alunos que levantaram a mão,
-- **Para que** eu possa atendê-los em ordem e marcar como resolvido conforme for tirando as dúvidas.
+- **Eu quero** ver a lista dos alunos que estão com a mão levantada,
+- **Para que** eu saiba quem precisa de ajuda sem interromper minha explicação.
 
 #### Critérios de Aceite (Gherkin):
 ```gherkin
-Cenário: Atender dúvida de aluno
+Cenário: Visualizar dúvidas pendentes
   Dado que os alunos "Carlos" e "Mariana" levantaram a mão
   Quando eu olhar para a barra de menus do macOS ou para o app AulaCast
-  Então devo ver o contador "(2) Dúvidas"
-  E ao clicar no botão de "OK" ao lado do nome de "Carlos"
-  O contador deve decrementar para "(1) Dúvida"
-  E o estado da tela do aluno Carlos deve voltar ao normal.
+  Então devo ver o contador "Dúvidas: 2"
+  E as linhas de "Carlos" e "Mariana" devem exibir o ícone de mão levantada
+  E o contador só deve baixar quando o próprio aluno abaixar a mão.
 ```
+
+> **Decisão de projeto:** seguindo o modelo do Google Meet, o professor não abaixa a mão de ninguém — quem levantou é quem cancela. Isso evita que o professor "resolva" uma dúvida que o aluno ainda considera aberta.
 
 ---
 
-### US-06: Compartilhamento Rápido de Códigos e Arquivos
-- **Como** Professor de Programação,
-- **Eu quero** arrastar um arquivo `.swift` ou `.pdf` para o aplicativo,
-- **Para que** todos os alunos na sala recebam o arquivo instantaneamente sem eu precisar usar pendrive ou e-mail.
+### US-06: Identificação do Aluno na Entrada
+- **Como** Professor,
+- **Eu quero** que cada aluno informe nome e matrícula antes de assistir,
+- **Para que** eu saiba exatamente quem está na aula, e não apenas quantos dispositivos se conectaram.
 
 #### Critérios de Aceite (Gherkin):
 ```gherkin
-Cenário: Enviar arquivo para a turma
-  Dado que a transmissão está ativa
-  Quando eu arrastar o arquivo "ExemploLoop.swift" para a área de arquivos do AulaCast no Mac
-  Então o arquivo deve ser disponibilizado na rede local imediatamente
-  E uma notificação "Novo arquivo compartilhado: ExemploLoop.swift" deve aparecer na tela de todos os alunos
-  E o botão de download deve permitir baixar o arquivo intacto.
+Cenário: Aluno entra na aula identificado
+  Dado que eu abri o endereço da sala no navegador
+  Quando eu informar o nome "Ana Beatriz Sousa" e a matrícula "2021234TADS5678"
+  Então a transmissão deve ser liberada para mim
+  E meu nome e matrícula devem aparecer na lista do professor.
+
+Cenário: Matrícula fora do padrão do IFPI
+  Dado que eu estou na tela de entrada
+  Quando eu informar a matrícula "2021234INFO5678"
+  Então devo ver a mensagem "A matrícula deve ter TADS na posição 8"
+  E a transmissão não deve ser liberada.
+
+Cenário: Validação também no servidor
+  Dado que um cliente adulterado envia uma matrícula inválida direto pelo WebSocket
+  Então o servidor deve recusar a identificação
+  E o aluno não deve aparecer na lista de presença.
 ```
 
 ---
@@ -116,7 +127,7 @@ Cenário: Enviar arquivo para a turma
 #### Critérios de Aceite (Gherkin):
 ```gherkin
 Cenário: Envio de mensagem no chat local
-  Dado que a aba de chat está aberta na página web do aluno
+  Dado que estou com a página da aula aberta
   Quando eu digitar "Professor, qual a diferença entre let e var?" e pressionar Enter
   Então a mensagem deve aparecer no histórico do chat com o meu nome e horário
   E todos os demais alunos e o professor devem ver essa mensagem em tempo real.
@@ -136,4 +147,38 @@ Cenário: Reconexão transparente após queda de sinal
   Quando a conexão for restaurada pelo sistema operacional
   Então o cliente Web deve reconectar automaticamente ao servidor do professor em até 2 segundos
   E o vídeo deve voltar a ser reproduzido sem necessidade de dar F5 na página.
+
+Cenário: Queda longa da rede
+  Dado que a rede do laboratório ficou fora por mais de um minuto
+  Quando ela voltar
+  Então o cliente deve continuar tentando em intervalos maiores e reconectar sozinho
+  E a turma não deve precisar recarregar a página.
+
+Cenário: Queda apenas do fluxo de vídeo
+  Dado que o vídeo trafega numa conexão separada do canal de mensagens
+  Quando somente a conexão de vídeo cair, permanecendo o WebSocket ativo
+  Então o cliente deve restabelecer o vídeo por conta própria
+  E a imagem não deve ficar congelada indicando "Conectado".
+```
+
+---
+
+### US-09: Saber Quem Está Realmente Assistindo
+- **Como** Professor,
+- **Eu quero** distinguir os alunos que estão com a aula à vista dos que apenas deixaram a página aberta,
+- **Para que** a lista de presença reflita quem está de fato acompanhando.
+
+#### Critérios de Aceite (Gherkin):
+```gherkin
+Cenário: Aluno sai da tela da aula
+  Dado que a aluna "Ana Beatriz" está assistindo à transmissão
+  Quando ela minimizar a janela, trocar de aba ou clicar em outro aplicativo
+  Então a linha dela deve passar a exibir o ícone de olho cortado
+  E o contador de alunos assistindo deve diminuir em 1.
+
+Cenário: Aluno retorna à aula
+  Dado que a aluna "Ana Beatriz" estava fora da tela da aula
+  Quando ela voltar para a página da transmissão
+  Então a linha dela deve voltar a exibir o ícone de olho aberto
+  E o contador de alunos assistindo deve aumentar em 1.
 ```

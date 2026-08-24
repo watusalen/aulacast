@@ -10,15 +10,15 @@ O **AulaCast** segue uma arquitetura baseada em **Host Nativo (macOS)** e **Clie
 ```mermaid
 flowchart TB
     subgraph Host["Host macOS (App do Professor)"]
-        UI["SwiftUI Dashboard & StatusItem"]
+        UI["SwiftUI Dashboard & MenuBarExtra"]
         SCK["ScreenCaptureKit Engine"]
-        VT["VideoToolbox Hardware Encoder"]
+        ENC["MJPEGFrameEncoder (CoreImage + GPU)"]
         NET["Network.framework (HTTP & WebSocket Server)"]
         MDNS["Bonjour / mDNS Advertiser"]
 
         UI --> SCK
-        SCK --> VT
-        VT --> NET
+        SCK --> ENC
+        ENC --> NET
         UI <--> NET
         NET <--> MDNS
     end
@@ -40,20 +40,28 @@ flowchart TB
 - **Responsabilidade:** Capturar o conteúdo dos monitores ou janelas selecionadas com alta taxa de quadros e baixo overhead de memória.
 - **Implementação:** Utiliza `SCStream` e `SCStreamOutput`. Envia amostras de vídeo (`CMSampleBuffer`) para o codificador.
 
-#### 2.2. `StreamEncoder` (`VideoToolbox`)
-- **Responsabilidade:** Converter `CMSampleBuffer` em quadros compactados (H.264 ou JPEG de alta velocidade) acelerados por GPU.
-- **Saída:** Buffers de bytes de vídeo codificados prontos para envio em rede.
+#### 2.2. `MJPEGFrameEncoder` (`CoreImage`)
+- **Responsabilidade:** Converter `CMSampleBuffer` em quadros JPEG.
+- **Decisões relevantes:**
+  - O `CIContext` é criado **uma única vez** e reaproveitado. Recriá-lo por quadro compila shaders e aloca recursos de GPU repetidamente, inviabilizando o tempo real.
+  - Quadros novos são **descartados enquanto o anterior ainda está sendo codificado**. Sem isso, uma codificação mais lenta que a captura enfileira quadros e o atraso cresce indefinidamente.
+- **Saída:** `Data` com o JPEG pronto para envio.
 
 #### 2.3. `HTTPServer` & `WebSocketServer` (`Network.framework`)
 - **Responsabilidade:** Subir o ouvinte (`NWListener`) na porta 8080.
 - **Rotas HTTP:**
   - `GET /`: Entrega o arquivo `index.html` (Player do Aluno).
-  - `GET /styles.css`: CSS responsivo com tema escuro.
-  - `GET /app.js`: Script do cliente WebSocket.
-  - `GET /files/:filename`: Endpoint de download dos arquivos compartilhados.
-- **Rota WebSocket (`/ws`):** Gerencia conexões ativas, retransmissão de vídeo em tempo real (broadcast) e troca de mensagens JSON (chat, dúvidas, arquivos).
+  - `GET /styles.css` e `GET /js/*`: Recursos estáticos do cliente.
+  - `GET /stream`: Fluxo de vídeo em `multipart/x-mixed-replace` (MJPEG), consumido por uma tag `<img>`.
+- **Rota WebSocket (`/ws`):** Gerencia conexões ativas e a troca de mensagens JSON (identificação, presença, chat e dúvidas).
 
-#### 2.4. `BonjourAdvertiser`
+> **O vídeo não trafega pelo WebSocket.** São duas conexões independentes: MJPEG sobre HTTP para a imagem e WebSocket para as mensagens. Por isso o cliente vigia as duas separadamente — uma pode cair enquanto a outra segue viva.
+
+#### 2.4. `WebSocketFrameDecoder`
+- **Responsabilidade:** Decodificar frames RFC 6455, isoladamente do gerenciamento de conexões.
+- **Motivo de existir separado:** o TCP não respeita fronteira de mensagem. Uma leitura pode trazer dois frames colados ou metade de um, então o decodificador mantém um buffer próprio por conexão. Tratar cada leitura como exatamente um frame descartava mensagens em silêncio.
+
+#### 2.5. `BonjourAdvertiser`
 - **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` na porta 8080 usando `NWListener.service`. Permite que aparelhos da rede identifiquem a sala sem precisar saber o IP exato do professor.
 
 ---
@@ -63,33 +71,56 @@ flowchart TB
 Toda a comunicação interativa utiliza o protocolo WebSocket na rota `/ws`. As mensagens trafegam em formato JSON estruturado com o campo `type`.
 
 #### 3.1. Mensagem de Boas-Vindas (`CONNECTED`)
-Enviada pelo servidor assim que o aluno conecta.
+Enviada pelo servidor assim que o aluno conecta. O campo `payload` só acompanha a mensagem
+quando o professor preencheu o próprio nome nas configurações — o aplicativo é usado por
+qualquer professor e não assume o nome da conta do Mac.
 ```json
 {
   "type": "CONNECTED",
   "payload": {
-    "sessionId": "client-8f3a",
-    "profName": "Prof. Matusalém Alves",
-    "roomTitle": "Laboratório de Programação I",
-    "connectedClients": 18
+    "profName": "Ana Souza"
   }
 }
 ```
 
-#### 3.2. Notificação de "Levantar a Mão" (`RAISE_HAND`)
-Enviada pelo aluno para pedir ajuda.
+#### 3.2. Identificação do Aluno (`IDENTIFY`)
+Enviada pelo aluno na entrada. O servidor **revalida** a matrícula e responde
+`IDENTIFY_ACCEPTED` ou `IDENTIFY_REJECTED`.
+```json
+{
+  "type": "IDENTIFY",
+  "payload": {
+    "name": "Ana Beatriz Sousa",
+    "matricula": "2021234TADS5678"
+  }
+}
+```
+
+#### 3.3. Presença na Tela (`PRESENCE`)
+Enviada pelo aluno quando a aula deixa de estar (ou volta a estar) à vista.
+```json
+{
+  "type": "PRESENCE",
+  "payload": {
+    "visible": false
+  }
+}
+```
+
+#### 3.4. Notificação de "Levantar a Mão" (`RAISE_HAND`)
+Enviada pelo aluno para pedir ajuda. O servidor identifica o aluno pela **conexão**, e não
+pelo nome enviado, para que trocar de nome não crie um segundo registro na lista.
 ```json
 {
   "type": "RAISE_HAND",
   "payload": {
-    "studentName": "Carlos - PC 04",
-    "timestamp": 1787268500000,
+    "studentName": "Ana Beatriz Sousa",
     "active": true
   }
 }
 ```
 
-#### 3.3. Envio de Mensagem de Chat (`CHAT_SEND`)
+#### 3.5. Envio de Mensagem de Chat (`CHAT_SEND`)
 ```json
 {
   "type": "CHAT_SEND",
@@ -100,16 +131,14 @@ Enviada pelo aluno para pedir ajuda.
 }
 ```
 
-#### 3.4. Anúncio de Novo Arquivo (`FILE_ANNOUNCEMENT`)
-Enviada pelo servidor quando o professor compartilha um arquivo.
+#### 3.6. Estado da Transmissão
+Mensagens de controle enviadas pelo servidor: `STREAM_PAUSED` e `STREAM_RESUMED` quando o
+professor congela ou retoma a imagem, e `STREAM_ENDED` quando a captura termina.
 ```json
 {
-  "type": "FILE_ANNOUNCEMENT",
+  "type": "STREAM_ENDED",
   "payload": {
-    "fileId": "file-102",
-    "filename": "ExemploEstruturas.swift",
-    "fileSize": "14.2 KB",
-    "downloadUrl": "/files/ExemploEstruturas.swift"
+    "reason": "O monitor utilizado foi desconectado."
   }
 }
 ```
@@ -127,68 +156,123 @@ sequenceDiagram
     actor Aluno as Aluno (Web Client)
 
     Prof->>App: Clica em "Iniciar Transmissão"
-    App->>App: Inicializa ScreenCaptureKit & VideoToolbox
+    App->>App: Inicializa ScreenCaptureKit e o codificador MJPEG
     App->>Net: Sobe NWListener HTTP/WebSocket na porta 8080
     App->>Net: Ativa Anúncio Bonjour (_aulacast._tcp)
-    
+
     Aluno->>Net: Acessa http://192.168.1.15:8080 no navegador
-    Net-->>Aluno: Retorna index.html, styles.css, app.js
+    Net-->>Aluno: Retorna index.html, styles.css e os módulos JS
+    Aluno->>Aluno: Preenche nome e matrícula na tela de entrada
     Aluno->>Net: Conecta ao WebSocket /ws
     Net-->>App: Novo cliente conectado (+1)
-    App-->>Prof: Atualiza contador na Barra de Menus
-    
-    loop Stream de Vídeo (30 FPS)
-        App->>Net: Transmite quadro de vídeo codificado
-        Net->>Aluno: Envia frame via WebSocket
+    Aluno->>Net: IDENTIFY (nome + matrícula)
+    Net->>Net: Revalida a matrícula no servidor
+    Net-->>Aluno: IDENTIFY_ACCEPTED
+    Net-->>App: Registra o aluno na lista de presença
+
+    Aluno->>Net: GET /stream (conexão HTTP separada)
+    loop Enquanto houver quadros novos
+        App->>Net: Entrega quadro JPEG
+        Net->>Aluno: Envia parte do multipart MJPEG
     end
 
-    Aluno->>Net: Clica em "Levantar a Mão" (WS RAISE_HAND)
+    Aluno->>Net: PRESENCE (visible: false) ao sair da tela
+    Net-->>App: Marca o aluno como "não assistindo"
+
+    Aluno->>Net: RAISE_HAND (active: true)
     Net->>App: Encaminha notificação de dúvida
-    App-->>Prof: Toca alerta e exibe "Carlos levantou a mão"
+    App-->>Prof: Exibe o ícone de mão levantada e incrementa o contador
 ```
 
 ---
 
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
+O projeto usa **Swift Package Manager** (sem `.xcodeproj`), com o núcleo isolado na biblioteca
+`AulaCastCore` para que a suíte de testes possa exercitá-lo sem abrir a interface.
+
 ```text
-Workspace/Swift/AulaCast/
+AulaCast/
 ├── docs/
 │   ├── 01-especificacao-requisitos.md
 │   ├── 02-casos-de-uso.md
 │   ├── 03-historias-de-usuario.md
 │   └── 04-arquitetura-e-design.md
+├── README.md
 └── src/
-    ├── AulaCast.xcodeproj
-    ├── AulaCast/
-    │   ├── App/
-    │   │   ├── AulaCastApp.swift
-    │   │   └── AppDelegate.swift
-    │   ├── Core/
-    │   │   ├── Capture/
-    │   │   │   ├── ScreenRecorder.swift
-    │   │   │   └── StreamFrame.swift
-    │   │   ├── Encoder/
-    │   │   │   └── VideoEncoder.swift
-    │   │   └── Network/
-    │   │       ├── HTTPServer.swift
-    │   │       ├── WebSocketServer.swift
-    │   │       └── BonjourAdvertiser.swift
-    │   ├── Models/
-    │   │   ├── ConnectedClient.swift
-    │   │   ├── ChatMessage.swift
-    │   │   └── SharedFile.swift
-    │   ├── ViewModels/
-    │   │   └── MainViewModel.swift
-    │   ├── Views/
-    │   │   ├── MainDashboardView.swift
-    │   │   ├── SourceSelectionView.swift
-    │   │   ├── StudentListView.swift
-    │   │   ├── ChatView.swift
-    │   │   └── Components/
-    │   │       └── StatusBadge.swift
-    │   └── WebAssets/
-    │       ├── index.html
-    │       ├── styles.css
-    │       └── app.js
+    ├── Package.swift
+    ├── sources/
+    │   ├── aulacast-app/
+    │   │   └── AulaCastApp.swift              # Executável AulaCast
+    │   └── aulacast/                          # Biblioteca AulaCastCore
+    │       ├── core/                          # Protocolos (DIP/ISP)
+    │       │   ├── ScreenCaptureProtocol.swift
+    │       │   ├── VideoEncoderProtocol.swift
+    │       │   ├── NetworkServerProtocol.swift
+    │       │   ├── FrameReceiverProtocol.swift
+    │       │   └── EventObserverProtocols.swift
+    │       ├── models/
+    │       │   ├── ConnectedClient.swift      # Inclui matrícula e presença
+    │       │   ├── ChatMessage.swift
+    │       │   ├── DisplaySource.swift
+    │       │   └── VideoResolution.swift
+    │       ├── managers/
+    │       │   ├── ClientManagerService.swift
+    │       │   └── ChatManagerService.swift
+    │       ├── services/
+    │       │   ├── ScreenCaptureService.swift
+    │       │   ├── ShareableContentFetcher.swift
+    │       │   ├── ScreenRecordingPermissionService.swift
+    │       │   ├── MJPEGFrameEncoder.swift
+    │       │   ├── MJPEGStreamerService.swift
+    │       │   ├── NetworkListenerService.swift
+    │       │   ├── WebSocketHandlerService.swift
+    │       │   ├── WebSocketFrameDecoder.swift
+    │       │   ├── StaticFileProviderService.swift
+    │       │   ├── BonjourAdvertiserService.swift
+    │       │   └── WebAssetsPathResolver.swift
+    │       ├── viewmodels/
+    │       │   └── MainViewModel.swift
+    │       └── views/
+    │           ├── MainDashboardView.swift
+    │           ├── SourcePickerView.swift
+    │           ├── StudentListView.swift
+    │           ├── ChatPanelView.swift
+    │           ├── MenuBarView.swift
+    │           ├── QualitySettingsView.swift
+    │           ├── ScreenRecordingPermissionView.swift
+    │           └── AulaCastPalette.swift      # Tokens de cor e controles próprios
+    ├── tests/aulacast-tests/
+    │   ├── TestRunnerMain.swift               # Suíte executável
+    │   └── TestDoubles.swift                  # Dublês de captura, rede e codificação
+    └── web-assets/                            # Cliente do aluno (sem framework)
+        ├── index.html
+        ├── styles.css
+        ├── apple-touch-icon.png
+        ├── js/
+        │   ├── main.js
+        │   ├── entry-gate.js                  # Tela de identificação
+        │   ├── student-identity.js            # Validação da matrícula
+        │   ├── presence-reporter.js           # Presença na tela
+        │   ├── socket-client.js               # WebSocket + reconexão
+        │   ├── stream-watchdog.js             # Vigia o MJPEG
+        │   ├── chat-manager.js
+        │   ├── ui-controller.js
+        │   └── config.js
+        └── tests/                             # Testes com node --test
 ```
+
+---
+
+### 6. Estratégia de Testes
+
+Duas suítes, ambas **sem dependências externas** — coerente com o requisito de operação offline.
+
+| Suíte | Como executar | Cobre |
+| :--- | :--- | :--- |
+| Swift | `swift run AulaCastTestRunner` | Domínio (turma, chat, matrícula, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
+| Cliente Web | `node --test "tests/*.test.js"` | Validação de matrícula, política de reconexão, watchdog do vídeo e relato de presença |
+
+Os testes de integração sobem um `NetworkListenerService` real numa porta de teste e se
+conectam como um aluno de verdade, em vez de simular as camadas — vários defeitos deste
+projeto viviam justamente nas emendas entre camadas, invisíveis a testes isolados.
