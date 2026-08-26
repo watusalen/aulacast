@@ -1,10 +1,20 @@
 import SwiftUI
 
+/// Transporta a imagem capturada entre tarefas. No macOS 13 o `NSImage` ainda não é
+/// `Sendable`; aqui a instância é criada dentro da própria tarefa e entregue a um único
+/// destino, sem ser compartilhada, então a travessia é segura.
+private struct ImagemCapturada: @unchecked Sendable {
+    let imagem: NSImage?
+}
+
 /// Janela principal de controle do aplicativo AulaCast para macOS.
 public struct MainDashboardView: View {
     @EnvironmentObject private var viewModel: MainViewModel
     @State private var showPermissionPrompt = false
     @State private var showQualitySettings = false
+
+    /// Prévia da fonte escolhida enquanto a transmissão ainda não começou.
+    @State private var previewDaFonteSelecionada: NSImage?
 
     public init() {}
 
@@ -29,6 +39,10 @@ public struct MainDashboardView: View {
             if !ScreenRecordingPermissionService.isGranted() {
                 showPermissionPrompt = true
             }
+        }
+        // Reinicia a atualização quando a fonte muda ou quando a transmissão começa/para.
+        .task(id: chavePrevia) {
+            await manterPreviaDaFonteAtualizada()
         }
         .sheet(isPresented: $showQualitySettings) {
             QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
@@ -111,16 +125,22 @@ public struct MainDashboardView: View {
         )
     }
 
-    /// Mostra o último frame realmente transmitido — não é um placeholder falso.
+    /// Enquanto transmite, mostra o último quadro realmente enviado aos alunos.
+    /// Antes de transmitir, mostra a fonte selecionada, para o professor conferir
+    /// se escolheu a tela certa sem precisar entrar no ar para descobrir.
+    private var imagemDaPrevia: NSImage? {
+        viewModel.isStreaming ? viewModel.latestPreviewImage : previewDaFonteSelecionada
+    }
+
     private var livePreviewCard: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 11)
                 .fill(AC.windowBG)
 
-            if let preview = viewModel.latestPreviewImage {
+            if let preview = imagemDaPrevia {
                 Image(nsImage: preview)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
             } else {
                 VStack(spacing: 6) {
                     Text(viewModel.isStreaming ? "o que os alunos estão vendo" : "Pronto para transmitir")
@@ -289,5 +309,41 @@ public struct MainDashboardView: View {
 
     private var resolvedCaptureService: ScreenCaptureService {
         (viewModel.captureService as? ScreenCaptureService) ?? ScreenCaptureService()
+    }
+
+    /// Muda quando a fonte é trocada ou quando a transmissão começa/termina — os dois
+    /// casos exigem reiniciar (ou encerrar) a atualização da prévia.
+    private var chavePrevia: String {
+        "\(viewModel.isStreaming)-\(resolvedCaptureService.selectedSource?.id ?? "nenhuma")"
+    }
+
+    /// Atualiza a prévia da fonte a cada segundo enquanto a transmissão está parada.
+    /// Durante a transmissão isso não roda: ali a prévia vem dos quadros reais enviados
+    /// aos alunos, que é a informação que de fato importa.
+    private func manterPreviaDaFonteAtualizada() async {
+        guard !viewModel.isStreaming else {
+            previewDaFonteSelecionada = nil
+            return
+        }
+
+        let provider = SourceThumbnailProvider()
+
+        while !Task.isCancelled && !viewModel.isStreaming {
+            guard let fonte = resolvedCaptureService.selectedSource else {
+                previewDaFonteSelecionada = nil
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                continue
+            }
+
+            // A captura é feita fora da MainActor para não travar a interface.
+            let transporte = await Task.detached(priority: .utility) {
+                ImagemCapturada(imagem: provider.thumbnail(for: fonte))
+            }.value
+
+            if Task.isCancelled { return }
+            previewDaFonteSelecionada = transporte.imagem
+
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
     }
 }

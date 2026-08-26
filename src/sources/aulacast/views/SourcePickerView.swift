@@ -84,31 +84,16 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     }
 
     private func captureThumbnails() async {
+        let provider = SourceThumbnailProvider()
         var newThumbnails: [String: NSImage] = [:]
         for source in recorder.availableSources {
-            if let image = captureSourceThumbnail(source) {
+            if let image = provider.thumbnail(for: source) {
                 newThumbnails[source.id] = image
             }
         }
         await MainActor.run {
             thumbnails = newThumbnails
         }
-    }
-
-    private func captureSourceThumbnail(_ source: DisplaySource) -> NSImage? {
-        if let display = source.scDisplay {
-            guard let cgImage = CGDisplayCreateImage(display.displayID) else { return nil }
-            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        } else if let window = source.scWindow {
-            guard let cgImage = CGWindowListCreateImage(
-                .null,
-                .optionIncludingWindow,
-                window.windowID,
-                [.bestResolution, .boundsIgnoreFraming]
-            ) else { return nil }
-            return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        }
-        return nil
     }
 }
 

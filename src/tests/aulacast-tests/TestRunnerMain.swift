@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import AulaCastCore
 
 @main
@@ -28,7 +29,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 1: ClientManagerService (UC-03 & RF-11: Alunos e Levantar a Mão)
-        print("\n--- [1/9] Testes de Domínio: ClientManagerService ---")
+        print("\n--- [1/10] Testes de Domínio: ClientManagerService ---")
         let clientManager = ClientManagerService()
         
         clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50", isHandRaised: false)
@@ -136,7 +137,7 @@ struct AulaCastTestRunner {
         )
 
         // TESTE 2: ChatManagerService (UC-05 & RF-09: Chat Local Offline)
-        print("\n--- [2/9] Testes de Domínio: ChatManagerService ---")
+        print("\n--- [2/10] Testes de Domínio: ChatManagerService ---")
         let chatManager = ChatManagerService()
         
         let msg1 = ChatMessage(sender: "Mariana", text: "Dúvida no loop", isProf: false)
@@ -154,7 +155,7 @@ struct AulaCastTestRunner {
         assertTest(chatManager.messages.count == countBefore, "Mensagens vazias ou só com espaços são descartadas")
 
         // TESTE 3: Segurança do Servidor Web (StaticFileProvider)
-        print("\n--- [3/9] Testes de Segurança: StaticFileProviderService ---")
+        print("\n--- [3/10] Testes de Segurança: StaticFileProviderService ---")
         let tempAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempAssetsDir, withIntermediateDirectories: true)
         
@@ -167,7 +168,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: tempAssetsDir)
 
         // TESTE 5: Servidor de Rede Local (NetworkListenerService)
-        print("\n--- [4/9] Testes de Rede: NetworkListenerService ---")
+        print("\n--- [4/10] Testes de Rede: NetworkListenerService ---")
         let serverService = NetworkListenerService(port: 8089, webAssetsPath: FileManager.default.temporaryDirectory)
         
         assertTest(serverService.port == 8089, "Porta do servidor atribuída corretamente")
@@ -184,7 +185,7 @@ struct AulaCastTestRunner {
 
         // TESTE 5b: Directory traversal (RNF-06). A verificação antiga usava hasPrefix, que
         // casa no meio do nome da pasta: /x/web-assets-secreto passava como se fosse interno.
-        print("\n--- [5/9] Testes de Segurança: Directory Traversal ---")
+        print("\n--- [5/10] Testes de Segurança: Directory Traversal ---")
         let raizTemp = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_sec_\(UUID().uuidString)")
         let pastaPublica = raizTemp.appendingPathComponent("web-assets")
         let pastaIrma = raizTemp.appendingPathComponent("web-assets-secreto")
@@ -229,7 +230,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: raizTemp)
 
         // TESTE 6: Sondagem de apple-touch-icon do iOS/Safari (evita 404 no log do professor)
-        print("\n--- [6/9] Testes HTTP: fallback de apple-touch-icon ---")
+        print("\n--- [6/10] Testes HTTP: fallback de apple-touch-icon ---")
         let iconAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_icon_test_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: iconAssetsDir, withIntermediateDirectories: true)
 
@@ -274,7 +275,7 @@ struct AulaCastTestRunner {
         // TESTE 7: Frames WebSocket colados/partidos e comprimento absurdo.
         // O TCP não respeita fronteira de mensagem: tratar cada leitura como exatamente
         // um frame descartava mensagens de chat em silêncio.
-        print("\n--- [7/9] Testes de Protocolo: frames WebSocket ---")
+        print("\n--- [7/10] Testes de Protocolo: frames WebSocket ---")
 
         func frameDeTexto(_ texto: String) -> Data {
             let payload = Array(texto.utf8)
@@ -333,7 +334,7 @@ struct AulaCastTestRunner {
 
         // TESTE 8: WebSocket real ponta a ponta contra o servidor do app.
         // Cobre o handshake e o caminho da mão levantada depois da refatoração do decodificador.
-        print("\n--- [8/9] Testes E2E: WebSocket real ---")
+        print("\n--- [8/10] Testes E2E: WebSocket real ---")
 
         final class ColetorDeMaos: HandRaiseObserverProtocol, ClientObserverProtocol, StudentPresenceObserverProtocol, @unchecked Sendable {
             private let trava = NSLock()
@@ -458,7 +459,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 10: Matrícula do IFPI e presença na tela.
-        print("\n--- [9/9] Testes de Domínio: identificação e presença ---")
+        print("\n--- [9/10] Testes de Domínio: identificação e presença ---")
 
         assertTest(MatriculaIFPI.ehValida("2021234TADS5678"), "Matrícula no formato 202XXXXTADSXXXX é aceita")
         assertTest(MatriculaIFPI.ehValida("  2021234tads5678 "), "Minúsculas e espaços são normalizados")
@@ -497,6 +498,49 @@ struct AulaCastTestRunner {
             turma.clients.count == totalAntesDeIdentificacaoInvalida,
             "Identificação de conexão desconhecida é ignorada"
         )
+
+        // TESTE 10: Prévia local do professor.
+        // Ela mostra o último quadro realmente transmitido; se parar de atualizar, o professor
+        // perde a única confirmação visual de que os alunos estão vendo alguma coisa.
+        print("\n--- [10/10] Testes de Domínio: prévia da transmissão ---")
+
+        let vmPrevia = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser()
+        )
+
+        // JPEG real, para o NSImage conseguir decodificar de verdade.
+        let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 8, pixelsHigh: 8,
+            bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )
+        let jpegDeTeste = bitmap?.representation(using: .jpeg, properties: [:]) ?? Data()
+        assertTest(!jpegDeTeste.isEmpty, "JPEG de teste foi gerado")
+
+        assertTest(vmPrevia.latestPreviewImage == nil, "Prévia começa vazia")
+
+        vmPrevia.didReceiveEncodedFrame(data: jpegDeTeste, isKeyFrame: true)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(vmPrevia.latestPreviewImage != nil, "Quadro transmitido atualiza a prévia do professor")
+
+        // Pausado, a prévia não deve avançar — mas também não pode sumir.
+        vmPrevia.togglePause()
+        let previaAntesDaPausa = vmPrevia.latestPreviewImage
+        vmPrevia.didReceiveEncodedFrame(data: jpegDeTeste, isKeyFrame: true)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(
+            vmPrevia.latestPreviewImage === previaAntesDaPausa,
+            "Em pausa, a prévia congela no último quadro em vez de sumir"
+        )
+        vmPrevia.togglePause()
+
+        // Encerrar limpa a prévia, para não deixar imagem antiga na tela.
+        vmPrevia.stopStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(vmPrevia.latestPreviewImage == nil, "Encerrar a transmissão limpa a prévia")
 
         // SUMÁRIO FINAL
         print("\n==========================================")
