@@ -29,7 +29,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 1: ClientManagerService (UC-03 & RF-11: Alunos e Levantar a Mão)
-        print("\n--- [1/10] Testes de Domínio: ClientManagerService ---")
+        print("\n--- [1/11] Testes de Domínio: ClientManagerService ---")
         let clientManager = ClientManagerService()
         
         clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50", isHandRaised: false)
@@ -137,7 +137,7 @@ struct AulaCastTestRunner {
         )
 
         // TESTE 2: ChatManagerService (UC-05 & RF-09: Chat Local Offline)
-        print("\n--- [2/10] Testes de Domínio: ChatManagerService ---")
+        print("\n--- [2/11] Testes de Domínio: ChatManagerService ---")
         let chatManager = ChatManagerService()
         
         let msg1 = ChatMessage(sender: "Mariana", text: "Dúvida no loop", isProf: false)
@@ -155,7 +155,7 @@ struct AulaCastTestRunner {
         assertTest(chatManager.messages.count == countBefore, "Mensagens vazias ou só com espaços são descartadas")
 
         // TESTE 3: Segurança do Servidor Web (StaticFileProvider)
-        print("\n--- [3/10] Testes de Segurança: StaticFileProviderService ---")
+        print("\n--- [3/11] Testes de Segurança: StaticFileProviderService ---")
         let tempAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempAssetsDir, withIntermediateDirectories: true)
         
@@ -168,7 +168,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: tempAssetsDir)
 
         // TESTE 5: Servidor de Rede Local (NetworkListenerService)
-        print("\n--- [4/10] Testes de Rede: NetworkListenerService ---")
+        print("\n--- [4/11] Testes de Rede: NetworkListenerService ---")
         let serverService = NetworkListenerService(port: 8089, webAssetsPath: FileManager.default.temporaryDirectory)
         
         assertTest(serverService.port == 8089, "Porta do servidor atribuída corretamente")
@@ -185,7 +185,7 @@ struct AulaCastTestRunner {
 
         // TESTE 5b: Directory traversal (RNF-06). A verificação antiga usava hasPrefix, que
         // casa no meio do nome da pasta: /x/web-assets-secreto passava como se fosse interno.
-        print("\n--- [5/10] Testes de Segurança: Directory Traversal ---")
+        print("\n--- [5/11] Testes de Segurança: Directory Traversal ---")
         let raizTemp = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_sec_\(UUID().uuidString)")
         let pastaPublica = raizTemp.appendingPathComponent("web-assets")
         let pastaIrma = raizTemp.appendingPathComponent("web-assets-secreto")
@@ -230,7 +230,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: raizTemp)
 
         // TESTE 6: Sondagem de apple-touch-icon do iOS/Safari (evita 404 no log do professor)
-        print("\n--- [6/10] Testes HTTP: fallback de apple-touch-icon ---")
+        print("\n--- [6/11] Testes HTTP: fallback de apple-touch-icon ---")
         let iconAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_icon_test_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: iconAssetsDir, withIntermediateDirectories: true)
 
@@ -275,7 +275,7 @@ struct AulaCastTestRunner {
         // TESTE 7: Frames WebSocket colados/partidos e comprimento absurdo.
         // O TCP não respeita fronteira de mensagem: tratar cada leitura como exatamente
         // um frame descartava mensagens de chat em silêncio.
-        print("\n--- [7/10] Testes de Protocolo: frames WebSocket ---")
+        print("\n--- [7/11] Testes de Protocolo: frames WebSocket ---")
 
         func frameDeTexto(_ texto: String) -> Data {
             let payload = Array(texto.utf8)
@@ -334,7 +334,7 @@ struct AulaCastTestRunner {
 
         // TESTE 8: WebSocket real ponta a ponta contra o servidor do app.
         // Cobre o handshake e o caminho da mão levantada depois da refatoração do decodificador.
-        print("\n--- [8/10] Testes E2E: WebSocket real ---")
+        print("\n--- [8/11] Testes E2E: WebSocket real ---")
 
         final class ColetorDeMaos: HandRaiseObserverProtocol, ClientObserverProtocol, StudentPresenceObserverProtocol, @unchecked Sendable {
             private let trava = NSLock()
@@ -459,7 +459,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 10: Matrícula do IFPI e presença na tela.
-        print("\n--- [9/10] Testes de Domínio: identificação e presença ---")
+        print("\n--- [9/11] Testes de Domínio: identificação e presença ---")
 
         assertTest(MatriculaIFPI.ehValida("2021234TADS5678"), "Matrícula no formato 202XXXXTADSXXXX é aceita")
         assertTest(MatriculaIFPI.ehValida("  2021234tads5678 "), "Minúsculas e espaços são normalizados")
@@ -502,7 +502,7 @@ struct AulaCastTestRunner {
         // TESTE 10: Prévia local do professor.
         // Ela mostra o último quadro realmente transmitido; se parar de atualizar, o professor
         // perde a única confirmação visual de que os alunos estão vendo alguma coisa.
-        print("\n--- [10/10] Testes de Domínio: prévia da transmissão ---")
+        print("\n--- [10/11] Testes de Domínio: prévia da transmissão ---")
 
         let vmPrevia = MainViewModel(
             captureService: FakeCaptureService(),
@@ -541,6 +541,98 @@ struct AulaCastTestRunner {
         vmPrevia.stopStream()
         try? await Task.sleep(nanoseconds: 300_000_000)
         assertTest(vmPrevia.latestPreviewImage == nil, "Encerrar a transmissão limpa a prévia")
+
+        // TESTE 11: Privacidade do chat com dois alunos conectados de verdade.
+        // Mensagem de aluno é conversa reservada com o professor; só as do professor
+        // circulam pela turma.
+        print("\n--- [11/11] Testes E2E: privacidade do chat ---")
+
+        final class ColetorDeChat: ChatObserverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _recebidas: [ChatMessage] = []
+            var recebidas: [ChatMessage] { trava.lock(); defer { trava.unlock() }; return _recebidas }
+            func didReceiveChatMessage(_ message: ChatMessage) {
+                trava.lock(); _recebidas.append(message); trava.unlock()
+            }
+        }
+
+        let coletorChat = ColetorDeChat()
+        let servidorChat = NetworkListenerService(port: 8101, webAssetsPath: FileManager.default.temporaryDirectory)
+        servidorChat.chatObserver = coletorChat
+
+        do {
+            try servidorChat.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let alunoA = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8101/ws")!)
+            let alunoB = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8101/ws")!)
+            alunoA.resume()
+            alunoB.resume()
+
+            _ = try? await alunoA.receive() // CONNECTED
+            _ = try? await alunoB.receive() // CONNECTED
+
+            /// Guarda a primeira mensagem que chegar numa conexão.
+            /// Só um `receive` fica pendente por socket: encadear vários deixa o anterior na
+            /// fila e a chamada seguinte espera para sempre (foi o que travou esta suíte).
+            final class CaixaDeEscuta: @unchecked Sendable {
+                private let trava = NSLock()
+                private var _texto: String?
+                var texto: String? { trava.lock(); defer { trava.unlock() }; return _texto }
+                func guardar(_ t: String) { trava.lock(); if _texto == nil { _texto = t }; trava.unlock() }
+            }
+
+            // O colega fica escutando desde antes da mensagem do aluno A.
+            let escutaDoColega = CaixaDeEscuta()
+            Task {
+                if case .string(let texto)? = try? await alunoB.receive() {
+                    escutaDoColega.guardar(texto)
+                }
+            }
+
+            // Aluno A escreve para o professor.
+            try? await alunoA.send(.string("{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Ana\",\"text\":\"Nao estou enxergando\"}}"))
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            assertTest(coletorChat.recebidas.count == 1, "Mensagem do aluno chega ao professor")
+            assertTest(coletorChat.recebidas.first?.text == "Nao estou enxergando", "Texto preservado no app do professor")
+
+            // O próprio autor recebe de volta, para ver o que escreveu.
+            var ecoParaAutor = false
+            if case .string(let texto)? = try? await alunoA.receive(), texto.contains("Nao estou enxergando") {
+                ecoParaAutor = true
+            }
+            assertTest(ecoParaAutor, "O autor recebe a própria mensagem de volta")
+
+            // Tempo de rede real antes de concluir que nada chegou ao colega.
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            assertTest(
+                escutaDoColega.texto == nil,
+                "Mensagem de aluno NÃO chega aos colegas (recebido: \(escutaDoColega.texto ?? "nada"))"
+            )
+
+            // Já a mensagem do professor vai para todo mundo — inclusive para o colega,
+            // cuja escuta continua pendente e agora deve ser satisfeita.
+            servidorChat.broadcastChatMessage(
+                ChatMessage(sender: "Ana Souza", text: "Vou aumentar a fonte", isProf: true)
+            )
+
+            var professorChegouEmA = false
+            if case .string(let t)? = try? await alunoA.receive(), t.contains("Vou aumentar a fonte") {
+                professorChegouEmA = true
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            let professorChegouEmB = escutaDoColega.texto?.contains("Vou aumentar a fonte") ?? false
+
+            assertTest(professorChegouEmA, "Mensagem do professor chega a quem escreveu")
+            assertTest(professorChegouEmB, "Mensagem do professor chega também ao colega")
+
+            alunoA.cancel(with: .goingAway, reason: nil)
+            alunoB.cancel(with: .goingAway, reason: nil)
+            servidorChat.stop()
+        } catch {
+            assertTest(false, "Falha no teste de privacidade do chat: \(error.localizedDescription)")
+        }
 
         // SUMÁRIO FINAL
         print("\n==========================================")

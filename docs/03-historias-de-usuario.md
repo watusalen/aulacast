@@ -129,8 +129,13 @@ Cenário: Validação também no servidor
 Cenário: Envio de mensagem no chat local
   Dado que estou com a página da aula aberta
   Quando eu digitar "Professor, qual a diferença entre let e var?" e pressionar Enter
-  Então a mensagem deve aparecer no histórico do chat com o meu nome e horário
-  E todos os demais alunos e o professor devem ver essa mensagem em tempo real.
+  Então a mensagem deve aparecer no meu próprio histórico
+  E o professor deve recebê-la no aplicativo dele
+  E nenhum colega deve ver essa mensagem.
+
+Cenário: Resposta do professor
+  Dado que o professor respondeu no chat do aplicativo
+  Então todos os alunos conectados devem ver a resposta.
 ```
 
 ---

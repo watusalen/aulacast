@@ -121,6 +121,8 @@ pelo nome enviado, para que trocar de nome não crie um segundo registro na list
 ```
 
 #### 3.5. Envio de Mensagem de Chat (`CHAT_SEND`)
+Mensagem de aluno vai ao professor e retorna **somente ao autor**. Já a mensagem do professor
+é retransmitida a todos. O servidor é quem impõe essa separação — o cliente não decide.
 ```json
 {
   "type": "CHAT_SEND",

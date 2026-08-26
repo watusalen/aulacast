@@ -82,8 +82,8 @@ public final class WebSocketHandlerService {
         return true
     }
 
-    /// Transmite uma mensagem de chat para todos os clientes web conectados
-    public func broadcastChatMessage(_ message: ChatMessage) {
+    /// Serializa uma mensagem de chat no formato esperado pelo cliente web.
+    private func chatMessageJSON(_ message: ChatMessage) -> String? {
         let jsonDict: [String: Any] = [
             "type": "CHAT_MESSAGE",
             "payload": [
@@ -93,8 +93,14 @@ public final class WebSocketHandlerService {
             ]
         ]
 
-        guard let data = try? JSONSerialization.data(withJSONObject: jsonDict),
-              let jsonString = String(data: data, encoding: .utf8) else { return }
+        guard let data = try? JSONSerialization.data(withJSONObject: jsonDict) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Transmite uma mensagem de chat para todos os clientes web conectados.
+    /// Usado apenas para mensagens do professor — as dos alunos não circulam pela turma.
+    public func broadcastChatMessage(_ message: ChatMessage) {
+        guard let jsonString = chatMessageJSON(message) else { return }
 
         lock.lock()
         let connections = Array(activeConnections.values)
@@ -103,6 +109,13 @@ public final class WebSocketHandlerService {
         for conn in connections {
             sendTextFrame(connection: conn, text: jsonString)
         }
+    }
+
+    /// Devolve a mensagem apenas para quem a enviou, para que o aluno veja o próprio texto
+    /// no histórico sem que ele chegue aos colegas.
+    private func sendChatMessage(_ message: ChatMessage, to connection: NWConnection) {
+        guard let jsonString = chatMessageJSON(message) else { return }
+        sendTextFrame(connection: connection, text: jsonString)
     }
 
     /// Transmite uma mensagem de controle para todos os clientes web conectados.
@@ -267,8 +280,12 @@ public final class WebSocketHandlerService {
             let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmedText.isEmpty {
                 let chatMsg = ChatMessage(sender: sender, text: trimmedText, isProf: false)
+
+                // A mensagem do aluno é privada com o professor: vai para o app do professor
+                // e volta apenas para quem escreveu. Retransmiti-la à turma transformava o
+                // chat em conversa paralela durante a aula.
                 chatObserver?.didReceiveChatMessage(chatMsg)
-                broadcastChatMessage(chatMsg)
+                sendChatMessage(chatMsg, to: connection)
             }
 
         case "IDENTIFY":

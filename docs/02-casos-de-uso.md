@@ -69,12 +69,18 @@
 ### UC-04: Enviar Mensagens no Chat Local
 - **Ator Principal:** Aluno / Professor
 - **Pré-condição:** Transmissão ativa (UC-01 e UC-02).
-- **Fluxo Principal:**
-  1. O aluno usa o painel de chat, sempre visível ao lado da transmissão.
+- **Fluxo Principal (aluno escreve):**
+  1. O aluno usa o painel de conversa, sempre visível ao lado da transmissão.
   2. Digita uma mensagem de texto e pressiona Enter.
-  3. O evento WebSocket `CHAT_MESSAGE` envia a mensagem para o servidor nativo no Mac.
-  4. O servidor registra a mensagem no histórico da sessão e retransmite (broadcast) para todos os clientes conectados.
-  5. A mensagem é renderizada instantaneamente nos chats de todos os alunos e no app do professor.
+  3. O cliente envia `CHAT_SEND` ao servidor no Mac.
+  4. O servidor entrega a mensagem **ao app do professor** e a devolve **apenas ao autor**,
+     para que ele veja o próprio texto no histórico.
+- **Fluxo Principal (professor responde):**
+  1. O professor escreve no painel de chat do aplicativo.
+  2. O servidor retransmite a mensagem para **todos** os alunos conectados.
+- **Regra de negócio:** a conversa do aluno é **reservada com o professor**. Mensagens de aluno
+  não circulam pela turma; só as do professor são vistas por todos. Retransmiti-las a todos
+  transformava o chat em conversa paralela durante a aula.
 
 ---
 

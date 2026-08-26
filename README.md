@@ -39,7 +39,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 - Entrada identificada: o aluno informa **nome e matrícula do IFPI** antes de assistir
 - Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)
 - Levantar a mão — só o próprio aluno abaixa, como no Google Meet
-- Chat local entre a turma e o professor
+- Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros)
 - Reconexão automática do vídeo e do chat quando a rede oscila
 
 ## Requisitos
