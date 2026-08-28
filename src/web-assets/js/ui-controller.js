@@ -24,8 +24,16 @@ export class UIController {
       }
     });
 
+    this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
     this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
     this.menuToggleBtn.addEventListener('click', () => this.toggleSidebar());
+
+    // Tocar fora fecha a conversa. É o gesto que todo mundo tenta primeiro no
+    // celular; sem ele, a gaveta só fechava voltando no mesmo botão que a abriu.
+    if (this.sidebarBackdrop) {
+      this.sidebarBackdrop.addEventListener('click', () => this.closeSidebar());
+    }
   }
 
   updateState(state, attempts = 0) {
@@ -143,11 +151,19 @@ export class UIController {
   toggleSidebar() {
     const isOpen = this.sidebar.classList.toggle('open');
     this.menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
+    this.atualizarFundoDaGaveta(isOpen);
   }
 
   closeSidebar() {
     this.sidebar.classList.remove('open');
     this.menuToggleBtn.setAttribute('aria-expanded', 'false');
+    this.atualizarFundoDaGaveta(false);
+  }
+
+  atualizarFundoDaGaveta(aberta) {
+    if (!this.sidebarBackdrop) return;
+    this.sidebarBackdrop.hidden = !aberta;
+    this.sidebarBackdrop.classList.toggle('visible', aberta);
   }
 
   toggleFullscreen() {

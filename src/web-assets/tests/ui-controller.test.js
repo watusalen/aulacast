@@ -59,7 +59,8 @@ function montarDomFalso() {
     fullscreenBtn: criarElemento(),
     sidebar: criarElemento(),
     menuToggleBtn: criarElemento(),
-    studentBadge: criarElemento()
+    studentBadge: criarElemento(),
+    sidebarBackdrop: criarElemento()
   };
 
   globalThis.document = { getElementById: (id) => elementos[id] ?? null };
@@ -115,6 +116,25 @@ test('Aula que volta também apaga o aviso de pausa', () => {
 
   ui.showStreaming();
   assert.strictEqual(elementos.pausedOverlay.hidden, true);
+
+  ui.streamWatchdog.stop();
+});
+
+test('A conversa aberta no celular fecha ao tocar fora', () => {
+  const ui = novoController();
+
+  ui.toggleSidebar();
+  assert.ok(elementos.sidebar.classList.contains('open'), 'a gaveta abre');
+  assert.strictEqual(elementos.sidebarBackdrop.hidden, false, 'o fundo aparece junto');
+  assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'true');
+
+  // É o gesto que todo mundo tenta primeiro; sem ele a gaveta só fechava pelo
+  // mesmo botão que a abriu, que fica escondido atrás dela.
+  elementos.sidebarBackdrop.dispatch('click');
+
+  assert.ok(!elementos.sidebar.classList.contains('open'), 'a gaveta fecha');
+  assert.strictEqual(elementos.sidebarBackdrop.hidden, true, 'o fundo some junto');
+  assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'false');
 
   ui.streamWatchdog.stop();
 });

@@ -90,7 +90,7 @@ public struct StudentListView: View {
                                             .foregroundColor(client.isWatching ? AC.textPrimary : AC.textSecondary)
                                             .lineLimit(1)
 
-                                        Text(client.hasIdentified ? client.matricula : client.ipAddress)
+                                        Text(client.ipAddress)
                                             .font(.system(size: 12, design: .monospaced))
                                             .foregroundColor(AC.textSecondary)
                                             .lineLimit(1)

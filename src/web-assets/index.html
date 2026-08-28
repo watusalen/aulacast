@@ -16,17 +16,11 @@
     <form id="entryForm" class="entry-card" novalidate>
       <div class="entry-brand">AulaCast</div>
       <h1 class="entry-title">Entrar na aula</h1>
-      <p class="entry-sub">Identifique-se para o professor saber quem está assistindo.</p>
+      <p class="entry-sub">Diga seu nome para o professor saber quem está assistindo.</p>
 
       <label class="entry-label" for="entryName">Seu nome completo</label>
       <input type="text" id="entryName" class="input entry-input" autocomplete="name"
              placeholder="Ex.: Ana Beatriz Sousa" required>
-
-      <label class="entry-label" for="entryMatricula">Matrícula do IFPI</label>
-      <input type="text" id="entryMatricula" class="input entry-input entry-matricula"
-             placeholder="202XXXXTADSXXXX" maxlength="15" autocomplete="off"
-             spellcheck="false" required aria-describedby="entryHint">
-      <p id="entryHint" class="entry-hint">15 caracteres, no formato 202<b>0000</b>TADS<b>0000</b>.</p>
 
       <p id="entryError" class="entry-error" role="alert" hidden></p>
 
@@ -124,6 +118,9 @@
           </form>
         </section>
       </aside>
+
+      <!-- Fundo escuro da gaveta no celular: tocar fora fecha a conversa. -->
+      <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
     </main>
   </div>
 

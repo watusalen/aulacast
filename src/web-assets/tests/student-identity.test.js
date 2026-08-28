@@ -1,48 +1,42 @@
 import test from 'node:test';
 import assert from 'node:assert';
-import {
-  matriculaValida,
-  normalizarMatricula,
-  erroDaMatricula,
-  erroDoNome,
-  MATRICULA_TAMANHO
-} from '../js/student-identity.js';
-
-test('Matrícula no formato 202XXXXTADSXXXX é aceita', () => {
-  assert.strictEqual(MATRICULA_TAMANHO, 15);
-  assert.ok(matriculaValida('2021234TADS5678'));
-  assert.ok(matriculaValida('2020000TADS0000'));
-  assert.ok(matriculaValida('2029999TADS9999'));
-});
-
-test('Minúsculas e espaços são normalizados antes de validar', () => {
-  assert.strictEqual(normalizarMatricula('  2021234tads5678 '), '2021234TADS5678');
-  assert.ok(matriculaValida('  2021234tads5678 '));
-});
-
-test('Matrículas fora do padrão são recusadas', () => {
-  assert.ok(!matriculaValida(''), 'vazia');
-  assert.ok(!matriculaValida('2021234TADS567'), 'curta demais');
-  assert.ok(!matriculaValida('2021234TADS56789'), 'longa demais');
-  assert.ok(!matriculaValida('1991234TADS5678'), 'nao comeca com 202');
-  assert.ok(!matriculaValida('2021234INFO5678'), 'curso errado');
-  assert.ok(!matriculaValida('202ABCDTADS5678'), 'letras onde deveria ter numero');
-  assert.ok(!matriculaValida('2021234TADSABCD'), 'letras no bloco final');
-  assert.ok(!matriculaValida('2021234TADS567X'), 'digito invalido no fim');
-});
-
-test('A mensagem de erro aponta o problema específico', () => {
-  assert.match(erroDaMatricula(''), /Informe/);
-  assert.match(erroDaMatricula('2021234TADS567'), /15 caracteres/);
-  assert.match(erroDaMatricula('1991234TADS5678'), /começar com 202/);
-  assert.match(erroDaMatricula('2021234INFO5678'), /TADS/);
-  assert.match(erroDaMatricula('202ABCDTADS5678'), /números/);
-  assert.strictEqual(erroDaMatricula('2021234TADS5678'), null, 'valida nao gera erro');
-});
+import { erroDoNome, normalizarNome, salvarIdentidade, carregarIdentidade } from '../js/student-identity.js';
 
 test('Nome é obrigatório e não pode ser trivial', () => {
-  assert.match(erroDoNome(''), /Informe/);
-  assert.match(erroDoNome('   '), /Informe/);
+  assert.strictEqual(erroDoNome('Ana Beatriz'), null);
+  assert.match(erroDoNome(''), /Informe seu nome/);
+  assert.match(erroDoNome('   '), /Informe seu nome/);
   assert.match(erroDoNome('A'), /curto/);
-  assert.strictEqual(erroDoNome('Ana Beatriz Sousa'), null);
+});
+
+test('Espaços sobrando no nome não viram nomes diferentes na lista do professor', () => {
+  assert.strictEqual(normalizarNome('  Ana   Beatriz  '), 'Ana Beatriz');
+  assert.strictEqual(normalizarNome(undefined), '');
+});
+
+test('A identidade sobrevive a recarregar a página', () => {
+  const guardado = {};
+  globalThis.sessionStorage = {
+    getItem: (k) => (k in guardado ? guardado[k] : null),
+    setItem: (k, v) => { guardado[k] = v; }
+  };
+
+  salvarIdentidade({ name: 'Ana Beatriz' });
+  assert.deepStrictEqual(carregarIdentidade(), { name: 'Ana Beatriz' });
+});
+
+test('Identidade guardada sem nome válido é descartada', () => {
+  const guardado = { 'aulacast.identidade': JSON.stringify({ name: '' }) };
+  globalThis.sessionStorage = {
+    getItem: (k) => (k in guardado ? guardado[k] : null),
+    setItem: (k, v) => { guardado[k] = v; }
+  };
+
+  assert.strictEqual(carregarIdentidade(), null);
+});
+
+test('Sem sessionStorage disponível, a aula não quebra', () => {
+  delete globalThis.sessionStorage;
+  assert.doesNotThrow(() => salvarIdentidade({ name: 'Ana' }));
+  assert.strictEqual(carregarIdentidade(), null);
 });

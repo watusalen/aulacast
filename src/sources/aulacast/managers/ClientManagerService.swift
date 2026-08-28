@@ -58,13 +58,12 @@ public final class ClientManagerService: ObservableObject {
         recalculateHandRaises()
     }
 
-    /// Registra a identificação do aluno (nome + matrícula) na entrada da aula.
-    public func identify(clientId: String, name: String, matricula: String) {
+    /// Registra o nome que o aluno informou na entrada da aula.
+    public func identify(clientId: String, name: String) {
         guard let index = clients.firstIndex(where: { $0.id == clientId }) else { return }
-        if !name.isEmpty {
-            clients[index].name = name
-        }
-        clients[index].matricula = MatriculaIFPI.normalizar(matricula)
+        guard !name.isEmpty else { return }
+        clients[index].name = name
+        clients[index].hasIdentified = true
     }
 
     /// Marca se a aba do aluno está visível na tela dele.

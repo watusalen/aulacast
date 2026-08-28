@@ -351,9 +351,9 @@ extension MainViewModel: HandRaiseObserverProtocol {
 
 // MARK: - StudentPresenceObserverProtocol
 extension MainViewModel: StudentPresenceObserverProtocol {
-    public nonisolated func didIdentifyStudent(clientId: String, name: String, matricula: String) {
+    public nonisolated func didIdentifyStudent(clientId: String, name: String) {
         Task { @MainActor in
-            self.clientManager.identify(clientId: clientId, name: name, matricula: matricula)
+            self.clientManager.identify(clientId: clientId, name: name)
         }
     }
 

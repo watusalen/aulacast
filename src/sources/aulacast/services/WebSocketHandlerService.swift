@@ -312,21 +312,16 @@ public final class WebSocketHandlerService {
         case "IDENTIFY":
             let nome = (payloadDict?["name"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let matricula = (payloadDict?["matricula"] as? String) ?? ""
 
             // Revalida no servidor: confiar só na checagem do navegador deixaria a lista
-            // de presença aceitar qualquer coisa vinda de um cliente adulterado.
-            guard !nome.isEmpty, MatriculaIFPI.ehValida(matricula) else {
-                let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"Nome ou matrícula inválidos.\"}}"
+            // da turma aceitar qualquer coisa vinda de um cliente adulterado.
+            guard nome.count >= 2 else {
+                let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"Informe seu nome para entrar na aula.\"}}"
                 sendTextFrame(connection: connection, text: recusaJSON)
                 return
             }
 
-            presenceObserver?.didIdentifyStudent(
-                clientId: clientId,
-                name: nome,
-                matricula: MatriculaIFPI.normalizar(matricula)
-            )
+            presenceObserver?.didIdentifyStudent(clientId: clientId, name: nome)
             sendTextFrame(connection: connection, text: "{\"type\":\"IDENTIFY_ACCEPTED\"}")
 
         case "PRESENCE":

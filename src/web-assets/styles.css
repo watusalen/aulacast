@@ -10,9 +10,14 @@ body {
   background: #111;
   color: #e8e8e8;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* 100vh no celular inclui a barra do navegador: o rodapé do layout (onde ficam o campo
+     de mensagem e os controles) ficava escondido embaixo dela. `dvh` acompanha a barra
+     aparecendo e sumindo; o `vh` fica de reserva para navegador antigo. */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
 .sr-only {
@@ -99,24 +104,6 @@ body {
   margin-bottom: 16px;
 }
 
-/* Matrícula em monoespaçada: o formato tem posição fixa e fica mais fácil de conferir. */
-.entry-matricula {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.entry-hint {
-  font-size: 12px;
-  color: #7b7b82;
-  margin: -10px 0 18px;
-}
-
-.entry-hint b {
-  color: #9a9aa2;
-  font-weight: 600;
-}
-
 .entry-error {
   font-size: 13px;
   color: #ff8080;
@@ -156,6 +143,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
 }
 
 /* Header */
@@ -163,7 +151,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 10px 20px;
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   background: #1a1a1a;
   border-bottom: 1px solid #2a2a2a;
 }
@@ -263,6 +254,23 @@ body {
   overflow: hidden;
 }
 
+/* ------------------------------------------------------------------
+   Responsivo
+   ------------------------------------------------------------------
+   O aluno entra de onde estiver: notebook do laboratório, tablet, celular
+   na mão, e às vezes celular deitado. A régua abaixo vai do mais largo
+   para o mais estreito, e o último bloco trata de toque em vez de tamanho.
+   ------------------------------------------------------------------ */
+
+/* Tela média: a conversa encolhe, mas continua ao lado do vídeo. */
+@media (max-width: 1100px) {
+  .content {
+    grid-template-columns: 1fr 280px;
+  }
+}
+
+/* A conversa vira gaveta: abaixo disto ela roubaria largura demais do vídeo,
+   que é o que o aluno veio ver. */
 @media (max-width: 860px) {
   .content {
     grid-template-columns: 1fr;
@@ -277,15 +285,185 @@ body {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(320px, 84vw);
+    width: min(340px, 88vw);
     z-index: 20;
     transform: translateX(100%);
     transition: transform .2s ease;
     box-shadow: -20px 0 40px rgba(0,0,0,.4);
+    padding-right: env(safe-area-inset-right);
   }
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  /* Fundo escuro atrás da gaveta: sem ele, o aluno abre a conversa e não
+     descobre como fechar — tocar fora é o gesto que todo mundo tenta. */
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(0,0,0,.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s ease;
+  }
+
+  .sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Celular em pé. */
+@media (max-width: 600px) {
+  .header {
+    padding: 8px 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  /* Sobra espaço para o nome do aluno e o status, que é o que muda e importa. */
+  .header-sep,
+  .prof-label {
+    display: none;
+  }
+
+  .logo {
+    font-size: 15px;
+  }
+
+  .student-badge {
+    max-width: 40vw;
+  }
+
+  .badge {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+
+  /* Campo com menos de 16px faz o iPhone dar zoom sozinho ao focar, e a página
+     fica torta até o aluno pinçar de volta. */
+  .input {
+    font-size: 16px;
+    height: 44px;
+  }
+
+  .entry-card {
+    padding: 24px 20px;
+  }
+
+  .entry-title {
+    font-size: 21px;
+  }
+
+  .entry-input {
+    height: 46px;
+    font-size: 16px;
+  }
+
+  .messages {
+    padding: 12px;
+  }
+
+  .chat-bubble {
+    max-width: 92%;
+  }
+
+  .chat-form {
+    padding: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .sidebar-head {
+    padding: 14px;
+  }
+
+  /* Dedo não é ponteiro: alvo pequeno demais vira erro de toque. */
+  .btn {
+    min-height: 44px;
+  }
+
+  .controls {
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+
+  .fs-btn {
+    right: 12px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: 44px;
+    height: 44px;
+  }
+
+  .hand-banner {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    font-size: 12px;
+    padding: 7px 11px;
+  }
+
+  .reconnect-title,
+  .disconnected-title,
+  .paused-title {
+    font-size: 17px;
+  }
+
+  .reconnect-overlay,
+  .disconnected-state,
+  .paused-overlay {
+    padding: 20px;
+  }
+}
+
+/* Celular deitado: sobra pouquíssima altura, e o vídeo é a prioridade.
+   Aqui o cabeçalho encolhe ao mínimo para não comer a imagem. */
+@media (max-height: 460px) and (orientation: landscape) {
+  .header {
+    padding: 4px 12px;
+  }
+
+  .logo {
+    font-size: 14px;
+  }
+
+  .entry-gate {
+    padding: 12px;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .entry-card {
+    padding: 18px 20px;
+  }
+
+  .entry-sub {
+    margin-bottom: 14px;
+  }
+
+  .spinner {
+    width: 26px;
+    height: 26px;
+    margin-bottom: 10px;
+  }
+
+  .controls {
+    bottom: 10px;
+  }
+
+  .fs-btn {
+    bottom: 10px;
+  }
+}
+
+/* Toque em vez de mouse.
+   Os controles do vídeo ficam apagados e só acendem no `:hover` — gesto que não
+   existe em tela de toque. Sem isto, no celular eles vivem meio invisíveis e o
+   aluno não acha o botão de levantar a mão nem o de tela cheia. */
+@media (hover: none) {
+  .controls,
+  .fs-btn {
+    opacity: 1;
   }
 }
 

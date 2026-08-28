@@ -267,18 +267,6 @@ public struct MainDashboardView: View {
 
     private var addressCard: some View {
         HStack(spacing: 14) {
-            // Quem tem celular aponta a câmera e entra, sem digitar endereço nem porta.
-            // Quem está no computador continua tendo o endereço escrito ao lado.
-            if let qr = QRCodeGenerator.imagem(para: viewModel.serverURLString, lado: 96) {
-                Image(nsImage: qr)
-                    .interpolation(.none)
-                    .resizable()
-                    .frame(width: 96, height: 96)
-                    .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
-                    .help("Aponte a câmera do celular para entrar na aula")
-            }
-
             VStack(alignment: .leading, spacing: 2) {
                 Text("Endereço dos alunos na rede local")
                     .font(.system(size: 12))
@@ -288,9 +276,6 @@ public struct MainDashboardView: View {
                     .foregroundColor(AC.textPrimary)
                     .textSelection(.enabled)
                     .lineLimit(1)
-                Text("ou aponte a câmera do celular para o código ao lado")
-                    .font(.system(size: 11))
-                    .foregroundColor(AC.textTertiary)
             }
 
             Spacer()

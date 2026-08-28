@@ -20,8 +20,8 @@ public protocol ClientObserverProtocol: AnyObject {
 
 /// Interface segregada para identificação do aluno e presença na tela (ISP).
 public protocol StudentPresenceObserverProtocol: AnyObject {
-    /// O aluno informou nome e matrícula na entrada.
-    func didIdentifyStudent(clientId: String, name: String, matricula: String)
+    /// O aluno informou o nome na entrada.
+    func didIdentifyStudent(clientId: String, name: String)
     /// A aba do aluno passou a estar (ou deixou de estar) visível na tela dele.
     func didChangeWatching(clientId: String, isWatching: Bool)
 }

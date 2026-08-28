@@ -341,12 +341,12 @@ struct AulaCastTestRunner {
             private let trava = NSLock()
             private var _conectados: [ConnectedClient] = []
             private var _maos: [(id: String, nome: String, levantada: Bool)] = []
-            private var _identificacoes: [(id: String, nome: String, matricula: String)] = []
+            private var _identificacoes: [(id: String, nome: String)] = []
             private var _presencas: [(id: String, assistindo: Bool)] = []
 
             var conectados: [ConnectedClient] { trava.lock(); defer { trava.unlock() }; return _conectados }
             var maos: [(id: String, nome: String, levantada: Bool)] { trava.lock(); defer { trava.unlock() }; return _maos }
-            var identificacoes: [(id: String, nome: String, matricula: String)] { trava.lock(); defer { trava.unlock() }; return _identificacoes }
+            var identificacoes: [(id: String, nome: String)] { trava.lock(); defer { trava.unlock() }; return _identificacoes }
             var presencas: [(id: String, assistindo: Bool)] { trava.lock(); defer { trava.unlock() }; return _presencas }
 
             func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool) {
@@ -356,8 +356,8 @@ struct AulaCastTestRunner {
                 trava.lock(); _conectados.append(client); trava.unlock()
             }
             func didClientDisconnect(clientId: String) {}
-            func didIdentifyStudent(clientId: String, name: String, matricula: String) {
-                trava.lock(); _identificacoes.append((clientId, name, matricula)); trava.unlock()
+            func didIdentifyStudent(clientId: String, name: String) {
+                trava.lock(); _identificacoes.append((clientId, name)); trava.unlock()
             }
             func didChangeWatching(clientId: String, isWatching: Bool) {
                 trava.lock(); _presencas.append((clientId, isWatching)); trava.unlock()
@@ -408,20 +408,20 @@ struct AulaCastTestRunner {
             }
 
             // Identificação ponta a ponta pelo WebSocket real.
-            try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Ana Beatriz\",\"matricula\":\"2021234tads5678\"}}"))
+            try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Ana Beatriz\"}}"))
             let identificacaoAceita = await aguardarMensagem(contendo: "IDENTIFY_ACCEPTED")
             try? await Task.sleep(nanoseconds: 300_000_000)
 
-            assertTest(identificacaoAceita, "Servidor aceita identificação com matrícula válida")
+            assertTest(identificacaoAceita, "Servidor aceita a identificação do aluno pelo nome")
             assertTest(coletor.identificacoes.count == 1, "Identificação chega ao app do professor")
-            assertTest(coletor.identificacoes.first?.matricula == "2021234TADS5678", "Matrícula chega normalizada ao professor")
+            assertTest(coletor.identificacoes.first?.nome == "Ana Beatriz", "O nome informado chega ao professor")
 
-            // Matrícula fora do padrão precisa ser recusada pelo servidor, e não só pelo navegador.
-            try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Fraude\",\"matricula\":\"1231234INFO0000\"}}"))
+            // Nome vazio precisa ser recusado pelo servidor, e não só pelo navegador.
+            try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\" \"}}"))
             let recusou = await aguardarMensagem(contendo: "IDENTIFY_REJECTED")
             try? await Task.sleep(nanoseconds: 300_000_000)
 
-            assertTest(recusou, "Servidor recusa matrícula inválida mesmo vinda de cliente adulterado")
+            assertTest(recusou, "Servidor recusa nome vazio mesmo vindo de cliente adulterado")
             assertTest(coletor.identificacoes.count == 1, "Identificação inválida não entra na lista")
 
             // Presença: o aluno trocou de aba.
@@ -467,17 +467,8 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste E2E de WebSocket: \(error.localizedDescription)")
         }
 
-        // TESTE 10: Matrícula do IFPI e presença na tela.
+        // TESTE 10: Identificação do aluno e presença na tela.
         print("\n--- [9/12] Testes de Domínio: identificação e presença ---")
-
-        assertTest(MatriculaIFPI.ehValida("2021234TADS5678"), "Matrícula no formato 202XXXXTADSXXXX é aceita")
-        assertTest(MatriculaIFPI.ehValida("  2021234tads5678 "), "Minúsculas e espaços são normalizados")
-        assertTest(!MatriculaIFPI.ehValida("2021234TADS567"), "Matrícula curta é recusada")
-        assertTest(!MatriculaIFPI.ehValida("2021234TADS56789"), "Matrícula longa é recusada")
-        assertTest(!MatriculaIFPI.ehValida("1991234TADS5678"), "Matrícula que não começa com 202 é recusada")
-        assertTest(!MatriculaIFPI.ehValida("2021234INFO5678"), "Curso diferente de TADS é recusado")
-        assertTest(!MatriculaIFPI.ehValida("202ABCDTADS5678"), "Letras no lugar de dígitos são recusadas")
-        assertTest(!MatriculaIFPI.ehValida("2021234TADSABCD"), "Letras no bloco final são recusadas")
 
         let turma = ClientManagerService()
         let aluno = ConnectedClient(name: "Aluno-3.10", ipAddress: "192.168.3.10")
@@ -486,9 +477,8 @@ struct AulaCastTestRunner {
         assertTest(turma.clients.first?.hasIdentified == false, "Aluno começa sem identificação")
         assertTest(turma.watchingCount == 1, "Aluno recém-conectado conta como assistindo")
 
-        turma.identify(clientId: aluno.id, name: "Ana Beatriz", matricula: "2021234tads5678")
+        turma.identify(clientId: aluno.id, name: "Ana Beatriz")
         assertTest(turma.clients.first?.name == "Ana Beatriz", "Nome informado aparece na lista do professor")
-        assertTest(turma.clients.first?.matricula == "2021234TADS5678", "Matrícula é guardada normalizada")
         assertTest(turma.clients.first?.hasIdentified == true, "Aluno passa a constar como identificado")
 
         // O aluno minimizou a janela ou trocou de aba.
@@ -501,7 +491,7 @@ struct AulaCastTestRunner {
 
         // Identificação vinda de conexão desconhecida não pode criar aluno.
         let totalAntesDeIdentificacaoInvalida = turma.clients.count
-        turma.identify(clientId: "id-inexistente", name: "Fantasma", matricula: "2029999TADS9999")
+        turma.identify(clientId: "id-inexistente", name: "Fantasma")
         turma.setWatching(clientId: "id-inexistente", isWatching: false)
         assertTest(
             turma.clients.count == totalAntesDeIdentificacaoInvalida,
@@ -1344,20 +1334,6 @@ struct AulaCastTestRunner {
         assertTest(
             servidorEndereco.localIPAddress == (NetworkListenerService.enderecoLocal() ?? "127.0.0.1"),
             "O endereço do painel é consultado na hora, e não congelado na abertura"
-        )
-
-        // O QR Code é o que tira a digitação do caminho: numa turma inteira, um aluno erra
-        // um dígito do IP, outro esquece a porta, e o professor vira suporte técnico antes
-        // de começar a aula.
-        let qr = QRCodeGenerator.imagem(para: "http://192.168.0.42:8080", lado: 96)
-        assertTest(qr != nil, "O endereço da aula vira QR Code")
-        assertTest(
-            (qr?.size.width ?? 0) == 96 && (qr?.size.height ?? 0) == 96,
-            "O QR Code sai no tamanho pedido pelo painel"
-        )
-        assertTest(
-            QRCodeGenerator.imagem(para: "   ") == nil,
-            "Sem endereço, não se desenha um código que não leva a lugar nenhum"
         )
 
         // SUMÁRIO FINAL

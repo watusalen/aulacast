@@ -52,7 +52,7 @@ export class AulaCastApp {
     if (!this.identidade) return;
     this.socket.send({
       type: 'IDENTIFY',
-      payload: { name: this.identidade.name, matricula: this.identidade.matricula }
+      payload: { name: this.identidade.name }
     });
     // Reconectar cria uma conexão nova no servidor: é preciso reenviar a presença.
     this.presence.sincronizar();
