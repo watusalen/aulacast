@@ -32,17 +32,20 @@ public final class WebSocketFrameDecoder {
     enum SingleFrame: Equatable {
         case incomplete
         case invalid
-        case frame(WebSocketFrame, consumed: Int)
+        case frame(WebSocketFrame, consumed: Int, fin: Bool)
     }
 
     private var buffer = Data()
     private let maxPayloadBytes: Int
 
+    /// Mensagem partida em vários frames, sendo remontada (opcode do primeiro + bytes já lidos).
+    private var mensagemParcial: (opcode: UInt8, payload: Data)?
+
     public init(maxPayloadBytes: Int = 1 << 20) {
         self.maxPayloadBytes = maxPayloadBytes
     }
 
-    /// Acrescenta os bytes recebidos e devolve todos os frames completos disponíveis.
+    /// Acrescenta os bytes recebidos e devolve todas as mensagens completas disponíveis.
     public func consume(_ bytes: Data) -> Result {
         buffer.append(bytes)
 
@@ -53,24 +56,81 @@ public final class WebSocketFrameDecoder {
             case .incomplete:
                 return .frames(encontrados)
             case .invalid:
-                buffer.removeAll()
+                descartarTudo()
                 return .protocolViolation
-            case .frame(let frame, let consumed):
+            case .frame(let frame, let consumed, let fin):
                 buffer.removeFirst(consumed)
-                encontrados.append(frame)
+
+                switch remontar(frame, fin: fin) {
+                case .invalida:
+                    descartarTudo()
+                    return .protocolViolation
+                case .aguardando:
+                    continue
+                case .pronta(let completa):
+                    encontrados.append(completa)
+                }
             }
         }
     }
 
-    public func reset() {
+    private enum Remontagem {
+        /// Ainda faltam pedaços desta mensagem.
+        case aguardando
+        case pronta(WebSocketFrame)
+        case invalida
+    }
+
+    /// Junta as partes de uma mensagem fragmentada.
+    ///
+    /// O navegador pode partir uma mensagem grande em vários frames: o primeiro traz o
+    /// opcode e FIN=0, os seguintes vêm com opcode 0 (continuação) e só o último tem FIN=1.
+    /// Tratar cada frame como uma mensagem inteira entregava ao professor só o começo do
+    /// texto do aluno e jogava o resto fora sem aviso.
+    private func remontar(_ frame: WebSocketFrame, fin: Bool) -> Remontagem {
+        // Frames de controle (close, ping, pong) nunca são fragmentados e podem chegar no
+        // meio de uma mensagem partida, sem interferir nela.
+        if frame.opcode >= 0x8 {
+            return fin ? .pronta(frame) : .invalida
+        }
+
+        if frame.opcode == 0x0 {
+            guard var parcial = mensagemParcial else { return .invalida } // continuação órfã
+            parcial.payload.append(frame.payload)
+            guard parcial.payload.count <= maxPayloadBytes else { return .invalida }
+
+            if fin {
+                mensagemParcial = nil
+                return .pronta(WebSocketFrame(opcode: parcial.opcode, payload: parcial.payload))
+            }
+            mensagemParcial = parcial
+            return .aguardando
+        }
+
+        // Início de mensagem: não pode haver outra pela metade.
+        guard mensagemParcial == nil else { return .invalida }
+
+        if fin { return .pronta(frame) }
+        mensagemParcial = (opcode: frame.opcode, payload: frame.payload)
+        return .aguardando
+    }
+
+    private func descartarTudo() {
         buffer.removeAll()
+        mensagemParcial = nil
+    }
+
+    public func reset() {
+        descartarTudo()
     }
 
     static func parseSingleFrame(from data: Data, maxPayloadBytes: Int) -> SingleFrame {
         guard data.count >= 2 else { return .incomplete }
 
         let base = data.startIndex
-        let opcode = data[base] & 0x0F
+        let primeiroByte = data[base]
+        let fin = (primeiroByte & 0x80) != 0
+        let opcode = primeiroByte & 0x0F
         let secondByte = data[base + 1]
         let isMasked = (secondByte & 0x80) != 0
         var payloadLength = Int(secondByte & 0x7F)
@@ -112,6 +172,6 @@ public final class WebSocketFrameDecoder {
             payload = data.subdata(in: (base + offset)..<(base + offset + payloadLength))
         }
 
-        return .frame(WebSocketFrame(opcode: opcode, payload: payload), consumed: total)
+        return .frame(WebSocketFrame(opcode: opcode, payload: payload), consumed: total, fin: fin)
     }
 }

@@ -187,7 +187,27 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 extension ScreenCaptureService: SCStreamOutput, SCStreamDelegate {
     public nonisolated func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen else { return }
+
+        // O ScreenCaptureKit entrega quadros que não carregam imagem nenhuma: quando a tela
+        // do professor está parada ele manda `.idle` só para dizer "nada mudou", e manda
+        // `.blank`/`.suspended` quando a captura está bloqueada. Repassá-los fazia o
+        // codificador acordar à toa a cada um deles (e, na troca de fonte, chegar a produzir
+        // um quadro vazio para a turma). Só `.complete` traz pixels novos de verdade.
+        guard sampleBuffer.isValid, Self.temImagemNova(sampleBuffer) else { return }
+
         frameReceiver?.didReceiveSampleBuffer(sampleBuffer)
+    }
+
+    /// Na dúvida, deixa passar: se um dia o formato do anexo mudar, o pior que acontece é
+    /// voltar ao comportamento antigo — e não a aula inteira sem imagem.
+    private nonisolated static func temImagemNova(_ sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let anexos = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
+                as? [[SCStreamFrameInfo: Any]],
+              let bruto = anexos.first?[.status] as? Int,
+              let status = SCFrameStatus(rawValue: bruto) else {
+            return true
+        }
+        return status == .complete
     }
     
     public nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {

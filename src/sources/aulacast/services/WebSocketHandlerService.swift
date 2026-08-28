@@ -172,6 +172,11 @@ public final class WebSocketHandlerService {
                 )
             }
 
+            // Se o frame recebido acabou de encerrar a conexão (CLOSE ou frame malformado),
+            // não vale voltar a escutar: essa escuta falharia em seguida e o aluno seria
+            // anunciado como desconectado uma segunda vez.
+            guard self.isActive(connectionId) else { return }
+
             self.listenForFrames(
                 connection: connection,
                 clientId: clientId,
@@ -181,12 +186,24 @@ public final class WebSocketHandlerService {
         }
     }
 
+    private func isActive(_ id: ObjectIdentifier) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeConnections[id] != nil
+    }
+
+    /// Encerra o registro da conexão e avisa o professor — uma única vez.
+    ///
+    /// A mesma queda chega por dois caminhos (o frame de CLOSE e, logo depois, a falha da
+    /// escuta): avisar em ambos tirava o aluno da lista duas vezes.
     private func removeConnection(id: ObjectIdentifier, clientId: String) {
         lock.lock()
-        activeConnections.removeValue(forKey: id)
+        let estavaAtiva = activeConnections.removeValue(forKey: id) != nil
         // Sem isto, o buffer de recepção da conexão ficaria retido até o app fechar.
         decoders.removeValue(forKey: id)
         lock.unlock()
+
+        guard estavaAtiva else { return }
         clientObserver?.didClientDisconnect(clientId: clientId)
     }
 
@@ -225,7 +242,13 @@ public final class WebSocketHandlerService {
                     break
                 }
                 if frame.isPing {
-                    sendPong(connection: connection)
+                    // Ping de controle pede pong de controle com o mesmo payload (RFC 6455).
+                    // Responder com um frame de texto fazia o navegador tratar a resposta
+                    // como mensagem da aula, e o ping do proxy nunca era de fato respondido.
+                    connection.send(
+                        content: WebSocketFrameEncoder.pongFrame(payload: frame.payload),
+                        completion: .contentProcessed({ _ in })
+                    )
                 } else if frame.isText, let jsonString = String(data: frame.payload, encoding: .utf8) {
                     processClientJSON(
                         jsonString,
@@ -326,24 +349,10 @@ public final class WebSocketHandlerService {
 
     /// Envia mensagem de texto codificada em frame WebSocket (servidor -> cliente sem mascara)
     public func sendTextFrame(connection: NWConnection, text: String) {
-        let payload = Data(text.utf8)
-        var frame = Data()
-
-        // FIN + Text frame (0x81)
-        frame.append(0x81)
-
-        if payload.count <= 125 {
-            frame.append(UInt8(payload.count))
-        } else if payload.count <= 65535 {
-            frame.append(126)
-            frame.append(UInt8(payload.count >> 8))
-            frame.append(UInt8(payload.count & 0xFF))
-        } else {
-            return
-        }
-
-        frame.append(payload)
-        connection.send(content: frame, completion: .contentProcessed({ _ in }))
+        connection.send(
+            content: WebSocketFrameEncoder.textFrame(text),
+            completion: .contentProcessed({ _ in })
+        )
     }
 
     private func calculateAcceptKey(for clientKey: String) -> String {
