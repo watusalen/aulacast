@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import CoreMedia
 import AppKit
+import Network
 
 @MainActor
 public final class MainViewModel: ObservableObject {
@@ -64,6 +65,13 @@ public final class MainViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
+    /// Avisa quando a rede muda (trocar de Wi-Fi, plugar cabo, o roteador renovar o IP).
+    ///
+    /// Sem isto o endereço no painel só era recalculado ao iniciar a transmissão. O professor
+    /// que abrisse o aplicativo em casa e chegasse na escola veria o endereço de casa na tela.
+    private let monitorDeRede = NWPathMonitor()
+    private let filaDoMonitor = DispatchQueue(label: "br.com.ifpi.aulacast.rede")
+
     public init(
         captureService: any ScreenCaptureProtocol = ScreenCaptureService(),
         encoderService: VideoEncoderProtocol = MJPEGFrameEncoder(),
@@ -108,6 +116,15 @@ public final class MainViewModel: ObservableObject {
         self.serverService.isChatEnabled = self.isChatEnabled
 
         self.updateServerURL()
+
+        monitorDeRede.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in self?.updateServerURL() }
+        }
+        monitorDeRede.start(queue: filaDoMonitor)
+    }
+
+    deinit {
+        monitorDeRede.cancel()
     }
 
     public func sendProfMessage(text: String) {

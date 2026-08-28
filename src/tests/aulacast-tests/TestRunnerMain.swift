@@ -1266,6 +1266,100 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste do stream de vídeo: \(error.localizedDescription)")
         }
 
+        // TESTE 18: Qual endereço o professor passa para a turma.
+        //
+        // O painel lia o IP uma única vez, na abertura, e só olhava en0/en1. Quem abrisse o
+        // aplicativo em casa e chegasse na escola via o endereço de casa; quem usasse cabo ou
+        // adaptador USB-C (que vira en2 ou acima) via 127.0.0.1 — nenhum dos dois leva aluno
+        // a lugar nenhum, e nada na tela avisava que o número estava errado.
+        print("\n--- [18/18] Testes de Rede: endereço mostrado à turma ---")
+
+        typealias Interface = NetworkListenerService.InterfaceDeRede
+
+        // O caso da escola: Wi-Fi e um monte de interface de sistema no ar ao mesmo tempo.
+        let salaDeAula = [
+            Interface(nome: "utun0", ip: "10.8.0.2"),
+            Interface(nome: "awdl0", ip: "169.254.31.4"),
+            Interface(nome: "en0", ip: "192.168.0.42"),
+            Interface(nome: "llw0", ip: "169.254.9.9")
+        ]
+        assertTest(
+            NetworkListenerService.melhorEndereco(entre: salaDeAula, interfaceWiFi: "en0") == "192.168.0.42",
+            "Com Wi-Fi no ar, é o endereço do Wi-Fi que vai para a turma"
+        )
+
+        // VPN ligada não pode roubar a vez: o aluno não chega pelo túnel.
+        assertTest(
+            NetworkListenerService.melhorEndereco(
+                entre: [Interface(nome: "utun3", ip: "10.8.0.2"), Interface(nome: "en0", ip: "192.168.0.42")],
+                interfaceWiFi: "en0"
+            ) == "192.168.0.42",
+            "VPN ativa não vira o endereço da aula"
+        )
+
+        // Cabo de rede num adaptador USB-C: o sistema chama de en4, e antes isso virava
+        // 127.0.0.1 na tela.
+        assertTest(
+            NetworkListenerService.melhorEndereco(
+                entre: [Interface(nome: "en4", ip: "10.0.0.7")],
+                interfaceWiFi: nil
+            ) == "10.0.0.7",
+            "Cabo em adaptador (en4) é reconhecido em vez de virar 127.0.0.1"
+        )
+
+        // Nem todo Mac chama o Wi-Fi de en0 — quem diz é o sistema, não o nome.
+        assertTest(
+            NetworkListenerService.melhorEndereco(
+                entre: [Interface(nome: "en0", ip: "10.0.0.7"), Interface(nome: "en1", ip: "192.168.15.30")],
+                interfaceWiFi: "en1"
+            ) == "192.168.15.30",
+            "O Wi-Fi apontado pelo sistema ganha de en0 pelo nome"
+        )
+
+        // Endereço auto-atribuído quer dizer "não falei com o roteador": mostrar isso é pior que
+        // não mostrar nada, porque tem cara de endereço bom.
+        assertTest(
+            NetworkListenerService.melhorEndereco(
+                entre: [Interface(nome: "en0", ip: "169.254.10.1")],
+                interfaceWiFi: "en0"
+            ) == nil,
+            "Endereço auto-atribuído (169.254) não é oferecido à turma"
+        )
+
+        assertTest(
+            NetworkListenerService.melhorEndereco(entre: [], interfaceWiFi: nil) == nil,
+            "Sem interface no ar, não há endereço a mostrar"
+        )
+
+        // E o principal: o endereço é lido na hora, não guardado na abertura.
+        let servidorEndereco = NetworkListenerService(
+            port: 8105,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+        let interfacesReais = NetworkListenerService.interfacesAtivas()
+        assertTest(
+            !interfacesReais.isEmpty,
+            "A varredura enxerga as interfaces reais desta máquina (achadas: \(interfacesReais.count))"
+        )
+        assertTest(
+            servidorEndereco.localIPAddress == (NetworkListenerService.enderecoLocal() ?? "127.0.0.1"),
+            "O endereço do painel é consultado na hora, e não congelado na abertura"
+        )
+
+        // O QR Code é o que tira a digitação do caminho: numa turma inteira, um aluno erra
+        // um dígito do IP, outro esquece a porta, e o professor vira suporte técnico antes
+        // de começar a aula.
+        let qr = QRCodeGenerator.imagem(para: "http://192.168.0.42:8080", lado: 96)
+        assertTest(qr != nil, "O endereço da aula vira QR Code")
+        assertTest(
+            (qr?.size.width ?? 0) == 96 && (qr?.size.height ?? 0) == 96,
+            "O QR Code sai no tamanho pedido pelo painel"
+        )
+        assertTest(
+            QRCodeGenerator.imagem(para: "   ") == nil,
+            "Sem endereço, não se desenha um código que não leva a lugar nenhum"
+        )
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

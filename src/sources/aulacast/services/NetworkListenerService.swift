@@ -1,11 +1,22 @@
 import Foundation
 import Network
+import CoreWLAN
 
 /// Servico central de escuta de rede e orquestracao HTTP/WebSocket (SRP, DIP, LSP).
 public final class NetworkListenerService: NetworkServerProtocol {
     public private(set) var isRunning: Bool = false
     public let port: UInt16
-    public private(set) var localIPAddress: String
+
+    /// Endereço que o professor passa para a turma.
+    ///
+    /// Consultado na hora, e não guardado na abertura do aplicativo. Antes o IP era lido uma
+    /// única vez, no início: quem trocasse de rede — sair do Wi-Fi de casa e entrar no da
+    /// escola, ou o roteador renovar o endereço — continuava vendo o número antigo no painel
+    /// e passava para a turma um endereço que não levava a lugar nenhum. O servidor sempre
+    /// atendeu no endereço novo; era só o painel que mentia.
+    public var localIPAddress: String {
+        NetworkListenerService.enderecoLocal() ?? "127.0.0.1"
+    }
 
     public var isChatEnabled: Bool {
         get { webSocketHandler.isChatEnabled }
@@ -42,7 +53,6 @@ public final class NetworkListenerService: NetworkServerProtocol {
         self.staticFileProvider = StaticFileProviderService(webAssetsPath: webAssetsPath)
         self.streamerService = MJPEGStreamerService()
         self.webSocketHandler = WebSocketHandlerService()
-        self.localIPAddress = NetworkListenerService.getWiFiAddress() ?? "127.0.0.1"
     }
 
     public func start() throws {
@@ -178,26 +188,104 @@ public final class NetworkListenerService: NetworkServerProtocol {
         }
     }
 
-    public static func getWiFiAddress() -> String? {
-        var address: String?
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else { return nil }
+    /// Uma interface de rede ativa com endereço IPv4.
+    public struct InterfaceDeRede: Equatable {
+        public let nome: String
+        public let ip: String
 
-        for ptr in sequence(first: firstAddr, next: { $0.pointee.ifa_next }) {
-            let flags = Int32(ptr.pointee.ifa_flags)
-            let addr = ptr.pointee.ifa_addr.pointee
-
-            if (flags & (IFF_UP | IFF_RUNNING)) != 0 && addr.sa_family == UInt8(AF_INET) {
-                let name = String(cString: ptr.pointee.ifa_name)
-                if name == "en0" || name == "en1" {
-                    var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    if getnameinfo(ptr.pointee.ifa_addr, socklen_t(addr.sa_len), &hostname, socklen_t(hostname.count), nil, socklen_t(0), NI_NUMERICHOST) == 0 {
-                        address = String(cString: hostname)
-                    }
-                }
-            }
+        public init(nome: String, ip: String) {
+            self.nome = nome
+            self.ip = ip
         }
+    }
+
+    public static func getWiFiAddress() -> String? { enderecoLocal() }
+
+    /// Endereço que a turma digita no navegador, relido a cada consulta.
+    public static func enderecoLocal() -> String? {
+        melhorEndereco(
+            entre: interfacesAtivas(),
+            interfaceWiFi: CWWiFiClient.shared().interface()?.interfaceName
+        )
+    }
+
+    /// Escolhe qual endereço mostrar entre as interfaces ativas.
+    ///
+    /// Antes só `en0` e `en1` eram consideradas. Um cabo de rede ou um adaptador USB-C
+    /// aparece como `en2` ou acima, e nesses casos o painel mostrava `127.0.0.1` — um
+    /// endereço que não leva aluno nenhum a lugar nenhum.
+    ///
+    /// O Wi-Fi vem primeiro porque é assim que a turma entra na prática, e quem diz qual
+    /// interface é o Wi-Fi é o próprio sistema (CoreWLAN), em vez de um palpite pelo nome:
+    /// nem todo Mac chama o Wi-Fi de `en0`. Túneis de VPN (`utun`), AirDrop (`awdl`, `llw`)
+    /// e o Wi-Fi de compartilhamento (`ap1`) ficam de fora — têm IP, mas não é por eles que
+    /// a turma chega.
+    public static func melhorEndereco(
+        entre candidatos: [InterfaceDeRede],
+        interfaceWiFi: String? = nil
+    ) -> String? {
+        let uteis = candidatos.filter { candidato in
+            let nome = candidato.nome
+            guard !nome.hasPrefix("utun"), !nome.hasPrefix("awdl"), !nome.hasPrefix("llw"),
+                  !nome.hasPrefix("bridge"), nome != "ap1", nome != "lo0" else {
+                return false
+            }
+            // 169.254.x.x é o endereço que o macOS inventa quando não conseguiu falar com o
+            // roteador. Mostrá-lo é pior que não mostrar nada: tem cara de endereço bom.
+            return !candidato.ip.hasPrefix("169.254.") && !candidato.ip.isEmpty
+        }
+
+        func prioridade(_ interface: InterfaceDeRede) -> Int {
+            if let wifi = interfaceWiFi, interface.nome == wifi { return 0 }
+            if interface.nome == "en0" { return 1 }
+            if interface.nome == "en1" { return 2 }
+            return interface.nome.hasPrefix("en") ? 3 : 4
+        }
+
+        return uteis.min { esquerda, direita in
+            let (pe, pd) = (prioridade(esquerda), prioridade(direita))
+            // Empate resolvido pelo nome, para a escolha não mudar sozinha entre execuções.
+            return pe == pd ? esquerda.nome < direita.nome : pe < pd
+        }?.ip
+    }
+
+    /// Varre as interfaces do sistema em busca das que estão no ar com IPv4.
+    public static func interfacesAtivas() -> [InterfaceDeRede] {
+        var encontradas: [InterfaceDeRede] = []
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let primeira = ifaddr else { return [] }
+
+        for ptr in sequence(first: primeira, next: { $0.pointee.ifa_next }) {
+            guard let enderecoBruto = ptr.pointee.ifa_addr else { continue }
+            let flags = Int32(ptr.pointee.ifa_flags)
+            let endereco = enderecoBruto.pointee
+
+            guard (flags & IFF_UP) != 0,
+                  (flags & IFF_RUNNING) != 0,
+                  (flags & IFF_LOOPBACK) == 0,
+                  endereco.sa_family == UInt8(AF_INET) else {
+                continue
+            }
+
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(
+                enderecoBruto,
+                socklen_t(endereco.sa_len),
+                &hostname,
+                socklen_t(hostname.count),
+                nil,
+                socklen_t(0),
+                NI_NUMERICHOST
+            ) == 0 else {
+                continue
+            }
+
+            encontradas.append(
+                InterfaceDeRede(nome: String(cString: ptr.pointee.ifa_name), ip: String(cString: hostname))
+            )
+        }
+
         freeifaddrs(ifaddr)
-        return address
+        return encontradas
     }
 }
