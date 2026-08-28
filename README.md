@@ -36,7 +36,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 - Transmissão do monitor inteiro ou de uma janela específica, **trocável durante a aula** sem derrubar a transmissão
 - Qualidade ajustável ao vivo (720p/1080p, 15/30 fps)
 - Pausar a transmissão sem encerrar a sessão
-- Entrada identificada: o aluno informa **nome e matrícula do IFPI** antes de assistir
+- Entrada identificada: o aluno informa o **nome** antes de assistir
 - Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)
 - Levantar a mão — só o próprio aluno abaixa, como no Google Meet
 - Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros)
@@ -153,7 +153,7 @@ node --test "tests/*.test.js"
 src/
   sources/aulacast/         # Núcleo (AulaCastCore)
     core/                   # Protocolos — captura, rede, codificação, observadores
-    models/                 # Aluno conectado, mensagem, fonte de captura, matrícula
+    models/                 # Aluno conectado, mensagem, fonte de captura
     managers/               # Estado da turma e do chat
     services/               # ScreenCaptureKit, servidor HTTP/WebSocket, MJPEG, Bonjour
     viewmodels/             # MainViewModel
@@ -169,7 +169,7 @@ docs/                       # Especificação, casos de uso, histórias de usuá
 - **MJPEG em vez de H.264** — sem negociação nem dependência de codec no cliente; qualquer navegador exibe com uma tag `<img>`, o que sustenta o requisito de zero instalação.
 - **Sem framework no cliente** — os computadores do laboratório são modestos; JavaScript puro carrega rápido e não exige build.
 - **Servidor HTTP/WebSocket próprio** (`Network.framework`) — mantém o projeto sem dependências externas, alinhado ao uso offline.
-- **Validação da matrícula também no servidor** — o registro de presença não pode confiar apenas na checagem do navegador.
+- **Identificação revalidada no servidor** — a lista de presença não pode confiar apenas na checagem do navegador.
 
 ## Sobre o desenvolvimento: pair programming com IA
 

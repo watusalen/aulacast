@@ -94,25 +94,25 @@ Cenário: Visualizar dúvidas pendentes
 
 ### US-06: Identificação do Aluno na Entrada
 - **Como** Professor,
-- **Eu quero** que cada aluno informe nome e matrícula antes de assistir,
+- **Eu quero** que cada aluno informe o nome antes de assistir,
 - **Para que** eu saiba exatamente quem está na aula, e não apenas quantos dispositivos se conectaram.
 
 #### Critérios de Aceite (Gherkin):
 ```gherkin
 Cenário: Aluno entra na aula identificado
   Dado que eu abri o endereço da sala no navegador
-  Quando eu informar o nome "Ana Beatriz Sousa" e a matrícula "2021234TADS5678"
+  Quando eu informar o nome "Ana Beatriz Sousa"
   Então a transmissão deve ser liberada para mim
-  E meu nome e matrícula devem aparecer na lista do professor.
+  E meu nome deve aparecer na lista do professor.
 
-Cenário: Matrícula fora do padrão do IFPI
+Cenário: Nome não preenchido
   Dado que eu estou na tela de entrada
-  Quando eu informar a matrícula "2021234INFO5678"
-  Então devo ver a mensagem "A matrícula deve ter TADS na posição 8"
+  Quando eu enviar o formulário com o campo vazio
+  Então devo ver a mensagem "Informe seu nome"
   E a transmissão não deve ser liberada.
 
 Cenário: Validação também no servidor
-  Dado que um cliente adulterado envia uma matrícula inválida direto pelo WebSocket
+  Dado que um cliente adulterado envia um IDENTIFY sem nome direto pelo WebSocket
   Então o servidor deve recusar a identificação
   E o aluno não deve aparecer na lista de presença.
 ```

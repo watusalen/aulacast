@@ -101,16 +101,16 @@
 - **Pré-condição:** O aluno abriu o endereço da sala no navegador (UC-02, passo 3).
 - **Fluxo Principal:**
   1. O sistema exibe a tela de entrada, cobrindo a aula.
-  2. O aluno informa o **nome completo** e a **matrícula do IFPI** no formato `202XXXXTADSXXXX`.
-  3. O cliente valida o formato e sinaliza o erro específico quando houver (tamanho, prefixo, curso ou dígitos).
+  2. O aluno informa o **nome completo**.
+  3. O cliente valida o preenchimento e sinaliza o erro específico quando houver (campo vazio ou nome curto demais).
   4. Ao enviar, o cliente transmite `IDENTIFY` pelo WebSocket.
-  5. O servidor **revalida a matrícula** e responde `IDENTIFY_ACCEPTED`.
+  5. O servidor **revalida o nome** e responde `IDENTIFY_ACCEPTED`.
   6. A tela de entrada é liberada e o aluno passa a ver a transmissão.
-  7. O nome e a matrícula aparecem na lista de presença do professor.
+  7. O nome aparece na lista de presença do professor.
 - **Fluxos Alternativos:**
   - *FA-01 (Retorno na mesma sessão):* Se o aluno recarregar a página, a identificação guardada na sessão é reaproveitada e ele entra direto.
 - **Exceções:**
-  - *EX-01 (Matrícula fora do padrão):* O cliente impede o envio e explica o que está errado.
+  - *EX-01 (Nome não preenchido):* O cliente impede o envio e explica o que está errado.
   - *EX-02 (Cliente adulterado):* Se um `IDENTIFY` inválido chegar ao servidor sem passar pelo formulário, ele responde `IDENTIFY_REJECTED` e o aluno não entra na lista de presença.
 - **Pós-condição:** O aluno está identificado e visível na lista de presença.
 

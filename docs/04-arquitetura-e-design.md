@@ -84,14 +84,13 @@ liberado e só descobriria o bloqueio ao ver o próprio texto sumir.
 ```
 
 #### 3.2. Identificação do Aluno (`IDENTIFY`)
-Enviada pelo aluno na entrada. O servidor **revalida** a matrícula e responde
+Enviada pelo aluno na entrada. O servidor **revalida** o nome e responde
 `IDENTIFY_ACCEPTED` ou `IDENTIFY_REJECTED`.
 ```json
 {
   "type": "IDENTIFY",
   "payload": {
-    "name": "Ana Beatriz Sousa",
-    "matricula": "2021234TADS5678"
+    "name": "Ana Beatriz Sousa"
   }
 }
 ```
@@ -179,11 +178,11 @@ sequenceDiagram
 
     Aluno->>Net: Acessa http://192.168.1.15:8080 no navegador
     Net-->>Aluno: Retorna index.html, styles.css e os módulos JS
-    Aluno->>Aluno: Preenche nome e matrícula na tela de entrada
+    Aluno->>Aluno: Preenche o nome na tela de entrada
     Aluno->>Net: Conecta ao WebSocket /ws
     Net-->>App: Novo cliente conectado (+1)
-    Aluno->>Net: IDENTIFY (nome + matrícula)
-    Net->>Net: Revalida a matrícula no servidor
+    Aluno->>Net: IDENTIFY (nome)
+    Net->>Net: Revalida o nome no servidor
     Net-->>Aluno: IDENTIFY_ACCEPTED
     Net-->>App: Registra o aluno na lista de presença
 
@@ -229,7 +228,7 @@ AulaCast/
     │       │   ├── FrameReceiverProtocol.swift
     │       │   └── EventObserverProtocols.swift
     │       ├── models/
-    │       │   ├── ConnectedClient.swift      # Inclui matrícula e presença
+    │       │   ├── ConnectedClient.swift      # Identificação e presença
     │       │   ├── ChatMessage.swift
     │       │   ├── DisplaySource.swift
     │       │   └── VideoResolution.swift
@@ -267,7 +266,7 @@ AulaCast/
         ├── js/
         │   ├── main.js
         │   ├── entry-gate.js                  # Tela de identificação
-        │   ├── student-identity.js            # Validação da matrícula
+        │   ├── student-identity.js            # Nome do aluno na sessão
         │   ├── presence-reporter.js           # Presença na tela
         │   ├── socket-client.js               # WebSocket + reconexão
         │   ├── stream-watchdog.js             # Vigia o MJPEG
@@ -285,8 +284,8 @@ Duas suítes, ambas **sem dependências externas** — coerente com o requisito 
 
 | Suíte | Como executar | Cobre |
 | :--- | :--- | :--- |
-| Swift | `swift run AulaCastTestRunner` | Domínio (turma, chat, matrícula, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
-| Cliente Web | `node --test "tests/*.test.js"` | Validação de matrícula, política de reconexão, watchdog do vídeo e relato de presença |
+| Swift | `swift run AulaCastTestRunner` | Domínio (turma, chat, identificação, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
+| Cliente Web | `node --test "tests/*.test.js"` | Identificação do aluno, política de reconexão, watchdog do vídeo e relato de presença |
 
 Os testes de integração sobem um `NetworkListenerService` real numa porta de teste e se
 conectam como um aluno de verdade, em vez de simular as camadas — vários defeitos deste
