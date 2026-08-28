@@ -49,7 +49,20 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             let sources = try await contentFetcher.fetchSources()
             await MainActor.run {
                 self.availableSources = sources
-                if self.selectedSource == nil {
+
+                guard !self.isRecording else {
+                    // Durante a transmissão a escolha não é mexida: se a janela transmitida
+                    // for fechada, quem avisa é o próprio SCStream, com o motivo do erro.
+                    return
+                }
+
+                // A janela escolhida pode ter sido fechada desde a última busca. Sem isto,
+                // "Iniciar Transmissão" apontaria para uma janela que não existe mais.
+                let escolhaSumiu = self.selectedSource.map { atual in
+                    !sources.contains(where: { $0.id == atual.id })
+                } ?? true
+
+                if escolhaSumiu {
                     self.selectedSource = sources.first
                 }
             }
@@ -69,7 +82,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         }
         
         do {
-            guard let filter = makeContentFilter(for: source) else { return }
+            guard let filter = await makeContentFilter(for: source) else { return }
             let config = makeConfiguration()
 
             let stream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -87,14 +100,35 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         }
     }
     
-    private func makeContentFilter(for source: DisplaySource) -> SCContentFilter? {
+    private func makeContentFilter(for source: DisplaySource) async -> SCContentFilter? {
         if let scDisplay = source.scDisplay {
-            return SCContentFilter(display: scDisplay, excludingApplications: [], exceptingWindows: [])
+            // Ao transmitir o monitor inteiro, a própria janela do AulaCast fica de fora.
+            // Sem isto a turma veria o painel do professor — inclusive a lista com nomes e
+            // matrículas dos colegas e a conversa privada — além do efeito de espelho
+            // infinito causado pela prévia exibindo a si mesma.
+            return SCContentFilter(
+                display: scDisplay,
+                excludingApplications: await aplicacoesDoProprioApp(),
+                exceptingWindows: []
+            )
         }
         if let scWindow = source.scWindow {
             return SCContentFilter(desktopIndependentWindow: scWindow)
         }
         return nil
+    }
+
+    /// O próprio aplicativo, identificado pelo processo — funciona tanto no app instalado
+    /// quanto rodando via `swift run`, onde o bundle identifier é nulo.
+    private func aplicacoesDoProprioApp() async -> [SCRunningApplication] {
+        let processoAtual = ProcessInfo.processInfo.processIdentifier
+        guard let content = try? await SCShareableContent.excludingDesktopWindows(
+            false,
+            onScreenWindowsOnly: false
+        ) else {
+            return []
+        }
+        return content.applications.filter { $0.processID == processoAtual }
     }
 
     private func makeConfiguration() -> SCStreamConfiguration {
@@ -111,7 +145,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     private func applyContentFilterChange() async {
         guard let stream = self.stream,
               let source = selectedSource,
-              let filter = makeContentFilter(for: source) else { return }
+              let filter = await makeContentFilter(for: source) else { return }
         do {
             try await stream.updateContentFilter(filter)
         } catch {

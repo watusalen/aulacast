@@ -26,7 +26,7 @@
   - *FA-02 (Trocar a fonte durante a aula):* O professor seleciona outro monitor ou janela na grade de fontes. O sistema troca o conteúdo transmitido sem encerrar a sessão nem desconectar os alunos.
   - *FA-03 (Pausar):* O professor congela a imagem para a turma sem encerrar a transmissão, e retoma depois.
 - **Exceções:**
-  - *EX-01 (Permissão de Captura Negada):* Se a permissão de Gravação de Tela do macOS não tiver sido autorizada, o app exibe uma tela explicativa e um botão que abre os Ajustes do Sistema na seção correta.
+  - *EX-01 (Permissão de Captura Negada):* Se a permissão de Gravação de Tela do macOS não tiver sido autorizada, o app **não inicia a transmissão** — nem a captura, nem o servidor — e exibe a tela explicativa com um botão que solicita a permissão e abre os Ajustes do Sistema na seção correta. A tela reaparece a cada tentativa de transmitir, e não apenas na abertura do app. Como o macOS só aplica a permissão a partir da próxima execução, a mesma tela oferece **Reabrir o AulaCast**, que fecha e reabre o aplicativo.
   - *EX-02 (Captura interrompida pelo sistema):* Se a captura cair sozinha (monitor desconectado, permissão revogada), o app encerra a sessão, exibe o motivo ao professor e avisa os alunos com `STREAM_ENDED`, em vez de deixar a imagem congelada sem explicação.
 - **Pós-condição:** O stream de vídeo está ativo e a página Web do aluno fica disponível na rede local.
 
@@ -58,7 +58,7 @@
   1. O aluno clica no botão **"Levantar a Mão"** na interface Web.
   2. O cliente Web envia uma mensagem WebSocket do tipo `RAISE_HAND` com a identificação do aluno.
   3. O aplicativo macOS do professor recebe a notificação.
-  4. O sistema incrementa o contador de dúvidas na Barra de Menus e no painel principal.
+  4. O sistema incrementa o contador de dúvidas no painel principal.
   5. A linha do aluno é destacada na lista, com o ícone de mão levantada.
 - **Fluxo Alternativo:**
   - *FA-01 (Abaixar a Mão):* O aluno clica novamente no botão, cancelando o pedido. O professor é atualizado.

@@ -72,8 +72,25 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .task {
+            await manterListaAtualizada()
+        }
+    }
+
+    /// Revarre as fontes de tempos em tempos.
+    ///
+    /// Sem isto a lista só mudava ao clicar em "Atualizar": um app fechado no meio da aula
+    /// continuava oferecido como fonte, e um app recém-aberto não aparecia. Refazer a busca
+    /// também limpa a seleção quando a janela escolhida deixa de existir.
+    private func manterListaAtualizada() async {
+        while !Task.isCancelled {
             await recorder.fetchAvailableSources()
             await captureThumbnails()
+
+            // A varredura captura uma miniatura por fonte, então não vale repetir depressa —
+            // e durante a transmissão ela espaça ainda mais, para não disputar CPU com o
+            // envio dos quadros, que é o que a turma está vendo.
+            let intervalo: UInt64 = recorder.isRecording ? 15_000_000_000 : 5_000_000_000
+            try? await Task.sleep(nanoseconds: intervalo)
         }
     }
 

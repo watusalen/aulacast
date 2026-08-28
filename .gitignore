@@ -3,6 +3,12 @@
 *.o
 *.dSYM/
 
+# Aplicativo e instalador gerados por scripts/build-app.sh e scripts/gerar-dmg.sh
+# (regeráveis a partir do código)
+build/
+*.icns
+*.dmg
+
 # Xcode
 *.xcodeproj/
 *.xcworkspace/

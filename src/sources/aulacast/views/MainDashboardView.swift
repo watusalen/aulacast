@@ -10,8 +10,8 @@ private struct ImagemCapturada: @unchecked Sendable {
 /// Janela principal de controle do aplicativo AulaCast para macOS.
 public struct MainDashboardView: View {
     @EnvironmentObject private var viewModel: MainViewModel
-    @State private var showPermissionPrompt = false
     @State private var showQualitySettings = false
+
 
     /// Prévia da fonte escolhida enquanto a transmissão ainda não começou.
     @State private var previewDaFonteSelecionada: NSImage?
@@ -19,33 +19,10 @@ public struct MainDashboardView: View {
     public init() {}
 
     public var body: some View {
-        ZStack {
-            dashboardContent
-
-            if showPermissionPrompt {
-                Color.black.opacity(0.35)
-                    .ignoresSafeArea()
-                ScreenRecordingPermissionView(
-                    onOpenSettings: {
-                        ScreenRecordingPermissionService.openSystemSettings()
-                    },
-                    onDismiss: {
-                        showPermissionPrompt = false
-                    }
-                )
-            }
-        }
-        .task {
-            if !ScreenRecordingPermissionService.isGranted() {
-                showPermissionPrompt = true
-            }
-        }
+        dashboardContent
         // Reinicia a atualização quando a fonte muda ou quando a transmissão começa/para.
         .task(id: chavePrevia) {
             await manterPreviaDaFonteAtualizada()
-        }
-        .sheet(isPresented: $showQualitySettings) {
-            QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
         }
     }
 
@@ -82,41 +59,31 @@ public struct MainDashboardView: View {
         .frame(minWidth: 1020, minHeight: 760)
     }
 
+    /// Sem o nome do aplicativo: quem abriu já sabe onde está, e o ícone dá a identidade.
+    /// O espaço fica para o estado da transmissão, que é o que muda e o que importa saber.
     private var header: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(AC.accent)
-                    .frame(width: 34, height: 34)
-                Text("A")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundColor(.white)
-            }
-
-            Text("AulaCast")
-                .font(.system(size: 26, weight: .bold))
-                .foregroundColor(AC.textPrimary)
-
+            ACBrandMark(tamanho: 34)
             statusBadge
         }
     }
 
     private var statusBadge: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 9) {
             if viewModel.isStreaming {
-                ACPulsingDot(color: AC.liveGreen)
+                ACPulsingDot(color: AC.liveGreen, size: 10)
             } else {
                 Circle()
                     .fill(AC.offlineRed)
-                    .frame(width: 9, height: 9)
+                    .frame(width: 10, height: 10)
             }
             Text(viewModel.isStreaming ? "TRANSMITINDO AO VIVO" : "OFFLINE")
-                .font(.system(size: 12, weight: .bold))
-                .tracking(0.6)
+                .font(.system(size: 14, weight: .bold))
+                .tracking(0.7)
                 .foregroundColor(viewModel.isStreaming ? AC.liveGreen : AC.offlineRed)
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .background(
             Capsule().fill((viewModel.isStreaming ? AC.liveGreen : AC.offlineRed).opacity(0.14))
         )
@@ -214,7 +181,9 @@ public struct MainDashboardView: View {
                 .font(.system(size: 14))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("A transmissão foi interrompida")
+                Text(viewModel.needsScreenRecordingPermission
+                     ? "Falta a autorização do macOS"
+                     : "A transmissão foi interrompida")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(AC.textPrimary)
                 Text(message)
@@ -225,10 +194,24 @@ public struct MainDashboardView: View {
 
             Spacer()
 
-            Button("Dispensar") {
-                viewModel.streamErrorMessage = nil
+            // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho:
+            // são exatamente as duas saídas possíveis, sem competir com o aviso do macOS.
+            if viewModel.needsScreenRecordingPermission {
+                Button("Abrir Ajustes") {
+                    ScreenRecordingPermissionService.openSystemSettings()
+                }
+                .buttonStyle(.acOutline(height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
+
+                Button("Reabrir o AulaCast") {
+                    ScreenRecordingPermissionService.relaunch()
+                }
+                .buttonStyle(.acFilled(AC.accent, height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
+            } else {
+                Button("Dispensar") {
+                    viewModel.streamErrorMessage = nil
+                }
+                .buttonStyle(.acOutline(height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
             }
-            .buttonStyle(.acOutline(height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(AC.stopRed.opacity(0.1)))
@@ -269,11 +252,16 @@ public struct MainDashboardView: View {
             .opacity(viewModel.isStreaming ? 1 : 0.4)
             .help(viewModel.isPaused ? "Retomar transmissão" : "Pausar transmissão")
 
-            Button(action: { showQualitySettings = true }) {
+            Button(action: { showQualitySettings.toggle() }) {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.acIcon(size: 50, cornerRadius: 10, fontSize: 17))
-            .help("Qualidade da Transmissão")
+            .help("Configurações da transmissão")
+            // Popover ancorado na engrenagem: fecha clicando fora ou com Esc. Como cada
+            // ajuste já vale na hora, não há nada a confirmar com um botão.
+            .popover(isPresented: $showQualitySettings, arrowEdge: .bottom) {
+                QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
+            }
         }
     }
 

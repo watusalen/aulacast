@@ -34,7 +34,7 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 | **RF-09** | Chat Local Offline | Mensagens de texto na rede local. A mensagem do aluno é reservada com o professor (volta apenas para o autor); a do professor é vista por toda a turma. | **SHOULD** |
 | **RF-10** | Identificação do Aluno | Antes de assistir, o aluno deve informar nome e matrícula do IFPI (formato `202XXXXTADSXXXX`), validada tanto no cliente quanto no servidor. | **MUST** |
 | **RF-11** | Notificação "Levantar a Mão" | O aluno pode clicar em um botão no cliente web para notificar o professor que possui uma dúvida. Apenas o próprio aluno abaixa a mão. | **SHOULD** |
-| **RF-12** | Ícone na Barra de Menus (StatusItem) | O aplicativo do Mac deve ter um ícone na barra de menus superior permitindo acesso rápido a controles e notificações. | **SHOULD** |
+| ~~**RF-12**~~ | ~~Ícone na Barra de Menus (StatusItem)~~ | **Descartado.** Foi implementado e removido: o painel duplicava o que a janela principal já mostra, e um ícone permanente na barra de menus cobra atenção o tempo todo em troca de pouco. Era **SHOULD**, e a decisão foi não ter. | — |
 | **RF-13** | Configuração de Qualidade de Vídeo | O professor pode alternar a resolução de saída (720p / 1080p) e taxa de quadros (15fps / 30fps), com efeito imediato na transmissão em andamento. | **SHOULD** |
 | **RF-14** | Indicador de Presença Efetiva | O aplicativo deve distinguir alunos que estão com a transmissão à vista daqueles apenas conectados (janela minimizada, outra aba ou outro aplicativo em foco). | **SHOULD** |
 | **RF-15** | Troca de Fonte em Transmissão | O professor pode trocar o monitor ou a janela transmitida durante a aula, sem encerrar a sessão nem desconectar os alunos. | **SHOULD** |

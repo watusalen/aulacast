@@ -76,10 +76,16 @@ class AulaCastApp {
 
   handleServerMessage(data) {
     switch (data.type) {
+      // Quem entra no meio da aula precisa saber como o chat está agora, e não só
+      // quando o professor mexer no botão da próxima vez.
       case 'CONNECTED':
-        if (data.payload && data.payload.profName) {
-          this.ui.setProfName(data.payload.profName);
+        if (data.payload && typeof data.payload.chatEnabled === 'boolean') {
+          this.chatManager.setEnabled(data.payload.chatEnabled);
         }
+        break;
+
+      case 'CHAT_STATE':
+        this.chatManager.setEnabled(data.payload.enabled === 'true');
         break;
 
       case 'IDENTIFY_REJECTED':

@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// Configurações de qualidade da transmissão: resolução, taxa de quadros e chat (SRP).
+/// Configurações da transmissão: resolução, taxa de quadros, nome e chat (SRP).
+///
+/// Cada ajuste vale no instante em que é feito, inclusive com a aula no ar, então não há
+/// o que confirmar — por isso não existe botão de "Concluído". A janela é um popover
+/// ancorado na engrenagem: fecha clicando fora ou com Esc, como manda o padrão do macOS.
 public struct QualitySettingsView: View {
     @ObservedObject var viewModel: MainViewModel
     @ObservedObject var captureService: ScreenCaptureService
-    @Environment(\.dismiss) private var dismiss
 
     public init(viewModel: MainViewModel, captureService: ScreenCaptureService) {
         self.viewModel = viewModel
@@ -45,48 +48,26 @@ public struct QualitySettingsView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Seu nome (opcional)")
-                    .font(.system(size: 13))
-                    .foregroundColor(AC.textSecondary)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Permitir chat dos alunos")
+                        .font(.system(size: 14))
+                        .foregroundColor(AC.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $viewModel.isChatEnabled)
+                        .toggleStyle(.switch)
+                        .tint(AC.liveGreen)
+                        .labelsHidden()
+                }
 
-                TextField("Como aparecer para a turma", text: $viewModel.professorName)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(AC.inputBG))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(AC.border, lineWidth: 1))
-
-                Text("Em branco, os alunos veem apenas \u{201C}Professor\u{201D}.")
+                Text(viewModel.isChatEnabled
+                     ? "Os alunos podem escrever para você."
+                     : "O campo de mensagem fica inativo na tela dos alunos na hora.")
                     .font(.system(size: 12))
                     .foregroundColor(AC.textSecondary)
             }
-
-            Divider()
-
-            HStack {
-                Text("Permitir chat dos alunos")
-                    .font(.system(size: 14))
-                    .foregroundColor(AC.textPrimary)
-                Spacer()
-                Toggle("", isOn: $viewModel.isChatEnabled)
-                    .toggleStyle(.switch)
-                    .tint(AC.liveGreen)
-                    .labelsHidden()
-            }
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Concluído") {
-                    dismiss()
-                }
-                .buttonStyle(.acFilled(AC.accent, height: 34, cornerRadius: 8, horizontalPadding: 18))
-            }
         }
-        .padding(24)
-        .frame(width: 400)
-        .background(AC.panelBG)
+        .padding(20)
+        .frame(width: 340)
     }
 }

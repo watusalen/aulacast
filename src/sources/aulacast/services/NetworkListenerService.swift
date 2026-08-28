@@ -12,10 +12,6 @@ public final class NetworkListenerService: NetworkServerProtocol {
         set { webSocketHandler.isChatEnabled = newValue }
     }
 
-    public var professorName: String {
-        get { webSocketHandler.professorName }
-        set { webSocketHandler.professorName = newValue }
-    }
 
     public weak var chatObserver: ChatObserverProtocol? {
         didSet { webSocketHandler.chatObserver = chatObserver }
