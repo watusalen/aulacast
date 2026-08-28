@@ -102,15 +102,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     
     private func makeContentFilter(for source: DisplaySource) async -> SCContentFilter? {
         if let scDisplay = source.scDisplay {
-            // Ao transmitir o monitor inteiro, a própria janela do AulaCast fica de fora.
-            // Sem isto a turma veria o painel do professor — inclusive a lista com nomes e
-            // matrículas dos colegas e a conversa privada — além do efeito de espelho
-            // infinito causado pela prévia exibindo a si mesma.
-            return SCContentFilter(
-                display: scDisplay,
-                excludingApplications: await aplicacoesDoProprioApp(),
-                exceptingWindows: []
-            )
+            return await filtroDeMonitor(scDisplay)
         }
         if let scWindow = source.scWindow {
             return SCContentFilter(desktopIndependentWindow: scWindow)
@@ -118,17 +110,62 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         return nil
     }
 
-    /// O próprio aplicativo, identificado pelo processo — funciona tanto no app instalado
-    /// quanto rodando via `swift run`, onde o bundle identifier é nulo.
-    private func aplicacoesDoProprioApp() async -> [SCRunningApplication] {
+    /// Monitor inteiro, com a janela do próprio AulaCast fora do quadro.
+    ///
+    /// Isto não é cosmético: o painel do professor mostra a conversa reservada com cada
+    /// aluno e a lista da turma. Se ele entrar na transmissão, a sala inteira vê — além do
+    /// espelho infinito da prévia exibindo a si mesma.
+    ///
+    /// Antes a exclusão falhava **em silêncio**: a consulta ao sistema era feita com `try?`
+    /// e, quando não respondia, devolvia lista vazia — nada era excluído e a transmissão
+    /// saía com o painel dentro, sem nenhum aviso. Aqui a consulta é tentada de novo e, se
+    /// ainda assim falhar, a captura não começa: é melhor o professor ver um erro do que a
+    /// turma ver o que não devia.
+    private func filtroDeMonitor(_ display: SCDisplay) async -> SCContentFilter? {
         let processoAtual = ProcessInfo.processInfo.processIdentifier
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: false
-        ) else {
-            return []
+
+        guard let conteudo = await conteudoCompartilhavel() else {
+            await MainActor.run {
+                self.errorMessage =
+                    "Não foi possível preparar a captura sem expor a janela do AulaCast. "
+                    + "Tente iniciar a transmissão de novo."
+            }
+            return nil
         }
-        return content.applications.filter { $0.processID == processoAtual }
+
+        let nossosAplicativos = conteudo.applications.filter { $0.processID == processoAtual }
+        if !nossosAplicativos.isEmpty {
+            return SCContentFilter(
+                display: display,
+                excludingApplications: nossosAplicativos,
+                exceptingWindows: []
+            )
+        }
+
+        // O AulaCast pode não constar na lista de aplicativos compartilháveis (acontece
+        // quando ele está minimizado ou a janela ainda não foi registrada). Excluir pelas
+        // janelas chega ao mesmo resultado sem depender daquela lista — e uma lista vazia
+        // aqui é legítima: sem janela na tela, não há o que esconder.
+        let nossasJanelas = conteudo.windows.filter {
+            $0.owningApplication?.processID == processoAtual
+        }
+        return SCContentFilter(display: display, excludingWindows: nossasJanelas)
+    }
+
+    /// Duas tentativas: logo depois de abrir o app a primeira consulta às vezes falha.
+    private func conteudoCompartilhavel() async -> SCShareableContent? {
+        for tentativa in 0..<2 {
+            if let conteudo = try? await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: false
+            ) {
+                return conteudo
+            }
+            if tentativa == 0 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+        }
+        return nil
     }
 
     private func makeConfiguration() -> SCStreamConfiguration {
