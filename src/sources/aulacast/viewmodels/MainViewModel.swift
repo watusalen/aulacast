@@ -298,7 +298,14 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // de caírem para a tela de "Reconectando" sem saber o que aconteceu.
         serverService.broadcastControlMessage(type: "STREAM_ENDED", payload: ["reason": reason])
 
-        systemActivity.endTransmission()
+        // A proteção contra o sono continua segurada de propósito, e é o mesmo motivo pelo
+        // qual o servidor segue no ar: a turma continua conectada.
+        //
+        // Soltá-la aqui desfazia justamente o que as linhas acima tentam fazer. Nesta
+        // máquina o macOS está configurado para dormir em 1 minuto ocioso — então, um
+        // minuto depois da queda, o Mac dormia, todas as conexões caíam e os alunos iam
+        // para "Reconectando" enquanto o professor ainda estava lendo o aviso do erro.
+        // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
         isStreaming = false
         isPaused = false
         streamState.reset()

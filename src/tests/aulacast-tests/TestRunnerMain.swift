@@ -776,6 +776,21 @@ struct AulaCastTestRunner {
         // o professor vai demonstrar algo em outro app.
         print("\n--- [13/13] Testes de Domínio: proteção contra App Nap ---")
 
+        // O serviço real primeiro: é o contrato que o dublê abaixo espelha. Ele guarda um
+        // único token, então pedir duas vezes não acumula nada e um único "soltar" libera.
+        let atividadeReal = SystemActivityService()
+        assertTest(!atividadeReal.isHoldingActivity, "Serviço real começa sem segurar nada")
+
+        atividadeReal.beginTransmission(reason: "Teste de proteção")
+        atividadeReal.beginTransmission(reason: "Teste de proteção")
+        assertTest(atividadeReal.isHoldingActivity, "Serviço real segura a proteção ao transmitir")
+
+        atividadeReal.endTransmission()
+        assertTest(
+            !atividadeReal.isHoldingActivity,
+            "Pedir duas vezes não acumula: um único 'soltar' libera o Mac"
+        )
+
         let atividade = FakeSystemActivity()
         let vmAtividade = MainViewModel(
             captureService: FakeCaptureService(),
@@ -800,13 +815,20 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 400_000_000)
         assertTest(!atividade.isHoldingActivity, "Ao parar, a proteção é liberada")
 
-        // Caminho crítico: a captura morre sozinha. Sem liberar aqui, o Mac ficaria
-        // impedido de dormir indefinidamente depois de uma aula que caiu.
+        // Caminho crítico: a captura morre sozinha, mas o servidor segue no ar de propósito
+        // e a turma continua conectada.
+        //
+        // A proteção era liberada aqui, e isso desfazia justamente o motivo de manter o
+        // servidor de pé: numa máquina configurada para dormir com 1 minuto de ociosidade
+        // (o padrão é apertado), o Mac dormia logo depois da queda, todas as conexões caíam
+        // e os alunos iam parar em "Reconectando" enquanto o professor ainda lia o aviso.
+        // Quem encerra a sessão de verdade é "Parar Transmissão".
         let atividadeQueda = FakeSystemActivity()
+        let servidorQueda = FakeServer()
         let vmQueda = MainViewModel(
             captureService: FakeCaptureService(),
             encoderService: FakeEncoder(),
-            serverService: FakeServer(),
+            serverService: servidorQueda,
             advertiserService: FakeAdvertiser(),
             systemActivity: atividadeQueda
         )
@@ -818,8 +840,47 @@ struct AulaCastTestRunner {
         vmQueda.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
         try? await Task.sleep(nanoseconds: 300_000_000)
         assertTest(
+            servidorQueda.isRunning,
+            "Depois da queda o servidor segue no ar, com a turma conectada"
+        )
+        assertTest(
+            atividadeQueda.isHoldingActivity,
+            "Com alunos ainda conectados, o Mac continua impedido de dormir"
+        )
+
+        // E a proteção não fica pendurada para sempre: encerrar a transmissão a libera.
+        vmQueda.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(
             !atividadeQueda.isHoldingActivity,
-            "Captura caindo sozinha também libera a proteção (o Mac volta a poder dormir)"
+            "Parar a transmissão libera a proteção (o Mac volta a poder dormir)"
+        )
+        assertTest(
+            !servidorQueda.isRunning,
+            "Parar a transmissão também baixa o servidor"
+        )
+
+        // Reiniciar depois da queda não pode acumular uma segunda proteção.
+        let atividadeRetomada = FakeSystemActivity()
+        let vmRetomadaAtividade = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: atividadeRetomada
+        )
+        vmRetomadaAtividade.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        vmRetomadaAtividade.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        vmRetomadaAtividade.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        vmRetomadaAtividade.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(
+            !atividadeRetomada.isHoldingActivity,
+            "Depois de cair e voltar, um único 'Parar' libera a proteção (nada acumulado)"
         )
 
         // TESTE 14: Mensagem partida em vários frames e mensagem longa demais.
