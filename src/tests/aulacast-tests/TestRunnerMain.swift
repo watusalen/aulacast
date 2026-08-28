@@ -1336,6 +1336,87 @@ struct AulaCastTestRunner {
             "O endereço do painel é consultado na hora, e não congelado na abertura"
         )
 
+        // TESTE 19: O quadro sai assim que fica pronto.
+        //
+        // A conexão de vídeo fica parada esperando o próximo quadro. Antes essa espera era
+        // um cochilo de 10 ms — o laço acordava, perguntava se havia algo novo e dormia de
+        // novo — o que encaixava a saída dos quadros numa grade de 10 ms. Agora quem publica
+        // o quadro acorda as conexões paradas, e o risco passa a ser outro: perder o aviso e
+        // deixar o aluno dormindo. É isso que este teste vigia.
+        print("\n--- [19/19] Testes de Rede: entrega dos quadros ---")
+
+        let servidorFluidez = NetworkListenerService(
+            port: 8106,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+
+        do {
+            try servidorFluidez.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            final class BytesRecebidos: @unchecked Sendable {
+                private let trava = NSLock()
+                private var total = 0
+                func somar(_ quantos: Int) { trava.lock(); total += quantos; trava.unlock() }
+                var quantidade: Int { trava.lock(); defer { trava.unlock() }; return total }
+            }
+
+            let recebidos = BytesRecebidos()
+            let video = NWConnection(
+                host: NWEndpoint.Host("127.0.0.1"),
+                port: NWEndpoint.Port(rawValue: 8106)!,
+                using: .tcp
+            )
+
+            func escutar() {
+                video.receive(minimumIncompleteLength: 1, maximumLength: 65536) { dados, _, _, erro in
+                    guard erro == nil else { return }
+                    if let dados = dados { recebidos.somar(dados.count) }
+                    escutar()
+                }
+            }
+
+            video.start(queue: .global(qos: .userInitiated))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            escutar()
+
+            video.send(
+                content: Data("GET /stream HTTP/1.1\r\nHost: 127.0.0.1:8106\r\n\r\n".utf8),
+                completion: .contentProcessed({ _ in })
+            )
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            let apenasCabecalhos = recebidos.quantidade
+            assertTest(apenasCabecalhos > 0, "O aluno recebe os cabeçalhos do stream ao pedir /stream")
+
+            // A conexão está parada, sem nenhum quadro publicado até aqui: é exatamente a
+            // situação em que um aviso perdido deixaria o aluno esperando para sempre.
+            let primeiroQuadro = Data(repeating: 0xAB, count: 4096)
+            servidorFluidez.broadcastFrame(primeiroQuadro)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            let depoisDoPrimeiro = recebidos.quantidade
+            assertTest(
+                depoisDoPrimeiro >= apenasCabecalhos + primeiroQuadro.count,
+                "Quadro publicado com a conexão parada é entregue (recebidos: \(depoisDoPrimeiro - apenasCabecalhos) bytes)"
+            )
+
+            // E o laço volta a se registrar: o segundo quadro não pode ficar preso.
+            let segundoQuadro = Data(repeating: 0xCD, count: 4096)
+            servidorFluidez.broadcastFrame(segundoQuadro)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            assertTest(
+                recebidos.quantidade >= depoisDoPrimeiro + segundoQuadro.count,
+                "O quadro seguinte também sai, sem a conexão ficar dormindo"
+            )
+
+            video.cancel()
+            servidorFluidez.stop()
+        } catch {
+            assertTest(false, "Falha no teste de entrega de quadros: \(error.localizedDescription)")
+        }
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

@@ -41,9 +41,15 @@ public struct QualitySettingsView: View {
                     .foregroundColor(AC.textSecondary)
 
                 ACSegmentedPicker(
-                    options: [(15, "15 fps"), (30, "30 fps")],
+                    options: [(15, "15"), (30, "30"), (45, "45"), (60, "60")],
                     selection: $captureService.frameRate
                 )
+
+                Text("Mais quadros deixam o movimento mais macio, mas multiplicam o tráfego na "
+                     + "rede: se a turma começar a travar, é o primeiro a baixar.")
+                    .font(.system(size: 12))
+                    .foregroundColor(AC.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider()

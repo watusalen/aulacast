@@ -24,11 +24,40 @@ public final class MJPEGStreamerService {
 
     public init() {}
 
+    /// Conexões paradas esperando o próximo quadro.
+    ///
+    /// Protegidas pelo `frameLock`: registrar-se e conferir se há quadro novo precisam
+    /// acontecer na mesma trava, senão um quadro publicado exatamente entre as duas coisas
+    /// passa despercebido e a conexão dorme até o seguinte.
+    private var esperandoQuadro: [() -> Void] = []
+
     public func updateFrame(_ data: Data) {
         frameLock.lock()
         self.latestFrameData = data
         self.frameSequence &+= 1
+        let acordar = esperandoQuadro
+        esperandoQuadro.removeAll()
         frameLock.unlock()
+
+        // Fora da trava: cada um destes retoma o laço de envio, que vai querer a trava.
+        for despertar in acordar {
+            despertar()
+        }
+    }
+
+    /// Garante que cada conexão parada seja retomada uma única vez, venha o aviso pelo
+    /// quadro novo ou pela batida de segurança.
+    private final class Despertador {
+        private let trava = NSLock()
+        private var jaUsado = false
+
+        func assumir() -> Bool {
+            trava.lock()
+            defer { trava.unlock() }
+            if jaUsado { return false }
+            jaUsado = true
+            return true
+        }
     }
 
     public func serveStream(connection: NWConnection) {
@@ -66,24 +95,41 @@ public final class MJPEGStreamerService {
         frameLock.lock()
         let currentFrame = latestFrameData
         let currentSequence = frameSequence
-        frameLock.unlock()
 
         guard let jpeg = currentFrame, currentSequence != lastSentSequence else {
             // Enquanto a tela do professor está parada nada é enviado, então é aqui que
             // precisamos notar que o aluno saiu — do contrário este laço giraria para sempre.
             switch connection.state {
             case .cancelled, .failed:
+                frameLock.unlock()
                 encerrar(connection)
                 return
             default:
                 break
             }
 
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.01) { [weak self] in
+            // Antes esta espera era um cochilo de 10 ms: o laço acordava, perguntava se
+            // havia quadro novo e dormia de novo. Isso encaixava a saída dos quadros numa
+            // grade de 10 ms — a 60 fps o quadro fica pronto a cada 16,6 ms e saía com até
+            // 10 ms de atraso variável, que é exatamente o que se enxerga como engasgo.
+            //
+            // Agora a conexão fica registrada e quem publica o quadro a acorda na hora.
+            // A batida de segurança continua existindo, bem mais espaçada, só para notar o
+            // aluno que fechou a aba com a tela do professor parada — aí nenhum quadro novo
+            // vai chegar para acordar ninguém.
+            let despertador = Despertador()
+            let retomar: () -> Void = { [weak self] in
+                guard despertador.assumir() else { return }
                 self?.streamLoop(connection: connection, lastSentSequence: lastSentSequence)
             }
+
+            esperandoQuadro.append(retomar)
+            frameLock.unlock()
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5, execute: retomar)
             return
         }
+        frameLock.unlock()
 
         let frameHeader = "--frame\r\n" +
                           "Content-Type: image/jpeg\r\n" +
