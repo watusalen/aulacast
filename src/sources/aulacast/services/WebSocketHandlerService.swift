@@ -9,8 +9,6 @@ public final class WebSocketHandlerService {
     public weak var clientObserver: ClientObserverProtocol?
     public weak var presenceObserver: StudentPresenceObserverProtocol?
     public var isChatEnabled: Bool = true
-    /// Vazio = professor não se identificou; o aluno vê o rótulo genérico da página.
-    public var professorName: String = ""
 
     private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
     /// Um decodificador por conexão, cada um com seu buffer de bytes incompletos.
@@ -58,13 +56,13 @@ public final class WebSocketHandlerService {
         let connectedClient = ConnectedClient(name: "Aluno-\(String(clientIp.suffix(4)))", ipAddress: clientIp, isHandRaised: false)
         clientObserver?.didClientConnect(connectedClient)
 
-        // Envia mensagem de boas-vindas CONNECTED. O nome só vai junto se o professor
-        // tiver se identificado; caso contrário a página do aluno mantém o rótulo genérico.
-        var welcomeDict: [String: Any] = ["type": "CONNECTED"]
-        let nomeExibido = professorName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !nomeExibido.isEmpty {
-            welcomeDict["payload"] = ["profName": nomeExibido]
-        }
+        // Envia mensagem de boas-vindas CONNECTED com o estado atual do chat. Sem isto, quem
+        // entra (ou reconecta) no meio da aula com o chat já desligado veria o campo liberado
+        // e só descobriria o bloqueio ao ver a mensagem sumir.
+        let welcomeDict: [String: Any] = [
+            "type": "CONNECTED",
+            "payload": ["chatEnabled": isChatEnabled]
+        ]
         if let data = try? JSONSerialization.data(withJSONObject: welcomeDict),
            let welcomeJSON = String(data: data, encoding: .utf8) {
             sendTextFrame(connection: connection, text: welcomeJSON)

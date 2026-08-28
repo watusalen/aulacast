@@ -14,18 +14,5 @@ public struct AulaCastApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1000, height: 680)
-
-        MenuBarExtra {
-            MenuBarView()
-                .environmentObject(viewModel)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: viewModel.isStreaming ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                if viewModel.clientManager.handRaisedCount > 0 {
-                    Text("[\(viewModel.clientManager.handRaisedCount)]")
-                        .bold()
-                }
-            }
-        }
     }
 }

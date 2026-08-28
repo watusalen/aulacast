@@ -6,7 +6,6 @@ public protocol NetworkServerProtocol: AnyObject {
     var port: UInt16 { get }
     var localIPAddress: String { get }
     var isChatEnabled: Bool { get set }
-    var professorName: String { get set }
 
     var chatObserver: ChatObserverProtocol? { get set }
     var presenceObserver: StudentPresenceObserverProtocol? { get set }

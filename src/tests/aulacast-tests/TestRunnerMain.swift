@@ -29,7 +29,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 1: ClientManagerService (UC-03 & RF-11: Alunos e Levantar a Mão)
-        print("\n--- [1/11] Testes de Domínio: ClientManagerService ---")
+        print("\n--- [1/12] Testes de Domínio: ClientManagerService ---")
         let clientManager = ClientManagerService()
         
         clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50", isHandRaised: false)
@@ -137,7 +137,7 @@ struct AulaCastTestRunner {
         )
 
         // TESTE 2: ChatManagerService (UC-05 & RF-09: Chat Local Offline)
-        print("\n--- [2/11] Testes de Domínio: ChatManagerService ---")
+        print("\n--- [2/12] Testes de Domínio: ChatManagerService ---")
         let chatManager = ChatManagerService()
         
         let msg1 = ChatMessage(sender: "Mariana", text: "Dúvida no loop", isProf: false)
@@ -155,7 +155,7 @@ struct AulaCastTestRunner {
         assertTest(chatManager.messages.count == countBefore, "Mensagens vazias ou só com espaços são descartadas")
 
         // TESTE 3: Segurança do Servidor Web (StaticFileProvider)
-        print("\n--- [3/11] Testes de Segurança: StaticFileProviderService ---")
+        print("\n--- [3/12] Testes de Segurança: StaticFileProviderService ---")
         let tempAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempAssetsDir, withIntermediateDirectories: true)
         
@@ -168,7 +168,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: tempAssetsDir)
 
         // TESTE 5: Servidor de Rede Local (NetworkListenerService)
-        print("\n--- [4/11] Testes de Rede: NetworkListenerService ---")
+        print("\n--- [4/12] Testes de Rede: NetworkListenerService ---")
         let serverService = NetworkListenerService(port: 8089, webAssetsPath: FileManager.default.temporaryDirectory)
         
         assertTest(serverService.port == 8089, "Porta do servidor atribuída corretamente")
@@ -185,7 +185,7 @@ struct AulaCastTestRunner {
 
         // TESTE 5b: Directory traversal (RNF-06). A verificação antiga usava hasPrefix, que
         // casa no meio do nome da pasta: /x/web-assets-secreto passava como se fosse interno.
-        print("\n--- [5/11] Testes de Segurança: Directory Traversal ---")
+        print("\n--- [5/12] Testes de Segurança: Directory Traversal ---")
         let raizTemp = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_sec_\(UUID().uuidString)")
         let pastaPublica = raizTemp.appendingPathComponent("web-assets")
         let pastaIrma = raizTemp.appendingPathComponent("web-assets-secreto")
@@ -230,7 +230,7 @@ struct AulaCastTestRunner {
         try? FileManager.default.removeItem(at: raizTemp)
 
         // TESTE 6: Sondagem de apple-touch-icon do iOS/Safari (evita 404 no log do professor)
-        print("\n--- [6/11] Testes HTTP: fallback de apple-touch-icon ---")
+        print("\n--- [6/12] Testes HTTP: fallback de apple-touch-icon ---")
         let iconAssetsDir = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_icon_test_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: iconAssetsDir, withIntermediateDirectories: true)
 
@@ -275,7 +275,7 @@ struct AulaCastTestRunner {
         // TESTE 7: Frames WebSocket colados/partidos e comprimento absurdo.
         // O TCP não respeita fronteira de mensagem: tratar cada leitura como exatamente
         // um frame descartava mensagens de chat em silêncio.
-        print("\n--- [7/11] Testes de Protocolo: frames WebSocket ---")
+        print("\n--- [7/12] Testes de Protocolo: frames WebSocket ---")
 
         func frameDeTexto(_ texto: String) -> Data {
             let payload = Array(texto.utf8)
@@ -334,7 +334,7 @@ struct AulaCastTestRunner {
 
         // TESTE 8: WebSocket real ponta a ponta contra o servidor do app.
         // Cobre o handshake e o caminho da mão levantada depois da refatoração do decodificador.
-        print("\n--- [8/11] Testes E2E: WebSocket real ---")
+        print("\n--- [8/12] Testes E2E: WebSocket real ---")
 
         final class ColetorDeMaos: HandRaiseObserverProtocol, ClientObserverProtocol, StudentPresenceObserverProtocol, @unchecked Sendable {
             private let trava = NSLock()
@@ -430,28 +430,36 @@ struct AulaCastTestRunner {
 
             socket.cancel(with: .goingAway, reason: nil)
 
-            // Sem nome configurado, o servidor não deve mandar identificação nenhuma:
-            // o app é usado por qualquer professor e não pode vazar o nome da conta do Mac.
-            var boasVindasSemNome = ""
-            let socketAnonimo = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
-            socketAnonimo.resume()
-            if case .string(let texto)? = try? await socketAnonimo.receive() {
-                boasVindasSemNome = texto
+            // Quem entra na aula precisa receber o estado atual do chat já nas boas-vindas.
+            // Sem isso, um aluno que chega atrasado (ou reconecta) com o chat desligado veria
+            // o campo de mensagem liberado e só descobriria o bloqueio ao ver o texto sumir.
+            var boasVindasChatLigado = ""
+            let socketChatLigado = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
+            socketChatLigado.resume()
+            if case .string(let texto)? = try? await socketChatLigado.receive() {
+                boasVindasChatLigado = texto
             }
-            assertTest(boasVindasSemNome.contains("CONNECTED"), "Aluno recebe boas-vindas mesmo sem nome do professor")
-            assertTest(!boasVindasSemNome.contains("profName"), "Sem nome configurado, nada de nome é enviado ao aluno")
-            socketAnonimo.cancel(with: .goingAway, reason: nil)
+            assertTest(boasVindasChatLigado.contains("CONNECTED"), "Aluno recebe boas-vindas ao conectar")
+            assertTest(
+                boasVindasChatLigado.contains("\"chatEnabled\":true"),
+                "Chat ligado: as boas-vindas dizem que o aluno pode escrever"
+            )
+            socketChatLigado.cancel(with: .goingAway, reason: nil)
 
-            // Com nome preenchido nas configurações, aí sim ele acompanha as boas-vindas.
-            servidorE2E.professorName = "Ana Souza"
-            var boasVindasComNome = ""
-            let socketNomeado = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
-            socketNomeado.resume()
-            if case .string(let texto)? = try? await socketNomeado.receive() {
-                boasVindasComNome = texto
+            servidorE2E.isChatEnabled = false
+
+            var boasVindasChatDesligado = ""
+            let socketChatDesligado = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
+            socketChatDesligado.resume()
+            if case .string(let texto)? = try? await socketChatDesligado.receive() {
+                boasVindasChatDesligado = texto
             }
-            assertTest(boasVindasComNome.contains("Ana Souza"), "Nome preenchido pelo professor chega ao aluno")
-            socketNomeado.cancel(with: .goingAway, reason: nil)
+            assertTest(
+                boasVindasChatDesligado.contains("\"chatEnabled\":false"),
+                "Chat desligado: quem entra depois já chega bloqueado"
+            )
+
+            socketChatDesligado.cancel(with: .goingAway, reason: nil)
 
             servidorE2E.stop()
         } catch {
@@ -459,7 +467,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 10: Matrícula do IFPI e presença na tela.
-        print("\n--- [9/11] Testes de Domínio: identificação e presença ---")
+        print("\n--- [9/12] Testes de Domínio: identificação e presença ---")
 
         assertTest(MatriculaIFPI.ehValida("2021234TADS5678"), "Matrícula no formato 202XXXXTADSXXXX é aceita")
         assertTest(MatriculaIFPI.ehValida("  2021234tads5678 "), "Minúsculas e espaços são normalizados")
@@ -502,7 +510,7 @@ struct AulaCastTestRunner {
         // TESTE 10: Prévia local do professor.
         // Ela mostra o último quadro realmente transmitido; se parar de atualizar, o professor
         // perde a única confirmação visual de que os alunos estão vendo alguma coisa.
-        print("\n--- [10/11] Testes de Domínio: prévia da transmissão ---")
+        print("\n--- [10/12] Testes de Domínio: prévia da transmissão ---")
 
         let vmPrevia = MainViewModel(
             captureService: FakeCaptureService(),
@@ -545,7 +553,7 @@ struct AulaCastTestRunner {
         // TESTE 11: Privacidade do chat com dois alunos conectados de verdade.
         // Mensagem de aluno é conversa reservada com o professor; só as do professor
         // circulam pela turma.
-        print("\n--- [11/11] Testes E2E: privacidade do chat ---")
+        print("\n--- [11/12] Testes E2E: privacidade do chat ---")
 
         final class ColetorDeChat: ChatObserverProtocol, @unchecked Sendable {
             private let trava = NSLock()
@@ -627,12 +635,191 @@ struct AulaCastTestRunner {
             assertTest(professorChegouEmA, "Mensagem do professor chega a quem escreveu")
             assertTest(professorChegouEmB, "Mensagem do professor chega também ao colega")
 
+            // Desligar o chat não pode ser só um aviso na tela: um cliente adulterado que
+            // ignore o bloqueio e mande a mensagem assim mesmo continua sem alcançar o professor.
+            servidorChat.isChatEnabled = false
+            let recebidasAntes = coletorChat.recebidas.count
+
+            try? await alunoA.send(.string("{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Ana\",\"text\":\"passa mesmo assim\"}}"))
+            try? await Task.sleep(nanoseconds: 800_000_000)
+
+            assertTest(
+                coletorChat.recebidas.count == recebidasAntes,
+                "Chat desligado: mensagem de cliente adulterado não chega ao professor"
+            )
+
+            // E religar volta a funcionar — o bloqueio não pode deixar o chat morto de vez.
+            servidorChat.isChatEnabled = true
+            try? await alunoA.send(.string("{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Ana\",\"text\":\"agora vai\"}}"))
+            try? await Task.sleep(nanoseconds: 800_000_000)
+
+            assertTest(
+                coletorChat.recebidas.last?.text == "agora vai",
+                "Religar o chat volta a entregar as mensagens ao professor"
+            )
+
             alunoA.cancel(with: .goingAway, reason: nil)
             alunoB.cancel(with: .goingAway, reason: nil)
             servidorChat.stop()
         } catch {
             assertTest(false, "Falha no teste de privacidade do chat: \(error.localizedDescription)")
         }
+
+        // TESTE 12: A permissão de Gravação de Tela e o "AO VIVO" mentiroso.
+        //
+        // O pior defeito que este projeto teve não avisava nada: sem permissão, a captura
+        // falhava em silêncio, o servidor subia mesmo assim e a tela anunciava
+        // "TRANSMITINDO AO VIVO" com o cronômetro correndo — enquanto a turma via uma
+        // imagem vazia. Erro que não parece erro é o que mais custa caro na aula.
+        print("\n--- [12/13] Testes de Domínio: permissão de Gravação de Tela ---")
+
+        func montarVM(permissao: Bool, capturaFalha: Bool = false) -> (MainViewModel, FakeCaptureService, FakeServer) {
+            let captura = FakeCaptureService()
+            captura.falhaAoIniciar = capturaFalha
+            let servidor = FakeServer()
+            let vm = MainViewModel(
+                captureService: captura,
+                encoderService: FakeEncoder(),
+                serverService: servidor,
+                advertiserService: FakeAdvertiser(),
+                systemActivity: FakeSystemActivity(),
+                permission: FakePermission(concedida: permissao)
+            )
+            return (vm, captura, servidor)
+        }
+
+        let (vmSemPermissao, capturaSemPermissao, servidorSemPermissao) = montarVM(permissao: false)
+        vmSemPermissao.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        assertTest(!vmSemPermissao.isStreaming, "Sem permissão, o app NÃO se declara no ar")
+        assertTest(!servidorSemPermissao.isRunning, "Sem permissão, o servidor nem chega a subir")
+        assertTest(!capturaSemPermissao.isRecording, "Sem permissão, a captura não é iniciada")
+        assertTest(
+            vmSemPermissao.needsScreenRecordingPermission,
+            "Sem permissão, o painel passa a mostrar o caminho da autorização"
+        )
+        assertTest(
+            (vmSemPermissao.permission as? FakePermission)?.pedidosFeitos == 1,
+            "Sem permissão, quem exibe o pedido é o macOS (request chamado uma vez)"
+        )
+
+        // O looping que o professor via: cada clique em "Iniciar Transmissão" reabria o aviso
+        // do macOS, porque a permissão continua indisponível até o app ser reaberto. O pedido
+        // tem que acontecer uma vez por execução, e não uma vez por clique.
+        vmSemPermissao.startStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        vmSemPermissao.startStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        assertTest(
+            (vmSemPermissao.permission as? FakePermission)?.pedidosFeitos == 1,
+            "Clicar de novo NÃO reabre o aviso do macOS (fim do looping)"
+        )
+        assertTest(
+            vmSemPermissao.streamErrorMessage?.contains("reabra") == true,
+            "A partir da segunda tentativa, o recado passa a ser reabrir o aplicativo"
+        )
+        assertTest(
+            vmSemPermissao.streamErrorMessage != nil,
+            "Sem permissão, o professor recebe uma explicação em vez de silêncio"
+        )
+        assertTest(vmSemPermissao.streamStartedAt == nil, "Sem permissão, nenhum cronômetro começa a correr")
+
+        // Permissão concedida nos Ajustes, mas o processo antigo continua sem enxergar a
+        // tela: é o caso de quem clicou "Mais Tarde" no aviso de reabrir do macOS.
+        let (vmCapturaFalha, _, servidorCapturaFalha) = montarVM(permissao: true, capturaFalha: true)
+        vmCapturaFalha.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        assertTest(!vmCapturaFalha.isStreaming, "Captura que não sobe não vira transmissão anunciada")
+        assertTest(!servidorCapturaFalha.isRunning, "Captura que não sobe não deixa servidor aberto para trás")
+        assertTest(
+            vmCapturaFalha.streamErrorMessage?.contains("permissão") == true,
+            "A falha real da captura chega ao professor com o motivo"
+        )
+
+        // E o caminho feliz precisa continuar funcionando.
+        let (vmOk, capturaOk, servidorOk) = montarVM(permissao: true)
+        vmOk.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        assertTest(vmOk.isStreaming, "Com permissão e captura ok, a transmissão começa")
+        assertTest(servidorOk.isRunning, "Com permissão e captura ok, o servidor sobe")
+        assertTest(capturaOk.isRecording, "Com permissão e captura ok, a captura roda")
+        assertTest(vmOk.streamErrorMessage == nil, "Caminho feliz não deixa mensagem de erro na tela")
+        assertTest(
+            !vmOk.needsScreenRecordingPermission,
+            "Caminho feliz não pede autorização"
+        )
+
+        // Autorizou e reabriu: o recado da tentativa anterior não pode ficar preso na tela.
+        let (vmDepois, _, _) = montarVM(permissao: false)
+        vmDepois.startStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(vmDepois.needsScreenRecordingPermission, "Primeira tentativa marca a falta de autorização")
+
+        (vmDepois.permission as? FakePermission)?.concedida = true
+        vmDepois.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        assertTest(vmDepois.isStreaming, "Depois de autorizar, a mesma tentativa transmite")
+        assertTest(
+            !vmDepois.needsScreenRecordingPermission,
+            "Depois de autorizar, o recado de permissão some do painel"
+        )
+
+        // TESTE 13: Proteção contra o estrangulamento do macOS (App Nap).
+        // Ao trocar de Mesa ou mudar de aplicativo, o AulaCast sai de vista e o sistema
+        // passaria a atrasar seus temporizadores — travando a transmissão justamente quando
+        // o professor vai demonstrar algo em outro app.
+        print("\n--- [13/13] Testes de Domínio: proteção contra App Nap ---")
+
+        let atividade = FakeSystemActivity()
+        let vmAtividade = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: atividade
+        )
+
+        assertTest(!atividade.isHoldingActivity, "Parado, o app não segura nenhuma proteção")
+
+        vmAtividade.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(atividade.isHoldingActivity, "Transmitindo, a proteção contra App Nap fica ativa")
+        assertTest(atividade.inicios == 1, "A proteção é solicitada uma única vez")
+        assertTest(
+            atividade.ultimaRazao?.isEmpty == false,
+            "A razão é informada ao sistema (aparece em diagnósticos de energia)"
+        )
+
+        vmAtividade.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(!atividade.isHoldingActivity, "Ao parar, a proteção é liberada")
+
+        // Caminho crítico: a captura morre sozinha. Sem liberar aqui, o Mac ficaria
+        // impedido de dormir indefinidamente depois de uma aula que caiu.
+        let atividadeQueda = FakeSystemActivity()
+        let vmQueda = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: atividadeQueda
+        )
+
+        vmQueda.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(atividadeQueda.isHoldingActivity, "Proteção ativa antes da queda")
+
+        vmQueda.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(
+            !atividadeQueda.isHoldingActivity,
+            "Captura caindo sozinha também libera a proteção (o Mac volta a poder dormir)"
+        )
 
         // SUMÁRIO FINAL
         print("\n==========================================")

@@ -3,6 +3,12 @@
 *.o
 *.dSYM/
 
+# Aplicativo e instalador gerados por scripts/build-app.sh e scripts/gerar-dmg.sh
+# (regeráveis a partir do código)
+build/
+*.icns
+*.dmg
+
 # Xcode
 *.xcodeproj/
 *.xcworkspace/
@@ -29,3 +35,6 @@ Icon?
 # Node (usado apenas para rodar os testes do cliente web)
 node_modules/
 npm-debug.log*
+
+# Worktrees de sessões de trabalho (não fazem parte do projeto)
+.claude/worktrees/

@@ -786,6 +786,22 @@ body {
   flex: 1;
 }
 
+/* Chat desligado pelo professor: campo e botão continuam na tela, apenas inativos.
+   O apagamento e o cursor barrado dizem que não adianta tentar, sem precisar de recado. */
+.input:disabled,
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.input:disabled {
+  background: #0d0d0d;
+}
+
+.btn-send:disabled:hover {
+  background: #1e2c44;
+}
+
 
 
 

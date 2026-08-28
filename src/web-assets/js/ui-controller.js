@@ -14,7 +14,6 @@ export class UIController {
     this.pausedOverlay = document.getElementById('pausedOverlay');
     this.handBanner = document.getElementById('handBanner');
     this.fullscreenBtn = document.getElementById('fullscreenBtn');
-    this.profNameElem = document.getElementById('profName');
     this.sidebar = document.getElementById('sidebar');
     this.menuToggleBtn = document.getElementById('menuToggleBtn');
 
@@ -120,12 +119,6 @@ export class UIController {
     if (alvo && name) {
       alvo.textContent = name;
       alvo.hidden = false;
-    }
-  }
-
-  setProfName(name) {
-    if (this.profNameElem && name) {
-      this.profNameElem.textContent = `Prof. ${name}`;
     }
   }
 

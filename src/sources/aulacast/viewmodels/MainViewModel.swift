@@ -15,17 +15,35 @@ public final class MainViewModel: ObservableObject {
     /// Erro que derrubou a transmissão sozinha (monitor desconectado, permissão revogada…).
     @Published public var streamErrorMessage: String?
 
+    /// Verdadeiro depois que o aviso do macOS já foi disparado nesta execução.
+    ///
+    /// Enquanto o app não reabre, `isGranted()` continua falso **mesmo depois de o professor
+    /// autorizar** — a permissão não se aplica a um processo que já estava rodando. Pedir de
+    /// novo a cada clique em "Iniciar Transmissão" reabria o mesmo aviso indefinidamente:
+    /// era esse o looping. Uma vez pedido, o único passo que resta é reabrir o aplicativo.
+    private var jaPediuPermissao = false
+
+    /// Liga a tela que explica a permissão de Gravação de Tela.
+    ///
+    /// É estado do modelo, e não da view, porque quem descobre que falta permissão é a
+    /// tentativa de transmitir. Antes a tela era decidida uma única vez na abertura: quem
+    /// dispensasse com "Agora não" nunca mais a via, mesmo clicando em transmitir de novo.
+    @Published public var needsScreenRecordingPermission: Bool = false
+
     /// Compartilhado com a thread de captura (que não pode tocar em estado da MainActor).
     public let streamState = StreamRuntimeState()
 
+    /// Desligar o chat já barrava as mensagens no servidor, mas em silêncio: o aluno digitava,
+    /// apertava Enter e o texto sumia sem explicação, dando a impressão de que o botão não
+    /// funcionava. Avisar os alunos na hora deixa o campo inativo na tela deles.
     @Published public var isChatEnabled: Bool = true {
-        didSet { serverService.isChatEnabled = isChatEnabled }
-    }
-
-    /// Vazio por padrão: o app é usado por qualquer professor, então não se assume o nome
-    /// da conta do Mac. Quem quiser aparecer identificado preenche nas configurações.
-    @Published public var professorName: String = "" {
-        didSet { serverService.professorName = professorName }
+        didSet {
+            serverService.isChatEnabled = isChatEnabled
+            serverService.broadcastControlMessage(
+                type: "CHAT_STATE",
+                payload: ["enabled": isChatEnabled ? "true" : "false"]
+            )
+        }
     }
 
     public let captureService: any ScreenCaptureProtocol
@@ -35,6 +53,11 @@ public final class MainViewModel: ObservableObject {
     // internamente por lock, então não devem exigir salto para a MainActor.
     nonisolated(unsafe) public let encoderService: VideoEncoderProtocol
     nonisolated(unsafe) public let serverService: NetworkServerProtocol
+
+    /// Mantém a transmissão viva quando o professor troca de Mesa ou muda de aplicativo.
+    public let systemActivity: SystemActivityProtocol
+
+    public let permission: ScreenRecordingPermissionProtocol
 
     public let chatManager: ChatManagerService
     public let clientManager: ClientManagerService
@@ -46,6 +69,8 @@ public final class MainViewModel: ObservableObject {
         encoderService: VideoEncoderProtocol = MJPEGFrameEncoder(),
         serverService: NetworkServerProtocol = NetworkListenerService(port: 8080, webAssetsPath: WebAssetsPathResolver.resolve()),
         advertiserService: ServiceAdvertiserProtocol = BonjourAdvertiserService(),
+        systemActivity: SystemActivityProtocol = SystemActivityService(),
+        permission: ScreenRecordingPermissionProtocol = ScreenRecordingPermissionService(),
         chatManager: ChatManagerService = ChatManagerService(),
         clientManager: ClientManagerService = ClientManagerService()
     ) {
@@ -53,6 +78,8 @@ public final class MainViewModel: ObservableObject {
         self.encoderService = encoderService
         self.serverService = serverService
         self.advertiserService = advertiserService
+        self.systemActivity = systemActivity
+        self.permission = permission
         self.chatManager = chatManager
         self.clientManager = clientManager
 
@@ -75,7 +102,6 @@ public final class MainViewModel: ObservableObject {
         self.serverService.presenceObserver = self
         self.serverService.handRaiseObserver = self
         self.serverService.clientObserver = self
-        self.serverService.professorName = self.professorName
         self.serverService.isChatEnabled = self.isChatEnabled
 
         self.updateServerURL()
@@ -91,17 +117,68 @@ public final class MainViewModel: ObservableObject {
     public func startStream() {
         Task {
             self.streamErrorMessage = nil
+
+            // Sem permissão nem vale tentar: o ScreenCaptureKit falharia e o professor
+            // ficaria com um "AO VIVO" que não transmite nada.
+            //
+            // Quem conduz daqui é o macOS. `request()` faz o sistema exibir o próprio aviso
+            // ("Abrir Ajustes do Sistema" / "Negar"), levar aos Ajustes e, depois do professor
+            // autorizar, oferecer "Encerrar e Reabrir" — que é o único jeito de a permissão
+            // valer, porque ela não se aplica a um processo já em execução.
+            //
+            // O AulaCast não desenha nenhuma tela por cima disso. A versão anterior mostrava
+            // um painel próprio que disparava o aviso nativo, e o professor acabava em dois
+            // pedidos empilhados que reapareciam em looping. Aqui só fica um recado no painel,
+            // para o caso de ele ter escolhido "Negar" ou "Mais Tarde".
+            guard permission.isGranted() else {
+                self.needsScreenRecordingPermission = true
+
+                if jaPediuPermissao {
+                    // O aviso do macOS já apareceu nesta execução. Repeti-lo não muda nada:
+                    // daqui em diante só reabrir o aplicativo resolve.
+                    self.streamErrorMessage =
+                        "Se você já autorizou o AulaCast, reabra o aplicativo para valer. "
+                        + "O macOS não aplica essa permissão a um app que já estava aberto."
+                } else {
+                    jaPediuPermissao = true
+                    permission.request()
+                    self.streamErrorMessage =
+                        "Autorize o AulaCast em Gravação de Tela e reabra o aplicativo."
+                }
+                return
+            }
+
+            // A tentativa vingou: se a tela ainda estava pedindo autorização, não pede mais.
+            self.needsScreenRecordingPermission = false
+
             await captureService.startCapture()
+
+            // A captura pode falhar mesmo com a permissão concedida (monitor desconectado,
+            // janela fechada no meio do caminho, permissão concedida sem reabrir o app).
+            // Seguir daqui subia o servidor e marcava `isStreaming`, então a tela mostrava
+            // "TRANSMITINDO AO VIVO" com o cronômetro correndo enquanto a turma via uma
+            // imagem vazia — o pior erro possível, porque não parece erro nenhum.
+            guard captureService.isRecording else {
+                self.streamErrorMessage = captureService.errorMessage
+                    ?? "Não foi possível iniciar a captura da tela."
+                return
+            }
+
             do {
                 try serverService.start()
                 advertiserService.startAdvertising()
+                self.systemActivity.beginTransmission(
+                    reason: "Transmitindo a aula para os alunos na rede local"
+                )
                 self.isStreaming = true
                 self.isPaused = false
                 self.streamState.reset()
                 self.streamStartedAt = Date()
                 self.updateServerURL()
             } catch {
-                print("Erro ao iniciar servidor: \(error)")
+                // O servidor não subiu: desfaz a captura em vez de deixá-la rodando à toa.
+                await captureService.stopCapture()
+                self.streamErrorMessage = "Não foi possível abrir o servidor na porta \(serverService.port)."
             }
         }
     }
@@ -111,6 +188,7 @@ public final class MainViewModel: ObservableObject {
             await captureService.stopCapture()
             serverService.stop()
             advertiserService.stopAdvertising()
+            self.systemActivity.endTransmission()
             self.isStreaming = false
             self.isPaused = false
             self.streamState.reset()
@@ -208,6 +286,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // de caírem para a tela de "Reconectando" sem saber o que aconteceu.
         serverService.broadcastControlMessage(type: "STREAM_ENDED", payload: ["reason": reason])
 
+        systemActivity.endTransmission()
         isStreaming = false
         isPaused = false
         streamState.reset()

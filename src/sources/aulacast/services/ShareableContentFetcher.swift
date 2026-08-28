@@ -33,12 +33,18 @@ public final class ShareableContentFetcher {
             displays.append(DisplaySource(scDisplay: display))
         }
 
+        let processoAtual = ProcessInfo.processInfo.processIdentifier
+
         for window in content.windows {
             guard window.windowLayer == 0 else { continue }
             guard window.frame.width >= 100, window.frame.height >= 100 else { continue }
 
+            // O transmissor não se transmite. A comparação é pelo id do processo, e não
+            // pelo bundle: rodando via `swift run` o bundle identifier é nulo, e a própria
+            // janela do AulaCast acabava aparecendo como fonte para transmitir.
+            guard window.owningApplication?.processID != processoAtual else { continue }
+
             guard let bundleID = window.owningApplication?.bundleIdentifier,
-                  bundleID != Bundle.main.bundleIdentifier,
                   !Self.excludedBundleIdentifiers.contains(bundleID),
                   let appName = window.owningApplication?.applicationName, !appName.isEmpty,
                   let title = window.title, !title.isEmpty else {

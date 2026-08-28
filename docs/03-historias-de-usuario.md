@@ -82,7 +82,7 @@ Cenário: Aluno sinaliza dúvida ao professor
 ```gherkin
 Cenário: Visualizar dúvidas pendentes
   Dado que os alunos "Carlos" e "Mariana" levantaram a mão
-  Quando eu olhar para a barra de menus do macOS ou para o app AulaCast
+  Quando eu olhar para o app AulaCast
   Então devo ver o contador "Dúvidas: 2"
   E as linhas de "Carlos" e "Mariana" devem exibir o ícone de mão levantada
   E o contador só deve baixar quando o próprio aluno abaixar a mão.

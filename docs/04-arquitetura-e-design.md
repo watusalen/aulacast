@@ -10,7 +10,7 @@ O **AulaCast** segue uma arquitetura baseada em **Host Nativo (macOS)** e **Clie
 ```mermaid
 flowchart TB
     subgraph Host["Host macOS (App do Professor)"]
-        UI["SwiftUI Dashboard & MenuBarExtra"]
+        UI["SwiftUI Dashboard"]
         SCK["ScreenCaptureKit Engine"]
         ENC["MJPEGFrameEncoder (CoreImage + GPU)"]
         NET["Network.framework (HTTP & WebSocket Server)"]
@@ -71,14 +71,14 @@ flowchart TB
 Toda a comunicação interativa utiliza o protocolo WebSocket na rota `/ws`. As mensagens trafegam em formato JSON estruturado com o campo `type`.
 
 #### 3.1. Mensagem de Boas-Vindas (`CONNECTED`)
-Enviada pelo servidor assim que o aluno conecta. O campo `payload` só acompanha a mensagem
-quando o professor preencheu o próprio nome nas configurações — o aplicativo é usado por
-qualquer professor e não assume o nome da conta do Mac.
+Enviada pelo servidor assim que o aluno conecta. Carrega o estado atual do chat: sem isso,
+quem entra (ou reconecta) no meio da aula com o chat já desligado veria o campo de mensagem
+liberado e só descobriria o bloqueio ao ver o próprio texto sumir.
 ```json
 {
   "type": "CONNECTED",
   "payload": {
-    "profName": "Ana Souza"
+    "chatEnabled": true
   }
 }
 ```
@@ -133,7 +133,22 @@ Mensagem de aluno vai ao professor e retorna **somente ao autor**. Já a mensage
 }
 ```
 
-#### 3.6. Estado da Transmissão
+#### 3.6. Estado do Chat (`CHAT_STATE`)
+Enviada a todos os alunos quando o professor liga ou desliga o chat nas configurações. O
+servidor já descartava as mensagens com o chat desligado, mas em silêncio: o aluno escrevia,
+enviava e o texto sumia sem explicação. Agora o campo e o botão ficam inativos na hora, sem
+anunciar à turma que o professor desligou o chat. O descarte no servidor continua valendo — um
+cliente adulterado que reative o campo segue sem alcançar o professor.
+```json
+{
+  "type": "CHAT_STATE",
+  "payload": {
+    "enabled": "false"
+  }
+}
+```
+
+#### 3.7. Estado da Transmissão
 Mensagens de controle enviadas pelo servidor: `STREAM_PAUSED` e `STREAM_RESUMED` quando o
 professor congela ou retoma a imagem, e `STREAM_ENDED` quando a captura termina.
 ```json
@@ -240,9 +255,7 @@ AulaCast/
     │           ├── SourcePickerView.swift
     │           ├── StudentListView.swift
     │           ├── ChatPanelView.swift
-    │           ├── MenuBarView.swift
     │           ├── QualitySettingsView.swift
-    │           ├── ScreenRecordingPermissionView.swift
     │           └── AulaCastPalette.swift      # Tokens de cor e controles próprios
     ├── tests/aulacast-tests/
     │   ├── TestRunnerMain.swift               # Suíte executável

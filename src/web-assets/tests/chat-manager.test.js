@@ -15,8 +15,11 @@ function montarDomFalso() {
       filhos: [],
       scrollTop: 0,
       scrollHeight: 100,
+      hidden: false,
+      disabled: false,
       appendChild(filho) { this.filhos.push(filho); },
-      addEventListener() {}
+      addEventListener() {},
+      blur() {}
     };
     return el;
   };
@@ -24,7 +27,8 @@ function montarDomFalso() {
   const elementos = {
     chatForm: criarElemento(),
     chatMessageInput: criarElemento(),
-    chatMessages: criarElemento()
+    chatMessages: criarElemento(),
+    chatSendBtn: criarElemento()
   };
 
   globalThis.document = {
@@ -112,4 +116,75 @@ test('Mensagem vazia ou só com espaços não é enviada', () => {
   chat.handleSubmit({ preventDefault() {} });
 
   assert.strictEqual(enviadas.length, 0);
+});
+
+/**
+ * O bloqueio do chat só existia no servidor: a mensagem era descartada em silêncio e o
+ * aluno via o texto sumir sem explicação, como se o botão do professor não funcionasse.
+ */
+test('Desligar o chat inativa o campo e o botão', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
+  chat.setEnabled(false);
+
+  assert.strictEqual(elementos.chatMessageInput.disabled, true, 'campo fica inativo');
+  assert.strictEqual(elementos.chatSendBtn.disabled, true, 'botão fica inativo');
+});
+
+test('Religar o chat reativa o campo e o botão', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
+
+  // Confere o estado intermediário: sem isto o teste passaria mesmo se `setEnabled`
+  // não fizesse nada, já que o campo nasce ativo e continuaria ativo no fim.
+  chat.setEnabled(false);
+  assert.strictEqual(elementos.chatMessageInput.disabled, true, 'bloqueou de fato antes de religar');
+
+  chat.setEnabled(true);
+  assert.strictEqual(elementos.chatMessageInput.disabled, false);
+  assert.strictEqual(elementos.chatSendBtn.disabled, false);
+});
+
+// O campo inativo barra o aluno pela interface, mas o submit ainda pode partir de um
+// script: o bloqueio no cliente não pode depender só do atributo `disabled`.
+test('Com o chat desligado, nada é enviado ao servidor', () => {
+  const enviadas = [];
+  const chat = new ChatManager((m) => enviadas.push(m), () => 'Ana Beatriz');
+
+  chat.setEnabled(false);
+  elementos.chatMessageInput.value = 'insistindo mesmo assim';
+  chat.handleSubmit({ preventDefault() {} });
+
+  assert.strictEqual(enviadas.length, 0);
+});
+
+test('O texto pendente é descartado ao bloquear', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
+
+  elementos.chatMessageInput.value = 'estava digitando quando bloqueou';
+  chat.setEnabled(false);
+
+  // Um campo inativo com texto parado dentro parece travado, não desligado.
+  assert.strictEqual(elementos.chatMessageInput.value, '');
+});
+
+test('Religar reativa antes de qualquer envio, sem sobra do bloqueio', () => {
+  const enviadas = [];
+  const chat = new ChatManager((m) => enviadas.push(m), () => 'Ana Beatriz');
+
+  chat.setEnabled(false);
+  chat.setEnabled(true);
+  elementos.chatMessageInput.value = 'voltei a poder falar';
+  chat.handleSubmit({ preventDefault() {} });
+
+  assert.strictEqual(enviadas.length, 1);
+  assert.strictEqual(enviadas[0].payload.text, 'voltei a poder falar');
+});
+
+test('Chat começa liberado até o servidor dizer o contrário', () => {
+  const enviadas = [];
+  const chat = new ChatManager((m) => enviadas.push(m), () => 'Ana Beatriz');
+
+  elementos.chatMessageInput.value = 'antes de qualquer CHAT_STATE';
+  chat.handleSubmit({ preventDefault() {} });
+
+  assert.strictEqual(enviadas.length, 1);
 });

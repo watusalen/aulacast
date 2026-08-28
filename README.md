@@ -57,6 +57,72 @@ swift run AulaCast
 
 Ao iniciar a transmissão, o app mostra o endereço para passar à turma.
 
+## Gerando o aplicativo e o instalador
+
+```bash
+./scripts/build-app.sh    # monta build/AulaCast.app
+./scripts/gerar-dmg.sh    # monta o .app e o embala em build/AulaCast-1.0.0.dmg
+```
+
+O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos — quem recebe só arrasta um
+para o outro.
+
+Para desenvolver, `swift run AulaCast` é o caminho mais liso — inclusive porque não esbarra na
+permissão de Gravação de Tela (veja a seção abaixo). O `.app` é o que se instala e se entrega.
+
+### A permissão de Gravação de Tela pede autorização a cada build
+
+Se você recompilar e o macOS voltar a pedir a autorização, não é defeito do aplicativo. Sem
+certificado, o `codesign` assina de forma ad-hoc e a identidade do app fica sendo o **hash do
+binário**:
+
+```
+$ codesign -d -r- build/AulaCast.app
+# designated => cdhash H"d8d04e3247cb83e91edfc6848f75f4509b3b05f4"
+```
+
+Qualquer mudança no código muda esse hash, o macOS deixa de reconhecer o app e a permissão
+precisa ser concedida de novo.
+
+> É por isso que `swift run AulaCast` nunca pede nada: ali o binário roda solto, sem bundle
+> próprio, e o macOS atribui a captura ao processo responsável — o Terminal, que já tem a
+> permissão. O aplicativo empacotado tem identidade própria e precisa da sua.
+
+**Como resolver de vez, sem conta paga da Apple:** crie um certificado de assinatura de código
+no seu próprio Mac.
+
+1. Abra o **Acesso às Chaves** (Keychain Access).
+2. Menu **Acesso às Chaves > Assistente de Certificado > Criar um certificado…**
+3. Nome: `AulaCast Local` · Tipo de identidade: **Autoassinado raiz** · Tipo de certificado:
+   **Assinatura de código**. Confirme.
+4. Rode `./scripts/build-app.sh` de novo — ele detecta o certificado e passa a usá-lo.
+
+A identidade do app deixa de ser o hash e passa a ser o certificado mais o identificador do
+bundle, que não mudam entre builds. Você autoriza a Gravação de Tela **uma vez** e pronto.
+
+Se preferir outro nome para o certificado, exporte `AULACAST_CODESIGN_ID` antes de compilar.
+
+### O aviso do Gatekeeper
+
+O aplicativo é assinado de forma **ad-hoc**, não com Developer ID nem notarizado — as duas
+coisas exigem conta paga da Apple. Na prática, o macOS de quem receber o `.dmg` vai recusar a
+primeira abertura, dizendo que o app "está danificado" ou que veio de um desenvolvedor não
+identificado. Não é defeito do aplicativo: é o Gatekeeper reagindo à marca de quarentena que o
+sistema põe em tudo que chega de fora.
+
+Para liberar, uma vez só:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/AulaCast.app
+```
+
+Depois disso o app abre normalmente e basta autorizar a Gravação de Tela em Ajustes do Sistema
+> Privacidade e Segurança.
+
+> Clicar com o botão direito > Abrir, o truque de sempre, **não resolve** aqui: em Macs Apple
+> Silicon o sistema exige assinatura notarizada quando o arquivo está em quarentena, e não
+> apenas a confirmação do usuário. Só a remoção do atributo resolve.
+
 ## Testes
 
 O projeto tem duas suítes, ambas sem dependências externas.
