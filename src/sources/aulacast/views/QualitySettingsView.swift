@@ -41,7 +41,10 @@ public struct QualitySettingsView: View {
                     .foregroundColor(AC.textSecondary)
 
                 ACSegmentedPicker(
-                    options: [(15, "15"), (30, "30"), (45, "45"), (60, "60")],
+                    // 60 fps saiu da lista: foi testado em sala e piorou. Cada quadro
+                    // MJPEG é um JPEG inteiro, então dobrar a taxa dobra o tráfego sem
+                    // entregar imagem melhor — e o que trava não é o Mac, é a rede.
+                    options: [(15, "15"), (30, "30"), (45, "45")],
                     selection: $captureService.frameRate
                 )
 
