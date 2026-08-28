@@ -31,11 +31,50 @@ if [ ! -x "$BINARIO" ]; then
   exit 1
 fi
 
+# Segunda arquitetura, para o aplicativo rodar também em Mac Intel.
+#
+# `swift build` sozinho gera só a arquitetura da máquina que compilou. Um .dmg feito num
+# Mac Apple Silicon simplesmente não abria num Intel — e é justamente numa sala de aula que
+# se encontram máquinas dos dois tipos. O `--arch` duplo do SwiftPM exige o Xcode completo
+# (xcbuild); compilar cada fatia com `--triple` e juntar com `lipo` funciona só com as
+# Ferramentas de Linha de Comando, que é o que a maioria tem instalado.
+#
+# Se a segunda fatia não compilar, o aplicativo sai com a arquitetura local e o aviso fica
+# impresso: melhor entregar algo que roda aqui do que falhar a geração inteira.
+ARQUITETURA_LOCAL="$(uname -m)"
+if [ "$ARQUITETURA_LOCAL" = "arm64" ]; then
+  TRIPLA_OUTRA="x86_64-apple-macosx$MACOS_MINIMO"
+else
+  TRIPLA_OUTRA="arm64-apple-macosx$MACOS_MINIMO"
+fi
+
+echo "==> Compilando a outra arquitetura ($TRIPLA_OUTRA)"
+# Pasta de build separada: alternar de tripla dentro do mesmo .build faz o SwiftPM
+# reaproveitar a base de build da arquitetura anterior e falhar com
+# "command ... not registered".
+CRUZADO="$RAIZ/src/.build-cruzado"
+UNIVERSAL=""
+if swift build -c release --triple "$TRIPLA_OUTRA" --scratch-path "$CRUZADO" >/dev/null 2>&1; then
+  OUTRO_BINARIO="$(swift build -c release --triple "$TRIPLA_OUTRA" --scratch-path "$CRUZADO" --show-bin-path)/AulaCast"
+  if [ -x "$OUTRO_BINARIO" ]; then
+    UNIVERSAL="$SAIDA/AulaCast-universal"
+    mkdir -p "$SAIDA"
+    lipo -create "$BINARIO" "$OUTRO_BINARIO" -output "$UNIVERSAL"
+  fi
+fi
+
 echo "==> Montando a estrutura do aplicativo"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp "$BINARIO" "$APP/Contents/MacOS/AulaCast"
+if [ -n "$UNIVERSAL" ] && [ -x "$UNIVERSAL" ]; then
+  cp "$UNIVERSAL" "$APP/Contents/MacOS/AulaCast"
+  rm -f "$UNIVERSAL"
+  echo "    binário universal: $(lipo -archs "$APP/Contents/MacOS/AulaCast")"
+else
+  cp "$BINARIO" "$APP/Contents/MacOS/AulaCast"
+  echo "    AVISO: só $ARQUITETURA_LOCAL — este aplicativo não abrirá em Macs da outra arquitetura."
+fi
 
 # O cliente web precisa viajar junto: o WebAssetsPathResolver procura em
 # Bundle.main.resourceURL quando o app roda instalado.

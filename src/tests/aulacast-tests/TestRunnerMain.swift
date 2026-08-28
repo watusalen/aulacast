@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Network
 import AulaCastCore
 
 @main
@@ -775,6 +776,21 @@ struct AulaCastTestRunner {
         // o professor vai demonstrar algo em outro app.
         print("\n--- [13/13] Testes de Domínio: proteção contra App Nap ---")
 
+        // O serviço real primeiro: é o contrato que o dublê abaixo espelha. Ele guarda um
+        // único token, então pedir duas vezes não acumula nada e um único "soltar" libera.
+        let atividadeReal = SystemActivityService()
+        assertTest(!atividadeReal.isHoldingActivity, "Serviço real começa sem segurar nada")
+
+        atividadeReal.beginTransmission(reason: "Teste de proteção")
+        atividadeReal.beginTransmission(reason: "Teste de proteção")
+        assertTest(atividadeReal.isHoldingActivity, "Serviço real segura a proteção ao transmitir")
+
+        atividadeReal.endTransmission()
+        assertTest(
+            !atividadeReal.isHoldingActivity,
+            "Pedir duas vezes não acumula: um único 'soltar' libera o Mac"
+        )
+
         let atividade = FakeSystemActivity()
         let vmAtividade = MainViewModel(
             captureService: FakeCaptureService(),
@@ -799,13 +815,20 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 400_000_000)
         assertTest(!atividade.isHoldingActivity, "Ao parar, a proteção é liberada")
 
-        // Caminho crítico: a captura morre sozinha. Sem liberar aqui, o Mac ficaria
-        // impedido de dormir indefinidamente depois de uma aula que caiu.
+        // Caminho crítico: a captura morre sozinha, mas o servidor segue no ar de propósito
+        // e a turma continua conectada.
+        //
+        // A proteção era liberada aqui, e isso desfazia justamente o motivo de manter o
+        // servidor de pé: numa máquina configurada para dormir com 1 minuto de ociosidade
+        // (o padrão é apertado), o Mac dormia logo depois da queda, todas as conexões caíam
+        // e os alunos iam parar em "Reconectando" enquanto o professor ainda lia o aviso.
+        // Quem encerra a sessão de verdade é "Parar Transmissão".
         let atividadeQueda = FakeSystemActivity()
+        let servidorQueda = FakeServer()
         let vmQueda = MainViewModel(
             captureService: FakeCaptureService(),
             encoderService: FakeEncoder(),
-            serverService: FakeServer(),
+            serverService: servidorQueda,
             advertiserService: FakeAdvertiser(),
             systemActivity: atividadeQueda
         )
@@ -817,9 +840,431 @@ struct AulaCastTestRunner {
         vmQueda.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
         try? await Task.sleep(nanoseconds: 300_000_000)
         assertTest(
-            !atividadeQueda.isHoldingActivity,
-            "Captura caindo sozinha também libera a proteção (o Mac volta a poder dormir)"
+            servidorQueda.isRunning,
+            "Depois da queda o servidor segue no ar, com a turma conectada"
         )
+        assertTest(
+            atividadeQueda.isHoldingActivity,
+            "Com alunos ainda conectados, o Mac continua impedido de dormir"
+        )
+
+        // E a proteção não fica pendurada para sempre: encerrar a transmissão a libera.
+        vmQueda.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(
+            !atividadeQueda.isHoldingActivity,
+            "Parar a transmissão libera a proteção (o Mac volta a poder dormir)"
+        )
+        assertTest(
+            !servidorQueda.isRunning,
+            "Parar a transmissão também baixa o servidor"
+        )
+
+        // Reiniciar depois da queda não pode acumular uma segunda proteção.
+        let atividadeRetomada = FakeSystemActivity()
+        let vmRetomadaAtividade = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: atividadeRetomada
+        )
+        vmRetomadaAtividade.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        vmRetomadaAtividade.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        vmRetomadaAtividade.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        vmRetomadaAtividade.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(
+            !atividadeRetomada.isHoldingActivity,
+            "Depois de cair e voltar, um único 'Parar' libera a proteção (nada acumulado)"
+        )
+
+        // TESTE 14: Mensagem partida em vários frames e mensagem longa demais.
+        //
+        // O navegador parte mensagens grandes em vários frames (o primeiro com FIN=0, os
+        // seguintes com opcode 0). Tratar cada frame como uma mensagem inteira entregava ao
+        // professor só o começo do texto do aluno e jogava o resto fora sem aviso nenhum.
+        print("\n--- [14/16] Testes de Protocolo: mensagens partidas e longas ---")
+
+        func frameMascarado(opcode: UInt8, fin: Bool, texto: String) -> Data {
+            let payload = Array(texto.utf8)
+            let mascara: [UInt8] = [0x1A, 0x2B, 0x3C, 0x4D]
+            var frame = Data([(fin ? 0x80 : 0x00) | opcode, UInt8(0x80 | payload.count)])
+            frame.append(contentsOf: mascara)
+            for (i, b) in payload.enumerated() {
+                frame.append(b ^ mascara[i % 4])
+            }
+            return frame
+        }
+
+        func textoDoUnicoFrame(_ resultado: WebSocketFrameDecoder.Result) -> String? {
+            guard case .frames(let lista) = resultado, lista.count == 1 else { return nil }
+            return String(data: lista[0].payload, encoding: .utf8)
+        }
+
+        let decodificadorPartes = WebSocketFrameDecoder()
+        var partida = frameMascarado(opcode: 0x1, fin: false, texto: "Professor, não consigo ")
+        partida.append(frameMascarado(opcode: 0x0, fin: false, texto: "enxergar o terminal "))
+        partida.append(frameMascarado(opcode: 0x0, fin: true, texto: "daqui de trás."))
+
+        assertTest(
+            textoDoUnicoFrame(decodificadorPartes.consume(partida))
+                == "Professor, não consigo enxergar o terminal daqui de trás.",
+            "Mensagem partida em três frames chega inteira ao professor"
+        )
+
+        // Um ping do navegador pode cair no meio de uma mensagem partida sem atrapalhá-la.
+        let decodificadorComPing = WebSocketFrameDecoder()
+        var comPing = frameMascarado(opcode: 0x1, fin: false, texto: "metade ")
+        comPing.append(Data([0x89, 0x80, 0x00, 0x00, 0x00, 0x00])) // PING mascarado, sem payload
+        comPing.append(frameMascarado(opcode: 0x0, fin: true, texto: "e metade"))
+
+        if case .frames(let lista) = decodificadorComPing.consume(comPing) {
+            let textos = lista.compactMap { $0.isText ? String(data: $0.payload, encoding: .utf8) : nil }
+            assertTest(lista.count == 2, "Ping no meio da mensagem partida não some nem atrapalha")
+            assertTest(textos == ["metade e metade"], "Mensagem partida ao redor do ping é remontada")
+        } else {
+            assertTest(false, "Ping no meio da mensagem partida não some nem atrapalha")
+        }
+
+        // Continuação sem começo é cliente adulterado (ou fora de sincronia): encerrar.
+        let orfa = WebSocketFrameDecoder().consume(frameMascarado(opcode: 0x0, fin: true, texto: "sem começo"))
+        assertTest(orfa == .protocolViolation, "Frame de continuação sem começo é recusado")
+
+        // Mensagem do professor acima de 64 KB: antes o frame simplesmente não era montado
+        // e a turma nunca recebia nada — sem erro em lugar nenhum.
+        let textoLongo = String(repeating: "Resumo da aula. ", count: 8_000) // ~128 KB
+        assertTest(textoLongo.utf8.count > 65_535, "O texto de teste passa mesmo dos 64 KB")
+
+        let frameLongo = WebSocketFrameEncoder.textFrame(textoLongo)
+        let decodificadorLongo = WebSocketFrameDecoder(maxPayloadBytes: 1 << 22)
+        assertTest(
+            textoDoUnicoFrame(decodificadorLongo.consume(frameLongo)) == textoLongo,
+            "Mensagem acima de 64 KB é montada e chega inteira (antes era descartada em silêncio)"
+        )
+
+        // Os três tamanhos de cabeçalho da RFC 6455.
+        assertTest(
+            WebSocketFrameEncoder.textFrame("oi").count == 2 + 2,
+            "Texto curto usa cabeçalho de 2 bytes"
+        )
+        assertTest(
+            WebSocketFrameEncoder.textFrame(String(repeating: "a", count: 300)).count == 4 + 300,
+            "Texto médio usa comprimento estendido de 2 bytes"
+        )
+        assertTest(
+            WebSocketFrameEncoder.pongFrame(payload: Data([0x01, 0x02])).first == 0x8A,
+            "Pong é frame de controle (opcode 0xA), e não texto"
+        )
+
+        // TESTE 15: O servidor que precisa continuar de pé entre uma queda e a volta da aula.
+        print("\n--- [15/16] Testes de Rede: reinício e requisição partida ---")
+
+        final class ColetorDeSaidas: ClientObserverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _entradas: [String] = []
+            private var _saidas: [String] = []
+
+            var entradas: [String] { trava.lock(); defer { trava.unlock() }; return _entradas }
+            var saidas: [String] { trava.lock(); defer { trava.unlock() }; return _saidas }
+
+            func didClientConnect(_ client: ConnectedClient) {
+                trava.lock(); _entradas.append(client.id); trava.unlock()
+            }
+            func didClientDisconnect(clientId: String) {
+                trava.lock(); _saidas.append(clientId); trava.unlock()
+            }
+        }
+
+        /// Abre uma conexão TCP crua e envia a requisição em duas partes, com uma pausa no
+        /// meio — é o que a rede da escola faz sozinha quando o pacote chega picado.
+        func requisicaoEmDuasPartes(porta: UInt16, primeira: String, segunda: String) async -> String {
+            final class Caixa: @unchecked Sendable {
+                private let trava = NSLock()
+                private var dados = Data()
+                func acrescentar(_ novos: Data) { trava.lock(); dados.append(novos); trava.unlock() }
+                var texto: String {
+                    trava.lock(); defer { trava.unlock() }
+                    return String(data: dados, encoding: .utf8) ?? ""
+                }
+            }
+
+            let caixa = Caixa()
+            let conexao = NWConnection(
+                host: NWEndpoint.Host("127.0.0.1"),
+                port: NWEndpoint.Port(rawValue: porta)!,
+                using: .tcp
+            )
+            conexao.start(queue: .global(qos: .userInitiated))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            conexao.receive(minimumIncompleteLength: 1, maximumLength: 8192) { dados, _, _, _ in
+                if let dados = dados { caixa.acrescentar(dados) }
+            }
+
+            conexao.send(content: Data(primeira.utf8), completion: .contentProcessed({ _ in }))
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            conexao.send(content: Data(segunda.utf8), completion: .contentProcessed({ _ in }))
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
+            conexao.cancel()
+            return caixa.texto
+        }
+
+        let saidas = ColetorDeSaidas()
+        let servidorReinicio = NetworkListenerService(
+            port: 8102,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+        servidorReinicio.clientObserver = saidas
+
+        do {
+            try servidorReinicio.start()
+
+            // O caminho real: a captura cai, o servidor segue no ar de propósito para avisar
+            // a turma, e o professor clica em "Iniciar Transmissão" de novo. Subir um segundo
+            // listener na mesma porta derrubava o servidor em silêncio — o app continuava
+            // anunciando "AO VIVO" e nenhum aluno conseguia mais entrar.
+            try servidorReinicio.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            assertTest(servidorReinicio.isRunning, "Reiniciar a transmissão não derruba o servidor")
+
+            let socketDepoisDoReinicio = URLSession.shared.webSocketTask(
+                with: URL(string: "ws://127.0.0.1:8102/ws")!
+            )
+            socketDepoisDoReinicio.resume()
+            var reconectou = false
+            if case .string(let texto)? = try? await socketDepoisDoReinicio.receive() {
+                reconectou = texto.contains("CONNECTED")
+            }
+            assertTest(reconectou, "Depois do reinício o aluno ainda consegue entrar na aula")
+
+            // A saída do aluno chega por dois caminhos (o frame de CLOSE e a falha da escuta
+            // logo depois). Avisar nos dois tirava o mesmo aluno da lista duas vezes.
+            let idDoAluno = saidas.entradas.last
+            socketDepoisDoReinicio.cancel(with: .goingAway, reason: nil)
+            try? await Task.sleep(nanoseconds: 700_000_000)
+
+            let saidasDoAluno = saidas.saidas.filter { $0 == idDoAluno }
+            assertTest(
+                saidasDoAluno.count == 1,
+                "Aluno que sai é anunciado uma única vez (anunciados: \(saidasDoAluno.count))"
+            )
+
+            // Requisição partida em duas leituras: o cabeçalho Upgrade só chega na segunda.
+            // Decidindo na primeira leitura, o handshake caía no servidor de arquivos e o
+            // aluno recebia 404 no lugar da aula.
+            let resposta = await requisicaoEmDuasPartes(
+                porta: 8102,
+                primeira: "GET /ws HTTP/1.1\r\nHost: 127.0.0.1:8102\r\nUpgr",
+                segunda: "ade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            )
+            assertTest(
+                resposta.contains("101 Switching Protocols"),
+                "Handshake partido entre duas leituras ainda é reconhecido"
+            )
+            assertTest(
+                resposta.contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="),
+                "A chave de aceitação do handshake partido é a da RFC 6455"
+            )
+
+            servidorReinicio.stop()
+        } catch {
+            assertTest(false, "Falha no teste de reinício do servidor: \(error.localizedDescription)")
+        }
+
+        // Porta já ocupada por outro aplicativo: o socket falha depois, de forma assíncrona,
+        // então `start()` não lança nada. Sem alguém escutando o estado do listener, o app
+        // seguia anunciando "TRANSMITINDO AO VIVO" com o servidor morto e nenhum aluno
+        // conseguindo entrar — o professor só descobria pela turma.
+        do {
+            let intruso = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: 8103)!)
+            intruso.newConnectionHandler = { $0.cancel() }
+            intruso.start(queue: .global(qos: .utility))
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            let servidorSemPorta = NetworkListenerService(
+                port: 8103,
+                webAssetsPath: FileManager.default.temporaryDirectory
+            )
+            try servidorSemPorta.start()
+            try? await Task.sleep(nanoseconds: 800_000_000)
+
+            assertTest(
+                !servidorSemPorta.isRunning,
+                "Porta ocupada por outro app derruba o 'no ar' em vez de mentir para o professor"
+            )
+
+            servidorSemPorta.stop()
+            intruso.cancel()
+        } catch {
+            assertTest(false, "Falha no teste de porta ocupada: \(error.localizedDescription)")
+        }
+
+        // TESTE 16: A aula que volta e o custo das miniaturas.
+        print("\n--- [16/16] Testes de Domínio: retomada da aula e miniaturas ---")
+
+        let (vmRetomada, _, servidorRetomada) = montarVM(permissao: true)
+        vmRetomada.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        vmRetomada.captureDidStopUnexpectedly(reason: "O monitor foi desconectado.")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        assertTest(
+            servidorRetomada.controlMessages.contains { $0.type == "STREAM_ENDED" },
+            "A queda da captura é anunciada à turma"
+        )
+        assertTest(
+            servidorRetomada.isRunning,
+            "O servidor continua no ar depois da queda, para a turma receber o aviso"
+        )
+
+        // Aqui morava o defeito: o WebSocket nunca caiu, então nada avisava os alunos de que
+        // a aula tinha voltado. A turma inteira ficava na tela de "Transmissão encerrada"
+        // com o professor já transmitindo, e só recarregar a página resolvia.
+        vmRetomada.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+
+        assertTest(vmRetomada.isStreaming, "Depois da queda, o professor consegue transmitir de novo")
+
+        let tiposAnunciados = servidorRetomada.controlMessages.map { $0.type }
+        assertTest(
+            tiposAnunciados.contains("STREAM_STARTED"),
+            "A volta da transmissão é anunciada aos alunos que continuaram conectados"
+        )
+        if let posicaoDaQueda = tiposAnunciados.firstIndex(of: "STREAM_ENDED"),
+           let posicaoDaVolta = tiposAnunciados.lastIndex(of: "STREAM_STARTED") {
+            assertTest(
+                posicaoDaVolta > posicaoDaQueda,
+                "O aviso de volta vem depois do aviso de queda (é ele que destrava a tela do aluno)"
+            )
+        } else {
+            assertTest(false, "O aviso de volta vem depois do aviso de queda")
+        }
+
+        // Miniatura das fontes: guardar o quadro em resolução nativa não melhora nada na
+        // tela e cobra caro — uma varredura com dez janelas num monitor 5K são dez imagens
+        // enormes recriadas a cada cinco segundos, disputando a CPU com a transmissão.
+        let miniatura5K = SourceThumbnailProvider.tamanhoExibido(largura: 5120, altura: 2880)
+        assertTest(
+            miniatura5K.width == SourceThumbnailProvider.larguraMaxima,
+            "Miniatura de monitor 5K respeita o teto de largura"
+        )
+        assertTest(
+            Int(miniatura5K.height) == 540,
+            "Miniatura reduzida mantém a proporção do monitor (altura: \(Int(miniatura5K.height)))"
+        )
+
+        let miniaturaPequena = SourceThumbnailProvider.tamanhoExibido(largura: 640, altura: 400)
+        assertTest(
+            miniaturaPequena.width == 640 && miniaturaPequena.height == 400,
+            "Janela menor que o teto não é ampliada à toa"
+        )
+
+        // TESTE 17: Homônimos, histórico do chat e o aluno que fecha a aba.
+        print("\n--- [17/17] Testes de Domínio: turma cheia e aula longa ---")
+
+        // Numa turma real há homônimos — e, antes de se identificarem, todos os alunos se
+        // chamam "Aluno-…". A saída de um deles não pode levar junto o colega de mesmo nome.
+        let gerenciadorHomonimos = ClientManagerService()
+        let primeiraAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.20", isHandRaised: false)
+        let segundaAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.21", isHandRaised: true)
+        gerenciadorHomonimos.addOrUpdateClient(primeiraAna)
+        gerenciadorHomonimos.addOrUpdateClient(segundaAna)
+
+        gerenciadorHomonimos.removeClient(id: segundaAna.id)
+        assertTest(
+            gerenciadorHomonimos.clients.count == 1,
+            "Sai exatamente um aluno quando dois têm o mesmo nome"
+        )
+        assertTest(
+            gerenciadorHomonimos.clients.first?.id == primeiraAna.id,
+            "Quem sai é o dono da conexão que caiu, e não o primeiro homônimo da lista"
+        )
+        assertTest(
+            gerenciadorHomonimos.handRaisedCount == 0,
+            "A mão levantada de quem saiu não fica pendurada no contador"
+        )
+
+        // Um id que não existe (ou um nome no lugar do id) não pode remover ninguém.
+        gerenciadorHomonimos.removeClient(id: "Ana")
+        assertTest(
+            gerenciadorHomonimos.clients.count == 1,
+            "Remover por nome não tira aluno nenhum da lista"
+        )
+
+        // Aula longa com turma cheia: o histórico não pode crescer para sempre.
+        let chatLongo = ChatManagerService()
+        for i in 1...(ChatManagerService.maxMessages + 120) {
+            chatLongo.addMessage(ChatMessage(sender: "Aluno \(i)", text: "Mensagem \(i)", isProf: false))
+        }
+        assertTest(
+            chatLongo.messages.count == ChatManagerService.maxMessages,
+            "Histórico do chat respeita o teto (guardadas: \(chatLongo.messages.count))"
+        )
+        assertTest(
+            chatLongo.messages.last?.text == "Mensagem \(ChatManagerService.maxMessages + 120)",
+            "O que fica é o fim da conversa, que é o que o professor está lendo"
+        )
+        assertTest(
+            chatLongo.messages.first?.text == "Mensagem 121",
+            "O descarte tira as mensagens mais antigas, em ordem"
+        )
+
+        // O aluno que fecha a aba com a tela do professor parada.
+        //
+        // Sem envio não há erro de envio, e era só pelo erro de envio que a saída era
+        // percebida: a conexão de vídeo ficava pendurada, girando o laço a cada 10 ms, até
+        // que um quadro novo finalmente falhasse. Uma por aluno que saiu.
+        let servidorVideo = NetworkListenerService(
+            port: 8104,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+
+        do {
+            try servidorVideo.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            // De propósito, nenhum quadro é publicado: é o cenário da tela parada.
+            let video = NWConnection(
+                host: NWEndpoint.Host("127.0.0.1"),
+                port: NWEndpoint.Port(rawValue: 8104)!,
+                using: .tcp
+            )
+            video.start(queue: .global(qos: .userInitiated))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            video.send(
+                content: Data("GET /stream HTTP/1.1\r\nHost: 127.0.0.1:8104\r\n\r\n".utf8),
+                completion: .contentProcessed({ _ in })
+            )
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
+            assertTest(servidorVideo.activeStreamCount == 1, "O vídeo do aluno é contado enquanto está aberto")
+
+            video.cancel()
+
+            // Dá tempo de a saída ser percebida — sem nenhum quadro novo no meio.
+            var sobrou = servidorVideo.activeStreamCount
+            for _ in 0..<10 where sobrou > 0 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                sobrou = servidorVideo.activeStreamCount
+            }
+
+            assertTest(
+                sobrou == 0,
+                "Aluno que fecha a aba com a tela parada não deixa conexão pendurada (sobraram: \(sobrou))"
+            )
+
+            servidorVideo.stop()
+        } catch {
+            assertTest(false, "Falha no teste do stream de vídeo: \(error.localizedDescription)")
+        }
 
         // SUMÁRIO FINAL
         print("\n==========================================")

@@ -38,3 +38,6 @@ npm-debug.log*
 
 # Worktrees de sessões de trabalho (não fazem parte do projeto)
 .claude/worktrees/
+
+# Build cruzado para a segunda arquitetura (scripts/build-app.sh)
+.build-cruzado/

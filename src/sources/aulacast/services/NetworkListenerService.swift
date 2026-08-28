@@ -30,6 +30,9 @@ public final class NetworkListenerService: NetworkServerProtocol {
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private let connectionsLock = NSLock()
 
+    /// Teto para o cabeçalho HTTP acumulado antes de desistir da conexão.
+    private static let maxRequestHeaderBytes = 64 * 1024
+
     private let staticFileProvider: StaticFileProviderService
     private let streamerService: MJPEGStreamerService
     private let webSocketHandler: WebSocketHandlerService
@@ -43,14 +46,31 @@ public final class NetworkListenerService: NetworkServerProtocol {
     }
 
     public func start() throws {
-        let parameters = NWParameters.tcp
-        self.listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
+        // Subir um segundo listener na mesma porta não substitui o primeiro: quem falha ao
+        // ligar é o socket, de forma assíncrona, e não esta chamada — então o erro não
+        // chegava a lugar nenhum e o servidor saía do ar em silêncio.
+        //
+        // O caminho real é este: a captura cai sozinha, o servidor segue no ar de propósito
+        // (para a turma receber o aviso) e o professor clica em "Iniciar Transmissão" de novo.
+        guard !isRunning else { return }
 
-        self.listener?.newConnectionHandler = { [weak self] connection in
+        let parameters = NWParameters.tcp
+        let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: port)!)
+
+        listener.newConnectionHandler = { [weak self] connection in
             self?.handleConnection(connection)
         }
 
-        self.listener?.start(queue: .global(qos: .userInteractive))
+        // Sem isto, uma falha ao ligar na porta (outro aplicativo já usando a 8080) deixava
+        // o painel anunciando "TRANSMITINDO AO VIVO" com o servidor morto.
+        listener.stateUpdateHandler = { [weak self] state in
+            guard case .failed(let erro) = state else { return }
+            print("[NetworkListener] Servidor falhou na porta \(self?.port ?? 0): \(erro)")
+            self?.isRunning = false
+        }
+
+        self.listener = listener
+        listener.start(queue: .global(qos: .userInteractive))
         self.isRunning = true
     }
 
@@ -65,6 +85,9 @@ public final class NetworkListenerService: NetworkServerProtocol {
 
         self.isRunning = false
     }
+
+    /// Quantos alunos estão com o vídeo aberto agora (conexões de `/stream` vivas).
+    public var activeStreamCount: Int { streamerService.activeStreamCount }
 
     public func broadcastFrame(_ jpegData: Data) {
         streamerService.updateFrame(jpegData)
@@ -98,9 +121,48 @@ public final class NetworkListenerService: NetworkServerProtocol {
 
         connection.start(queue: .global(qos: .userInteractive))
 
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, _, _ in
-            guard let self = self, let data = data, !data.isEmpty else { return }
-            let req = String(data: data, encoding: .utf8) ?? ""
+        receiveRequest(connection: connection, acumulado: Data())
+    }
+
+    /// Lê a requisição HTTP até o fim dos cabeçalhos antes de decidir o que fazer com ela.
+    ///
+    /// O TCP não respeita fronteira de mensagem: numa rede de escola é comum a requisição
+    /// chegar partida em duas leituras. Decidir na primeira leitura fazia um handshake de
+    /// WebSocket partido no meio não ser reconhecido como tal (o cabeçalho `Upgrade` ainda
+    /// não tinha chegado) e cair no servidor de arquivos, devolvendo 404 ao aluno.
+    private func receiveRequest(connection: NWConnection, acumulado: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
+            guard let self = self else { return }
+
+            guard error == nil else {
+                connection.cancel()
+                return
+            }
+
+            var buffer = acumulado
+            if let data = data, !data.isEmpty {
+                buffer.append(data)
+            }
+
+            // Cabeçalho maior que isto não é requisição de navegador, é erro ou abuso.
+            guard buffer.count <= Self.maxRequestHeaderBytes else {
+                print("[HTTP] Cabeçalho grande demais (\(buffer.count) bytes); conexão encerrada.")
+                connection.cancel()
+                return
+            }
+
+            guard let fimDosCabecalhos = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                if isComplete {
+                    // O cliente fechou antes de terminar a requisição: não há o que servir.
+                    connection.cancel()
+                    return
+                }
+                self.receiveRequest(connection: connection, acumulado: buffer)
+                return
+            }
+
+            let cabecalhos = buffer[buffer.startIndex..<fimDosCabecalhos.upperBound]
+            let req = String(data: cabecalhos, encoding: .utf8) ?? ""
             let reqLower = req.lowercased()
 
             if reqLower.contains("upgrade: websocket") {

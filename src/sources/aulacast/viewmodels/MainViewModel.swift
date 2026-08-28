@@ -68,7 +68,10 @@ public final class MainViewModel: ObservableObject {
         captureService: any ScreenCaptureProtocol = ScreenCaptureService(),
         encoderService: VideoEncoderProtocol = MJPEGFrameEncoder(),
         serverService: NetworkServerProtocol = NetworkListenerService(port: 8080, webAssetsPath: WebAssetsPathResolver.resolve()),
-        advertiserService: ServiceAdvertiserProtocol = BonjourAdvertiserService(),
+        // Sem porta fixa aqui: o Bonjour precisa anunciar a porta em que o servidor de fato
+        // subiu. Repetir o 8080 neste ponto era um número solto que passaria a mentir para a
+        // rede assim que alguém trocasse a porta do servidor.
+        advertiserService: ServiceAdvertiserProtocol? = nil,
         systemActivity: SystemActivityProtocol = SystemActivityService(),
         permission: ScreenRecordingPermissionProtocol = ScreenRecordingPermissionService(),
         chatManager: ChatManagerService = ChatManagerService(),
@@ -77,7 +80,7 @@ public final class MainViewModel: ObservableObject {
         self.captureService = captureService
         self.encoderService = encoderService
         self.serverService = serverService
-        self.advertiserService = advertiserService
+        self.advertiserService = advertiserService ?? BonjourAdvertiserService(port: serverService.port)
         self.systemActivity = systemActivity
         self.permission = permission
         self.chatManager = chatManager
@@ -175,6 +178,15 @@ public final class MainViewModel: ObservableObject {
                 self.streamState.reset()
                 self.streamStartedAt = Date()
                 self.updateServerURL()
+
+                // Avisa quem já estava conectado que a aula voltou.
+                //
+                // Quando a captura cai sozinha, o servidor segue no ar de propósito e os
+                // alunos recebem STREAM_ENDED: a página deles para de pedir vídeo e mostra
+                // o motivo. Sem este aviso de volta, o WebSocket nunca cai, nada reinicia o
+                // vídeo e a turma inteira ficava na tela de "Transmissão encerrada" mesmo
+                // com o professor já transmitindo de novo — só recarregando a página resolvia.
+                serverService.broadcastControlMessage(type: "STREAM_STARTED", payload: nil)
             } catch {
                 // O servidor não subiu: desfaz a captura em vez de deixá-la rodando à toa.
                 await captureService.stopCapture()
@@ -286,7 +298,14 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // de caírem para a tela de "Reconectando" sem saber o que aconteceu.
         serverService.broadcastControlMessage(type: "STREAM_ENDED", payload: ["reason": reason])
 
-        systemActivity.endTransmission()
+        // A proteção contra o sono continua segurada de propósito, e é o mesmo motivo pelo
+        // qual o servidor segue no ar: a turma continua conectada.
+        //
+        // Soltá-la aqui desfazia justamente o que as linhas acima tentam fazer. Nesta
+        // máquina o macOS está configurado para dormir em 1 minuto ocioso — então, um
+        // minuto depois da queda, o Mac dormia, todas as conexões caíam e os alunos iam
+        // para "Reconectando" enquanto o professor ainda estava lendo o aviso do erro.
+        // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
         isStreaming = false
         isPaused = false
         streamState.reset()

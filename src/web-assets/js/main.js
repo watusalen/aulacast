@@ -4,7 +4,8 @@ import { ChatManager } from './chat-manager.js';
 import { EntryGate } from './entry-gate.js';
 import { PresenceReporter } from './presence-reporter.js';
 
-class AulaCastApp {
+/** Exportada para que o despachante de mensagens possa ser exercitado pelos testes. */
+export class AulaCastApp {
   constructor() {
     this.ui = new UIController();
     this.isHandRaised = false;
@@ -99,6 +100,13 @@ class AulaCastApp {
       case 'RAISE_HAND_ACK':
         this.isHandRaised = data.payload.active;
         this.updateRaiseHandUI();
+        break;
+
+      // O professor começou (ou recomeçou) a transmitir com a gente já conectado.
+      // Sem tratar isto, quem recebeu um STREAM_ENDED antes ficava preso no aviso de
+      // aula encerrada até recarregar a página.
+      case 'STREAM_STARTED':
+        this.ui.showStreaming();
         break;
 
       case 'STREAM_PAUSED':

@@ -89,12 +89,18 @@ final class FakeSystemActivity: SystemActivityProtocol {
 
     var isHoldingActivity: Bool { inicios > fins }
 
+    /// Pedir de novo com a proteção já segurada não faz nada, e soltar sem ter nada
+    /// segurado também não — é o contrato do SystemActivityService real, que guarda um
+    /// único token. Sem espelhar isso aqui, o dublê contaria chamadas que o sistema
+    /// operacional ignora e os testes passariam a medir a coisa errada.
     func beginTransmission(reason: String) {
-        inicios += 1
         ultimaRazao = reason
+        guard !isHoldingActivity else { return }
+        inicios += 1
     }
 
     func endTransmission() {
+        guard isHoldingActivity else { return }
         fins += 1
     }
 }

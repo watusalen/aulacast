@@ -15,6 +15,11 @@ public final class BonjourAdvertiserService: ServiceAdvertiserProtocol {
     }
 
     public func startAdvertising() {
+        // Anunciar duas vezes (o professor reinicia a transmissão) trocava o listener sem
+        // cancelar o anterior: sobravam dois anúncios do mesmo serviço na rede e um
+        // listener pendurado até o app fechar.
+        guard listener == nil else { return }
+
         do {
             let parameters = NWParameters.tcp
             // Porta 0 = porta efemera atribuida pelo SO, evita "Address already in use"

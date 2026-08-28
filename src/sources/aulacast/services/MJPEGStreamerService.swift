@@ -7,6 +7,21 @@ public final class MJPEGStreamerService {
     private var frameSequence: UInt64 = 0
     private let frameLock = NSLock()
 
+    private var streamsAtivos = 0
+    private let streamsLock = NSLock()
+
+    /// Quantos alunos estão com o vídeo aberto agora.
+    ///
+    /// A entrada e a saída de cada aluno passam a ser observáveis de fora: é o que permite
+    /// afirmar por teste que ninguém fica pendurado depois de fechar a aba — inclusive no
+    /// caso mais escorregadio, o da tela do professor parada, em que nenhum quadro é enviado
+    /// e portanto nenhum envio falha para denunciar a saída.
+    public var activeStreamCount: Int {
+        streamsLock.lock()
+        defer { streamsLock.unlock() }
+        return streamsAtivos
+    }
+
     public init() {}
 
     public func updateFrame(_ data: Data) {
@@ -23,9 +38,25 @@ public final class MJPEGStreamerService {
                       "Pragma: no-cache\r\n" +
                       "Connection: close\r\n\r\n"
 
-        connection.send(content: Data(headers.utf8), completion: .contentProcessed({ [weak self] _ in
+        streamsLock.lock()
+        streamsAtivos += 1
+        streamsLock.unlock()
+
+        connection.send(content: Data(headers.utf8), completion: .contentProcessed({ [weak self] erro in
+            guard erro == nil else {
+                self?.encerrar(connection)
+                return
+            }
             self?.streamLoop(connection: connection, lastSentSequence: 0)
         }))
+    }
+
+    private func encerrar(_ connection: NWConnection) {
+        connection.cancel()
+
+        streamsLock.lock()
+        streamsAtivos = max(0, streamsAtivos - 1)
+        streamsLock.unlock()
     }
 
     /// Envia apenas quadros novos. Reenviar o último quadro em loop desperdiçaria banda da LAN
@@ -42,7 +73,7 @@ public final class MJPEGStreamerService {
             // precisamos notar que o aluno saiu — do contrário este laço giraria para sempre.
             switch connection.state {
             case .cancelled, .failed:
-                connection.cancel()
+                encerrar(connection)
                 return
             default:
                 break
@@ -65,13 +96,14 @@ public final class MJPEGStreamerService {
         // O próximo quadro só é enviado quando este termina de sair: é o backpressure que
         // impede o acúmulo de quadros atrasados em clientes de rede lenta.
         connection.send(content: packet, completion: .contentProcessed({ [weak self] error in
+            guard let self = self else { return }
             guard error == nil else {
                 // O aluno saiu ou a rede caiu: encerrar explicitamente, senão a conexão
                 // fica pendurada até o app fechar (uma por aluno que sai da aula).
-                connection.cancel()
+                self.encerrar(connection)
                 return
             }
-            self?.streamLoop(connection: connection, lastSentSequence: currentSequence)
+            self.streamLoop(connection: connection, lastSentSequence: currentSequence)
         }))
     }
 }

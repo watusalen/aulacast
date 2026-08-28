@@ -32,13 +32,16 @@ public final class ClientManagerService: ObservableObject {
         }
     }
 
-    /// Remove um cliente buscando tanto por UUID (id) quanto por nome.
+    /// Remove o aluno pelo id da conexão.
+    ///
+    /// Havia aqui uma segunda tentativa por nome, para o caso de o id não casar. Como quem
+    /// chama é sempre a queda da conexão, que só conhece o id, essa busca nunca acertava o
+    /// alvo pretendido — mas podia acertar outro: numa turma com dois "Ana" (ou dois alunos
+    /// ainda sem se identificar, todos chamados "Aluno-…"), o nome não distingue ninguém e
+    /// quem saía da lista era o primeiro homônimo encontrado.
     public func removeClient(id: String) {
-        if let index = clients.firstIndex(where: { $0.id == id }) {
-            clients.remove(at: index)
-        } else if let index = clients.firstIndex(where: { $0.name == id }) {
-            clients.remove(at: index)
-        }
+        guard let index = clients.firstIndex(where: { $0.id == id }) else { return }
+        clients.remove(at: index)
         recalculateHandRaises()
     }
 

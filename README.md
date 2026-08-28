@@ -67,6 +67,16 @@ Ao iniciar a transmissão, o app mostra o endereço para passar à turma.
 O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos — quem recebe só arrasta um
 para o outro.
 
+O aplicativo sai **universal** (Apple Silicon e Intel). O `swift build` sozinho gera apenas a
+arquitetura da máquina que compilou, e um `.dmg` feito num Mac Apple Silicon não abria num
+Intel — o que numa sala de aula acontece o tempo todo. O script compila as duas fatias e as
+junta com `lipo`; se a segunda não compilar, ele avisa e segue com a arquitetura local.
+Para conferir o que saiu:
+
+```bash
+lipo -archs build/AulaCast.app/Contents/MacOS/AulaCast   # x86_64 arm64
+```
+
 Para desenvolver, `swift run AulaCast` é o caminho mais liso — inclusive porque não esbarra na
 permissão de Gravação de Tela (veja a seção abaixo). O `.app` é o que se instala e se entrega.
 

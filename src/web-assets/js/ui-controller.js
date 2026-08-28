@@ -99,6 +99,20 @@ export class UIController {
     if (spinner) spinner.hidden = true;
   }
 
+  /**
+   * A transmissão voltou sem que o WebSocket tenha caído.
+   *
+   * Depois de um `showStreamEnded` o vigia do vídeo está parado e o placeholder ocupa a
+   * tela. Como a conexão continuou de pé o tempo todo, nada disparava `updateState` de
+   * novo: o aluno ficava olhando "Transmissão encerrada" com a aula já rolando.
+   */
+  showStreaming() {
+    this.hideAllOverlays();
+    this.hidePaused();
+    this.videoStream.classList.add('active');
+    this.streamWatchdog.start();
+  }
+
   showPaused() {
     this.pausedOverlay.hidden = false;
   }
