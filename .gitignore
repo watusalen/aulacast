@@ -35,3 +35,6 @@ Icon?
 # Node (usado apenas para rodar os testes do cliente web)
 node_modules/
 npm-debug.log*
+
+# Build cruzado para a segunda arquitetura (scripts/build-app.sh)
+.build-cruzado/
