@@ -1105,6 +1105,106 @@ struct AulaCastTestRunner {
             "Janela menor que o teto não é ampliada à toa"
         )
 
+        // TESTE 17: Homônimos, histórico do chat e o aluno que fecha a aba.
+        print("\n--- [17/17] Testes de Domínio: turma cheia e aula longa ---")
+
+        // Numa turma real há homônimos — e, antes de se identificarem, todos os alunos se
+        // chamam "Aluno-…". A saída de um deles não pode levar junto o colega de mesmo nome.
+        let gerenciadorHomonimos = ClientManagerService()
+        let primeiraAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.20", isHandRaised: false)
+        let segundaAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.21", isHandRaised: true)
+        gerenciadorHomonimos.addOrUpdateClient(primeiraAna)
+        gerenciadorHomonimos.addOrUpdateClient(segundaAna)
+
+        gerenciadorHomonimos.removeClient(id: segundaAna.id)
+        assertTest(
+            gerenciadorHomonimos.clients.count == 1,
+            "Sai exatamente um aluno quando dois têm o mesmo nome"
+        )
+        assertTest(
+            gerenciadorHomonimos.clients.first?.id == primeiraAna.id,
+            "Quem sai é o dono da conexão que caiu, e não o primeiro homônimo da lista"
+        )
+        assertTest(
+            gerenciadorHomonimos.handRaisedCount == 0,
+            "A mão levantada de quem saiu não fica pendurada no contador"
+        )
+
+        // Um id que não existe (ou um nome no lugar do id) não pode remover ninguém.
+        gerenciadorHomonimos.removeClient(id: "Ana")
+        assertTest(
+            gerenciadorHomonimos.clients.count == 1,
+            "Remover por nome não tira aluno nenhum da lista"
+        )
+
+        // Aula longa com turma cheia: o histórico não pode crescer para sempre.
+        let chatLongo = ChatManagerService()
+        for i in 1...(ChatManagerService.maxMessages + 120) {
+            chatLongo.addMessage(ChatMessage(sender: "Aluno \(i)", text: "Mensagem \(i)", isProf: false))
+        }
+        assertTest(
+            chatLongo.messages.count == ChatManagerService.maxMessages,
+            "Histórico do chat respeita o teto (guardadas: \(chatLongo.messages.count))"
+        )
+        assertTest(
+            chatLongo.messages.last?.text == "Mensagem \(ChatManagerService.maxMessages + 120)",
+            "O que fica é o fim da conversa, que é o que o professor está lendo"
+        )
+        assertTest(
+            chatLongo.messages.first?.text == "Mensagem 121",
+            "O descarte tira as mensagens mais antigas, em ordem"
+        )
+
+        // O aluno que fecha a aba com a tela do professor parada.
+        //
+        // Sem envio não há erro de envio, e era só pelo erro de envio que a saída era
+        // percebida: a conexão de vídeo ficava pendurada, girando o laço a cada 10 ms, até
+        // que um quadro novo finalmente falhasse. Uma por aluno que saiu.
+        let servidorVideo = NetworkListenerService(
+            port: 8104,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+
+        do {
+            try servidorVideo.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            // De propósito, nenhum quadro é publicado: é o cenário da tela parada.
+            let video = NWConnection(
+                host: NWEndpoint.Host("127.0.0.1"),
+                port: NWEndpoint.Port(rawValue: 8104)!,
+                using: .tcp
+            )
+            video.start(queue: .global(qos: .userInitiated))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            video.send(
+                content: Data("GET /stream HTTP/1.1\r\nHost: 127.0.0.1:8104\r\n\r\n".utf8),
+                completion: .contentProcessed({ _ in })
+            )
+            try? await Task.sleep(nanoseconds: 600_000_000)
+
+            assertTest(servidorVideo.activeStreamCount == 1, "O vídeo do aluno é contado enquanto está aberto")
+
+            video.cancel()
+
+            // Dá tempo de a saída ser percebida — sem nenhum quadro novo no meio.
+            var sobrou = servidorVideo.activeStreamCount
+            for _ in 0..<10 where sobrou > 0 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                sobrou = servidorVideo.activeStreamCount
+            }
+
+            assertTest(
+                sobrou == 0,
+                "Aluno que fecha a aba com a tela parada não deixa conexão pendurada (sobraram: \(sobrou))"
+            )
+
+            servidorVideo.stop()
+        } catch {
+            assertTest(false, "Falha no teste do stream de vídeo: \(error.localizedDescription)")
+        }
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

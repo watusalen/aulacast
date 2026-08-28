@@ -295,8 +295,18 @@ public struct MainDashboardView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(AC.border, lineWidth: 1))
     }
 
+    /// Serviço de captura concreto, para os componentes que precisam observá-lo.
+    ///
+    /// O `??` daqui criava um `ScreenCaptureService` **novo a cada leitura** quando o modelo
+    /// carregava outra implementação — e esta propriedade é lida várias vezes por avaliação
+    /// do `body`. Cada leitura devolvia um objeto diferente, então o `@ObservedObject` do
+    /// seletor de fontes nunca observava o mesmo lugar duas vezes: a lista não atualizava e a
+    /// seleção não se mantinha, além de ficar registrando serviços de captura à toa.
+    /// Uma única instância de reserva mantém a identidade estável.
+    private static let capturaDeReserva = ScreenCaptureService()
+
     private var resolvedCaptureService: ScreenCaptureService {
-        (viewModel.captureService as? ScreenCaptureService) ?? ScreenCaptureService()
+        (viewModel.captureService as? ScreenCaptureService) ?? Self.capturaDeReserva
     }
 
     /// Muda quando a fonte é trocada ou quando a transmissão começa/termina — os dois

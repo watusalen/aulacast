@@ -86,6 +86,9 @@ public final class NetworkListenerService: NetworkServerProtocol {
         self.isRunning = false
     }
 
+    /// Quantos alunos estão com o vídeo aberto agora (conexões de `/stream` vivas).
+    public var activeStreamCount: Int { streamerService.activeStreamCount }
+
     public func broadcastFrame(_ jpegData: Data) {
         streamerService.updateFrame(jpegData)
     }
