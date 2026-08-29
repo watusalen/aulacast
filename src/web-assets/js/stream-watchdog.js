@@ -7,10 +7,17 @@ import { STREAM_RETRY_BASE_MS, STREAM_RETRY_MAX_MS } from './config.js';
  * imagem congelada para sempre enquanto o selo de status continua dizendo "Conectado",
  * porque nada reatribui o `src`.
  *
- * Em um multipart/x-mixed-replace, o navegador dispara:
- *   - `error` quando a conexão falha;
- *   - `load`  quando a resposta multipart TERMINA (ou seja, o stream acabou).
- * Os dois significam "não está mais chegando vídeo" e disparam nova tentativa.
+ * Só o evento `error` conta como queda.
+ *
+ * Havia aqui um segundo ouvinte, no `load`, com a ideia de que ele marcaria o fim da
+ * resposta multipart. Não marca: pela especificação, o `load` de um multipart dispara
+ * assim que a PRIMEIRA parte chega — e é isso que Chrome e Safari fazem (o Firefox vai
+ * além e dispara a cada quadro). O resultado era o vigia entender o primeiro quadro como
+ * "acabou" e derrubar o stream para reconectar, de novo e de novo, com a espera crescendo
+ * até o teto de 10 s. O aluno via a imagem engasgar e piscar em ciclo, sem parar.
+ *
+ * O fim de transmissão de verdade chega pelo WebSocket (STREAM_ENDED), que é o caminho
+ * confiável; a queda só do vídeo continua sendo pega pelo `error`.
  */
 export class StreamWatchdog {
   constructor(imgElement, { onRetry } = {}) {
@@ -23,7 +30,12 @@ export class StreamWatchdog {
     this.attempts = 0;
 
     this.img.addEventListener('error', () => this.handleInterruption('error'));
-    this.img.addEventListener('load', () => this.handleInterruption('load'));
+
+    // O `load` vira sinal de sucesso, que é o que ele de fato significa: chegou imagem.
+    // Sem isto, o intervalo entre tentativas só crescia — uma queda no começo da aula
+    // deixava o aluno esperando 10 s por reconexão pelo resto do tempo, mesmo com a rede
+    // já boa fazia tempo.
+    this.img.addEventListener('load', () => { this.attempts = 0; });
   }
 
   /** Passa a manter o stream vivo, reconectando sozinho enquanto for necessário. */

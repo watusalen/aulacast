@@ -44,16 +44,23 @@ test('queda do stream (error) agenda nova tentativa', () => {
   wd.stop();
 });
 
-test('fim do multipart (load) tambem conta como interrupcao', () => {
+test('o load do primeiro quadro NAO derruba o stream', () => {
   const img = fakeImg();
   const tentativas = [];
   const wd = new StreamWatchdog(img, { onRetry: (n, motivo) => tentativas.push({ n, motivo }) });
 
   wd.start();
+  const srcInicial = img.src;
+
+  // Num multipart/x-mixed-replace o `load` dispara na PRIMEIRA parte — Chrome e Safari
+  // fazem isso, o Firefox dispara a cada quadro. Tratar isso como fim do stream fazia o
+  // vigia reconectar em ciclo e a imagem do aluno piscava sem parar.
+  img.dispatch('load');
   img.dispatch('load');
 
-  assert.strictEqual(tentativas.length, 1);
-  assert.strictEqual(tentativas[0].motivo, 'load');
+  assert.strictEqual(tentativas.length, 0, 'load nao conta como queda');
+  assert.strictEqual(img.src, srcInicial, 'o stream segue no ar, sem reconectar');
+
   wd.stop();
 });
 
@@ -81,4 +88,22 @@ test('intervalo entre tentativas cresce mas respeita o teto', () => {
   assert.strictEqual(calcular(1), STREAM_RETRY_BASE_MS);
   assert.ok(calcular(2) > calcular(1));
   assert.strictEqual(calcular(50), STREAM_RETRY_MAX_MS);
+});
+
+test('imagem chegando zera o intervalo de reconexao', () => {
+  const img = fakeImg();
+  const wd = new StreamWatchdog(img);
+  wd.start();
+
+  // Duas quedas seguidas empurram o intervalo para cima.
+  img.dispatch('error');
+  img.dispatch('error');
+  assert.ok(wd.attempts >= 2, 'as tentativas acumulam durante a queda');
+
+  // Voltou a chegar imagem: a proxima queda tem de recomecar do intervalo curto, senao
+  // uma oscilacao no comeco da aula deixa o aluno esperando o teto de 10 s ate o fim.
+  img.dispatch('load');
+  assert.strictEqual(wd.attempts, 0);
+
+  wd.stop();
 });
