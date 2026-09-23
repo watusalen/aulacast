@@ -6,6 +6,39 @@
   padding: 0;
 }
 
+/* Barras de rolagem da página inteira (lista de arquivos, conversa, gaveta no celular).
+   A barra padrão do navegador é cinza-clara e grossa, e brigava com o tema escuro.
+   Aqui: fina, arredondada, translúcida, e sem trilho — some no fundo e só aparece quando
+   há o que rolar. Chrome (121+) e Firefox usam as propriedades padrão; o Safari usa
+   ::-webkit-scrollbar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .2) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, .16);
+  border-radius: 999px;
+  /* Borda transparente com background-clip: a barra fica com 4 px de largura visível,
+     afastada da borda do painel. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, .32);
+}
+
 body {
   background: #111;
   color: #e8e8e8;
@@ -1039,8 +1072,6 @@ body {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
 }
 
 .chat-bubble {
