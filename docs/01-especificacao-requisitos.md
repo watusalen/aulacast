@@ -27,7 +27,7 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 | **RF-02** | Seleção de Fonte | O professor deve poder escolher entre transmitir o Monitor Completo ou uma Janela de Aplicativo específica (ex: Xcode, Terminal, VS Code). | **MUST** |
 | **RF-03** | Servidor Web/WebSocket Embutido | O aplicativo macOS deve subir um servidor HTTP e WebSocket na porta local 8080 (usando `Network.framework`). | **MUST** |
 | **RF-04** | Streaming de Vídeo de Baixa Latência | O sistema deve codificar os quadros em JPEG e transmiti-los como fluxo MJPEG (`multipart/x-mixed-replace`) sobre HTTP, exibível por qualquer navegador sem plugin ou codec adicional. | **MUST** |
-| **RF-05** | Anúncio de Serviço (Bonjour/mDNS) | O sistema deve anunciar o serviço na rede local usando o protocolo Bonjour (`_aulacast._tcp`, nome "AulaCast - IFPI"), com a porta do servidor HTTP no registro TXT (`port=8080`). A turma entra pelo endereço IP mostrado no painel. | **MUST** |
+| **RF-05** | Anúncio de Serviço (Bonjour/mDNS) | O sistema deve anunciar o serviço na rede local usando o protocolo Bonjour (`_aulacast._tcp`, nome "AulaCast - IFPI"), na própria porta fixa do servidor (8080). A turma entra pelo endereço IP mostrado no painel. | **MUST** |
 | **RF-06** | Controles da Sessão de Transmissão | O professor deve ter botões intuitivos para **Iniciar**, **Pausar** (congelar imagem) e **Encerrar** a transmissão. | **MUST** |
 | **RF-07** | Indicador de Alunos Conectados | O aplicativo deve exibir em tempo real a lista e a contagem total de alunos/dispositivos conectados à transmissão. | **MUST** |
 | **RF-08** | Interface Web do Aluno (Player) | O cliente Web deve fornecer um player de vídeo HTML5 responsivo com suporte a Tela Cheia (Full Screen). | **MUST** |
