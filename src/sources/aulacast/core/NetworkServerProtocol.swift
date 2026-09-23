@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Abstração para servidores de rede e transmissão (DIP).
 public protocol NetworkServerProtocol: AnyObject {
@@ -22,6 +23,13 @@ public protocol NetworkServerProtocol: AnyObject {
     func broadcastControlMessage(type: String, payload: [String: String]?)
     /// Troca a lista de arquivos que a turma pode baixar e avisa quem está conectado.
     func updateSharedFiles(_ files: [SharedFile])
+}
+
+/// Servidor capaz de anunciar a si mesmo via Bonjour, na própria porta.
+public protocol BonjourHostProtocol: AnyObject {
+    /// Liga (ou, com `nil`, desliga) o anúncio. Vale também para o servidor ainda parado:
+    /// o anúncio sobe junto com ele.
+    func definirAnuncio(_ servico: NWListener.Service?)
 }
 
 /// Abstração para registradores de serviço Bonjour/mDNS (DIP).

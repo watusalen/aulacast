@@ -98,9 +98,8 @@ public final class MainViewModel: ObservableObject {
         captureService: any ScreenCaptureProtocol = ScreenCaptureService(),
         encoderService: VideoEncoderProtocol = MJPEGFrameEncoder(),
         serverService: NetworkServerProtocol = NetworkListenerService(port: 8080, webAssetsPath: WebAssetsPathResolver.resolve()),
-        // Sem porta fixa aqui: o Bonjour precisa anunciar a porta em que o servidor de fato
-        // subiu. Repetir o 8080 neste ponto era um número solto que passaria a mentir para a
-        // rede assim que alguém trocasse a porta do servidor.
+        // O anúncio Bonjour sai do próprio servidor, na porta dele: não há uma segunda
+        // porta para manter em sincronia.
         advertiserService: ServiceAdvertiserProtocol? = nil,
         systemActivity: SystemActivityProtocol = SystemActivityService(),
         permission: ScreenRecordingPermissionProtocol = ScreenRecordingPermissionService(),
@@ -110,7 +109,9 @@ public final class MainViewModel: ObservableObject {
         self.captureService = captureService
         self.encoderService = encoderService
         self.serverService = serverService
-        self.advertiserService = advertiserService ?? BonjourAdvertiserService(port: serverService.port)
+        self.advertiserService = advertiserService
+            ?? (serverService as? BonjourHostProtocol).map { BonjourAdvertiserService(servidor: $0) }
+            ?? SemAnuncioService()
         self.systemActivity = systemActivity
         self.permission = permission
         self.chatManager = chatManager

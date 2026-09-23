@@ -62,7 +62,7 @@ flowchart TB
 - **Motivo de existir separado:** o TCP não respeita fronteira de mensagem. Uma leitura pode trazer dois frames colados ou metade de um, então o decodificador mantém um buffer próprio por conexão. Tratar cada leitura como exatamente um frame descartava mensagens em silêncio.
 
 #### 2.5. `BonjourAdvertiser`
-- **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` usando `NWListener.service`. O anúncio sai de um listener próprio, em porta efêmera (para não disputar a 8080), e leva a porta real do servidor no registro TXT (`port=8080`). Esse listener recusa qualquer conexão: sem um `newConnectionHandler` o `NWListener` não sobe e o anúncio falhava em silêncio.
+- **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` usando `NWListener.service` no **próprio listener do servidor**, na porta fixa 8080. Antes o anúncio saía de um segundo listener, em porta sorteada a cada execução: quem achava a sala pelo Bonjour recebia uma porta que recusava conexão, e a porta mudava de aula para aula (ruim para liberar o app no firewall). Um nome repetido na rede é renomeado pelo sistema ("AulaCast - IFPI (2)") sem derrubar o servidor.
 
 ---
 

@@ -3,7 +3,7 @@ import Network
 import CoreWLAN
 
 /// Servico central de escuta de rede e orquestracao HTTP/WebSocket (SRP, DIP, LSP).
-public final class NetworkListenerService: NetworkServerProtocol {
+public final class NetworkListenerService: NetworkServerProtocol, BonjourHostProtocol {
     public private(set) var isRunning: Bool = false
     public let port: UInt16
 
@@ -37,6 +37,8 @@ public final class NetworkListenerService: NetworkServerProtocol {
     public var onFailure: ((String) -> Void)?
 
     private var listener: NWListener?
+    /// Anúncio Bonjour pedido para este servidor, aplicado também quando ele (re)sobe.
+    private var anuncio: NWListener.Service?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private let connectionsLock = NSLock()
 
@@ -90,9 +92,23 @@ public final class NetworkListenerService: NetworkServerProtocol {
             self.onFailure?(mensagem)
         }
 
+        listener.service = anuncio
+        // Um nome repetido na rede (dois professores com o AulaCast na mesma sala) não
+        // derruba nada: o sistema renomeia o anúncio, e só isso é registrado.
+        listener.serviceRegistrationUpdateHandler = { mudanca in
+            if case .add(let endpoint) = mudanca {
+                print("[Bonjour] Anunciado como \(endpoint)")
+            }
+        }
+
         self.listener = listener
         listener.start(queue: .global(qos: .userInteractive))
         self.isRunning = true
+    }
+
+    public func definirAnuncio(_ servico: NWListener.Service?) {
+        anuncio = servico
+        listener?.service = servico
     }
 
     public func stop() {

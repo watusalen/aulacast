@@ -1777,6 +1777,35 @@ struct AulaCastTestRunner {
         }
         try? FileManager.default.removeItem(at: pastaDeArquivos)
 
+        // TESTE 24: Porta fixa, também no Bonjour.
+        print("\n--- [24/24] Testes de Rede: anúncio Bonjour na porta do servidor ---")
+
+        final class HospedeiroFalso: BonjourHostProtocol {
+            var anuncios: [NWListener.Service?] = []
+            func definirAnuncio(_ servico: NWListener.Service?) { anuncios.append(servico) }
+        }
+        let hospedeiro = HospedeiroFalso()
+        let anunciante = BonjourAdvertiserService(servidor: hospedeiro)
+        anunciante.startAdvertising()
+        assertTest(
+            hospedeiro.anuncios.last??.type == "_aulacast._tcp",
+            "O anúncio sai pelo próprio servidor, com o tipo _aulacast._tcp"
+        )
+        anunciante.stopAdvertising()
+        assertTest(hospedeiro.anuncios.count == 2 && hospedeiro.anuncios.last! == nil, "Parar desliga o anúncio")
+
+        let vmPadrao = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: NetworkListenerService(port: 8114, webAssetsPath: FileManager.default.temporaryDirectory),
+            systemActivity: FakeSystemActivity()
+        )
+        assertTest(
+            vmPadrao.advertiserService is BonjourAdvertiserService,
+            "O app anuncia pelo servidor da aula, sem um segundo listener em porta sorteada"
+        )
+        assertTest(vmPadrao.serverService.port == 8114, "A porta da turma é a que foi fixada")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
