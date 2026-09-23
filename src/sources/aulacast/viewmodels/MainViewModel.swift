@@ -13,18 +13,17 @@ public final class MainViewModel: ObservableObject {
 
     /// O endereço como a turma digita.
     ///
-    /// Enquanto a transmissão está no ar, mostra `aulacast.local` — o nome mDNS
-    /// registrado pelo `MDNSHostnameService` — sem porta, porque a porta 80 fica
-    /// redirecionada para a porta real do servidor pelo `PrivilegedPortRedirectService`.
-    /// Se esse redirecionamento não rolou (senha de admin recusada, `pfctl` indisponível
-    /// etc.), cai para `aulacast.local:<porta>`, que continua funcionando igual. Antes da
-    /// sessão abrir, mostra o IP numérico para o professor saber a qual rede está
-    /// conectado.
+    /// Enquanto a transmissão está no ar, mostra `aulacast.local:<porta>` — o nome
+    /// mDNS registrado pelo `MDNSHostnameService` — que funciona em Chrome/Edge/Safari
+    /// sem nenhuma configuração. Antes da sessão abrir, mostra o IP numérico para o
+    /// professor saber a qual rede está conectado.
+    ///
+    /// Sem a porta (`aulacast.local` puro) exigiria o servidor escutar na porta 80, que só
+    /// root abre no macOS — chegou a ser tentado via `pf`, mas a única forma de fazer valer
+    /// de verdade é substituir o conjunto de regras de firewall do sistema inteiro, o que
+    /// não vale o risco para este app.
     public var displayAddress: String {
         if isSessionOpen {
-            if isPortaOitentaRedirecionada {
-                return "aulacast.local"
-            }
             return "aulacast.local:\(serverService.port)"
         }
         return serverURLString.replacingOccurrences(of: "http://", with: "")
@@ -132,13 +131,6 @@ public final class MainViewModel: ObservableObject {
 
     /// Registra `aulacast.local` na rede enquanto a transmissão está no ar.
     private let mdnsService = MDNSHostnameService()
-
-    /// Redireciona a porta 80 para a porta real do servidor, para a turma digitar
-    /// `aulacast.local` sem porta. Pede a senha de admin uma vez por transmissão.
-    private let portRedirectService = PrivilegedPortRedirectService()
-
-    /// Reflete se o redirecionamento da porta 80 está no ar. Ver `displayAddress`.
-    @Published private var isPortaOitentaRedirecionada: Bool = false
 
 
     /// Avisa quando a rede muda (trocar de Wi-Fi, plugar cabo, o roteador renovar o IP).
@@ -335,9 +327,6 @@ public final class MainViewModel: ObservableObject {
                 try serverService.start()
                 advertiserService.startAdvertising()
                 mdnsService.start(ip: serverService.localIPAddress)
-                portRedirectService.start(targetPort: serverService.port) { [weak self] status in
-                    self?.isPortaOitentaRedirecionada = (status == .ativo)
-                }
                 self.systemActivity.beginTransmission(
                     reason: "Transmitindo a aula para os alunos na rede local"
                 )
@@ -379,8 +368,6 @@ public final class MainViewModel: ObservableObject {
             serverService.stop()
             advertiserService.stopAdvertising()
             mdnsService.stop()
-            portRedirectService.stop()
-            self.isPortaOitentaRedirecionada = false
             self.systemActivity.endTransmission()
             self.isStreaming = false
             self.isSessionOpen = false
