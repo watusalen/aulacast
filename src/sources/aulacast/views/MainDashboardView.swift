@@ -57,7 +57,6 @@ public struct MainDashboardView: View {
         }
         .frame(minWidth: painelAberto ? 1040 : 760, minHeight: 620)
         .background(M3.surfaceContainerLow)
-        .overlay(alignment: .topLeading) { tituloDaJanela }
         .ignoresSafeArea(.container, edges: .top)
         .animation(M3.Mola.padrao, value: painelAberto)
         .animation(M3.Mola.padrao, value: abaSalva)
@@ -93,21 +92,6 @@ public struct MainDashboardView: View {
             aba.wrappedValue = destino
             painelAberto = true
         }
-    }
-
-    // MARK: - Título na faixa da janela
-
-    private var tituloDaJanela: some View {
-        HStack(spacing: 8) {
-            ACBrandMark(tamanho: 18)
-            Text("AulaCast")
-                .m3(.titleSmall)
-                .foregroundColor(M3.onSurfaceVariant)
-        }
-        .padding(.leading, 84)
-        .frame(height: 30)
-        .padding(.top, 2)
-        .allowsHitTesting(false)
     }
 
     // MARK: - Palco

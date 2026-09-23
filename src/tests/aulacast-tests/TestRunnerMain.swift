@@ -1418,6 +1418,17 @@ struct AulaCastTestRunner {
                 private var total = 0
                 func somar(_ quantos: Int) { trava.lock(); total += quantos; trava.unlock() }
                 var quantidade: Int { trava.lock(); defer { trava.unlock() }; return total }
+
+                /// Lê a conexão até ela fechar. Fica aqui, e não numa função local do teste,
+                /// porque o callback roda na fila da rede: uma função local herdaria o ator
+                /// principal do teste, e o Swift 6 avisa da chamada fora dele.
+                func escutar(_ conexao: NWConnection) {
+                    conexao.receive(minimumIncompleteLength: 1, maximumLength: 65536) { dados, _, _, erro in
+                        guard erro == nil else { return }
+                        if let dados = dados { self.somar(dados.count) }
+                        self.escutar(conexao)
+                    }
+                }
             }
 
             let recebidos = BytesRecebidos()
@@ -1427,17 +1438,9 @@ struct AulaCastTestRunner {
                 using: .tcp
             )
 
-            func escutar() {
-                video.receive(minimumIncompleteLength: 1, maximumLength: 65536) { dados, _, _, erro in
-                    guard erro == nil else { return }
-                    if let dados = dados { recebidos.somar(dados.count) }
-                    escutar()
-                }
-            }
-
             video.start(queue: .global(qos: .userInitiated))
             try? await Task.sleep(nanoseconds: 300_000_000)
-            escutar()
+            recebidos.escutar(video)
 
             video.send(
                 content: Data("GET /stream HTTP/1.1\r\nHost: 127.0.0.1:8106\r\n\r\n".utf8),

@@ -414,7 +414,6 @@ AulaCast/
     │           ├── ChatPanelView.swift
     │           ├── SharedFilesPanelView.swift
     │           ├── QualitySettingsView.swift
-    │           ├── ACBrandMark.swift
     │           └── AulaCastPalette.swift      # Cores da marca
     ├── tests/aulacast-tests/
     │   ├── TestRunnerMain.swift               # Suíte executável
