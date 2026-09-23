@@ -1,5 +1,7 @@
 import Foundation
 import AppKit
+import CoreMedia
+import CoreVideo
 import Network
 import AulaCastCore
 
@@ -1658,6 +1660,87 @@ struct AulaCastTestRunner {
         vmJanela.captureSourceDidDisappear(sourceName: "Safari")
         vmJanela.captureSourceIsAvailableAgain()
         assertTest(vmJanela.isPaused, "Com a aula já pausada pelo professor, a janela voltar não retoma")
+
+        // TESTE 22: Otimizações medidas contra as práticas consolidadas.
+        print("\n--- [22/22] Testes: tamanho da captura, codificador e confirmação do quadro ---")
+
+        // Tamanho da saída na proporção da fonte, sem faixas pretas e sem ampliar.
+        let limite1080 = CGSize(width: 1920, height: 1080)
+        let monitor1610 = ScreenCaptureService.tamanhoDeSaida(pixels: CGSize(width: 2940, height: 1912), limite: limite1080)
+        assertTest(monitor1610 == (1660, 1080), "Monitor 16:10 sai em 1660x1080, sem faixas laterais")
+        let janelaPequena = ScreenCaptureService.tamanhoDeSaida(pixels: CGSize(width: 1400, height: 1064), limite: limite1080)
+        assertTest(janelaPequena == (1400, 1064), "Janela menor que o limite sai no tamanho dela, sem ampliar")
+        let janelaEmPe = ScreenCaptureService.tamanhoDeSaida(pixels: CGSize(width: 1600, height: 2400), limite: limite1080)
+        assertTest(janelaEmPe == (720, 1080), "Janela em pé cabe pela altura, mantendo a proporção")
+        let em720 = ScreenCaptureService.tamanhoDeSaida(pixels: CGSize(width: 3840, height: 2160), limite: CGSize(width: 1280, height: 720))
+        assertTest(em720 == (1280, 720), "Em 720p, um monitor 16:9 grande sai em 1280x720")
+
+        // O codificador novo entrega JPEG de verdade a partir do pixel buffer da captura.
+        final class ColetorDeJPEG: EncodedFrameReceiverProtocol, @unchecked Sendable {
+            private let trava = NSLock(); private var _dados: Data?
+            var dados: Data? { trava.lock(); defer { trava.unlock() }; return _dados }
+            func didReceiveEncodedFrame(data: Data, isKeyFrame: Bool) { trava.lock(); _dados = data; trava.unlock() }
+        }
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 320, 200, kCVPixelFormatType_32BGRA,
+                            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+        var formato: CMVideoFormatDescription?
+        var amostra: CMSampleBuffer?
+        if let buffer {
+            CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: buffer, formatDescriptionOut: &formato)
+            var tempo = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: .zero, decodeTimeStamp: .invalid)
+            if let formato {
+                CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: buffer, formatDescription: formato,
+                                                         sampleTiming: &tempo, sampleBufferOut: &amostra)
+            }
+        }
+        let coletorJPEG = ColetorDeJPEG()
+        let codificador = MJPEGFrameEncoder()
+        codificador.outputReceiver = coletorJPEG
+        if let amostra { codificador.encode(sampleBuffer: amostra) }
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(coletorJPEG.dados?.prefix(2) == Data([0xFF, 0xD8]), "O codificador entrega um JPEG válido")
+        assertTest(
+            coletorJPEG.dados.flatMap { NSImage(data: $0) }?.size == NSSize(width: 320, height: 200),
+            "O JPEG sai no tamanho do quadro capturado"
+        )
+
+        // O Safari só desenha um quadro quando o próximo chega: parada a tela, o último é
+        // repetido uma vez para a turma ver o quadro certo.
+        let servidorConfirma = NetworkListenerService(port: 8115, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorConfirma.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(UInt16(8115).bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            var espera = timeval(tv_sec: 1, tv_usec: 0)
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &espera, socklen_t(MemoryLayout<timeval>.size))
+            _ = "GET /stream HTTP/1.1\r\nHost: x\r\n\r\n".withCString { send(fd, $0, strlen($0), 0) }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+
+            servidorConfirma.broadcastFrame(Data(repeating: 0xAB, count: 1000))
+            try? await Task.sleep(nanoseconds: 800_000_000)
+
+            var recebido = Data()
+            var pedaco = [UInt8](repeating: 0, count: 65536)
+            while true {
+                let n = recv(fd, &pedaco, pedaco.count, MSG_DONTWAIT)
+                if n <= 0 { break }
+                recebido.append(contentsOf: pedaco[0..<n])
+            }
+            let partes = (String(data: recebido, encoding: .isoLatin1) ?? "").components(separatedBy: "Content-Type: image/jpeg").count - 1
+            assertTest(partes == 2, "Com a tela parada, o último quadro é repetido uma única vez (partes: \(partes))")
+            close(fd)
+            servidorConfirma.stop()
+        } catch {
+            assertTest(false, "Falha no teste de confirmação do quadro: \(error.localizedDescription)")
+        }
 
         // SUMÁRIO FINAL
         print("\n==========================================")

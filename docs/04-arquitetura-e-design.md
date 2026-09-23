@@ -221,6 +221,30 @@ sequenceDiagram
 
 ---
 
+### 4.1. Desempenho: o que foi medido e comparado com as práticas consolidadas
+
+Medições feitas num MacBook Air (Apple Silicon), monitor 1470x956 pontos (Retina), 30 fps.
+
+| Ponto | Prática de referência | Antes | Agora |
+| :--- | :--- | :--- | :--- |
+| Codificação JPEG | Trabalho mínimo por quadro na fila da captura (guia do ScreenCaptureKit) | `CIContext` → `CGImage` → `NSBitmapImageRep`: 6,0 ms de CPU por quadro 1080p | `CIContext.jpegRepresentation` direto do pixel buffer: 1,0 ms, mesmo tamanho de arquivo |
+| CPU do app transmitindo | — | ~31% de um núcleo (monitor), ~27% (janela) | ~16% (monitor), ~14% (janela) |
+| Tamanho da captura | Saída na proporção da fonte (exemplo "Capturing screen content in macOS" da Apple) | 16:9 fixo: faixas pretas no monitor 16:10; janela encostada no canto | Proporção da fonte, limitada a 1920x1080 ou 1280x720, sem ampliar |
+| Último quadro no Safari | Repetir o último quadro quando a imagem para (como fazem servidores MJPEG como o µStreamer) | O WebKit só desenha uma parte quando a próxima chega (bug 36536): a turma via o quadro anterior, e quem entrava com a tela parada não via nada | O último quadro é repetido uma vez, 150 ms depois de a imagem parar |
+| Delimitador multipart | RFC 2046: o separador é `--` + boundary | Cabeçalho declarava `boundary=--frame` e o corpo usava `--frame` | `boundary=frame` |
+| Quadros `.idle` / `.suspended` | Descartar o que não é `.complete` (exemplo da Apple) | Já chegam sem imagem e morrem no codificador, sem custo | Igual |
+| Janela transmitida sumiu | Consulta periódica (o exemplo da Apple consulta o conteúdo a cada 3 s) | — | `CGWindowListCopyWindowInfo` de uma janela a cada 0,7 s: 77 µs por consulta, 0,011% de um núcleo. O status `.suspended` do ScreenCaptureKit também avisa, mas não veio em todos os fechamentos medidos, então não serve sozinho |
+
+Protocolo: MJPEG sobre HTTP continua sendo a escolha certa para o requisito de zero
+instalação e rede local. WebRTC (usado pelo Deskreen) exige negociação e UDP; H.264 sobre
+WebSocket com WebCodecs acumula atraso quando a rede congestiona, porque o TCP entrega tudo
+em ordem — foi o motivo de a Helix.ml voltar a JPEG sequencial. O AulaCast já faz o que eles
+fizeram: cada aluno só recebe o próximo quadro quando o anterior terminou de sair.
+
+Fontes: exemplo "Capturing screen content in macOS" (Apple); WWDC22 10156 e 10155; README
+do µStreamer (pikvm/ustreamer); bug 36536 do WebKit; bug 987135 do Firefox; "We Mass-Deployed
+15-Year-Old Screen Sharing Technology" (blog da Helix.ml).
+
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
 O projeto usa **Swift Package Manager** (sem `.xcodeproj`), com o núcleo isolado na biblioteca

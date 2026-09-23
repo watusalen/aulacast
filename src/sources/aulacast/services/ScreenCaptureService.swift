@@ -101,7 +101,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         
         do {
             guard let filter = await makeContentFilter(for: source) else { return }
-            let config = makeConfiguration()
+            let config = makeConfiguration(for: source)
 
             let stream = SCStream(filter: filter, configuration: config, delegate: self)
             try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: captureQueue)
@@ -186,14 +186,63 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         return nil
     }
 
-    private func makeConfiguration() -> SCStreamConfiguration {
+    private func makeConfiguration(for source: DisplaySource?) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
-        config.width = Int(resolution.width)
-        config.height = Int(resolution.height)
+        // Saída na proporção da própria fonte, como no exemplo de captura da Apple, e não
+        // num 16:9 fixo. Medido nesta máquina: o monitor 16:10 saía com faixas pretas nas
+        // laterais, e uma janela ficava encostada no canto esquerdo com uma faixa preta do
+        // outro lado — espaço desperdiçado na tela do aluno e imagem fora do centro.
+        let (largura, altura) = source.map(Self.tamanhoEmPixels(de:)).map {
+            Self.tamanhoDeSaida(
+                pixels: $0,
+                limite: CGSize(width: CGFloat(resolution.width), height: CGFloat(resolution.height))
+            )
+        } ?? (Int(resolution.width), Int(resolution.height))
+        config.width = largura
+        config.height = altura
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         config.queueDepth = 5
         config.pixelFormat = kCVPixelFormatType_32BGRA
         return config
+    }
+
+    /// Maior tamanho que cabe no limite da qualidade escolhida, mantendo a proporção da
+    /// fonte e sem nunca ampliar além dos pixels que ela tem (ampliar só gasta rede).
+    /// Dimensões pares, que é o que os codificadores de vídeo esperam.
+    public static func tamanhoDeSaida(pixels: CGSize, limite: CGSize) -> (largura: Int, altura: Int) {
+        guard pixels.width >= 2, pixels.height >= 2 else {
+            return (Int(limite.width), Int(limite.height))
+        }
+        let fator = min(1, limite.width / pixels.width, limite.height / pixels.height)
+        func par(_ v: CGFloat) -> Int { max(2, Int(v.rounded(.down)) / 2 * 2) }
+        return (par(pixels.width * fator), par(pixels.height * fator))
+    }
+
+    /// Tamanho real da fonte em pixels (pontos × escala Retina da tela onde ela está).
+    private static func tamanhoEmPixels(de source: DisplaySource) -> CGSize {
+        if let monitor = source.scDisplay {
+            let escala = escalaDaTela(monitor.displayID)
+            return CGSize(width: CGFloat(monitor.width) * escala, height: CGFloat(monitor.height) * escala)
+        }
+        if let janela = source.scWindow {
+            let centro = CGPoint(x: janela.frame.midX, y: janela.frame.midY)
+            let escala = escalaDaTela(telaQueContem(centro) ?? CGMainDisplayID())
+            return CGSize(width: janela.frame.width * escala, height: janela.frame.height * escala)
+        }
+        return .zero
+    }
+
+    /// Pixels por ponto da tela, pelo CoreGraphics (pode ser lido fora da thread principal).
+    private static func escalaDaTela(_ id: CGDirectDisplayID) -> CGFloat {
+        guard let modo = CGDisplayCopyDisplayMode(id), modo.width > 0 else { return 2 }
+        return max(1, CGFloat(modo.pixelWidth) / CGFloat(modo.width))
+    }
+
+    private static func telaQueContem(_ ponto: CGPoint) -> CGDirectDisplayID? {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var quantas: UInt32 = 0
+        guard CGGetActiveDisplayList(16, &ids, &quantas) == .success else { return nil }
+        return ids.prefix(Int(quantas)).first { CGDisplayBounds($0).contains(ponto) }
     }
 
     /// Troca a tela/janela transmitida sem derrubar a sessão: os alunos continuam conectados.
@@ -206,6 +255,9 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         // troca mais nova é que vale, e esta não pode passar por cima dela.
         guard !Task.isCancelled, selectedSource?.id == source.id, self.stream === stream else { return }
         do {
+            // Tamanho primeiro, conteúdo depois (a ordem do exemplo da Apple): a fonte nova
+            // pode ter outra proporção.
+            try await stream.updateConfiguration(makeConfiguration(for: source))
             try await stream.updateContentFilter(filter)
             vigiarJanelaTransmitida()
             lifecycleObserver?.captureSourceIsAvailableAgain()
@@ -262,7 +314,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     private func applyConfigurationChange() async {
         guard let stream = self.stream else { return }
         do {
-            try await stream.updateConfiguration(makeConfiguration())
+            try await stream.updateConfiguration(makeConfiguration(for: selectedSource))
         } catch {
             await relatarErro("Não foi possível aplicar a qualidade: \(error.localizedDescription)")
         }

@@ -169,6 +169,9 @@ docs/                       # Especificação, casos de uso, histórias de usuá
 - **MJPEG em vez de H.264** — sem negociação nem dependência de codec no cliente; qualquer navegador exibe com uma tag `<img>`, o que sustenta o requisito de zero instalação.
 - **Sem framework no cliente** — os computadores do laboratório são modestos; JavaScript puro carrega rápido e não exige build.
 - **Servidor HTTP/WebSocket próprio** (`Network.framework`) — mantém o projeto sem dependências externas, alinhado ao uso offline.
+- **JPEG direto do buffer da captura** (`CIContext.jpegRepresentation`) — 6x menos CPU por quadro que o caminho via `NSBitmapImageRep`; o app transmitindo caiu de ~31% para ~16% de um núcleo. Números e fontes em `docs/04-arquitetura-e-design.md`, seção 4.1.
+- **Captura na proporção da fonte** — sem faixas pretas e sem janela encostada no canto.
+- **Último quadro repetido uma vez quando a imagem para** — o Safari só desenha um quadro quando o próximo chega; sem isso a turma via o quadro anterior.
 - **Identificação revalidada no servidor** — a lista de presença não pode confiar apenas na checagem do navegador.
 
 ## Sobre o desenvolvimento: pair programming com IA

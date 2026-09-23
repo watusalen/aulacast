@@ -74,7 +74,7 @@ public final class MJPEGStreamerService {
 
     public func serveStream(connection: NWConnection) {
         let headers = "HTTP/1.1 200 OK\r\n" +
-                      "Content-Type: multipart/x-mixed-replace; boundary=--frame\r\n" +
+                      "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n" +
                       "Cache-Control: no-cache, no-store, must-revalidate\r\n" +
                       "Pragma: no-cache\r\n" +
                       "Connection: close\r\n\r\n"
@@ -88,7 +88,7 @@ public final class MJPEGStreamerService {
                 self?.encerrar(connection)
                 return
             }
-            self?.streamLoop(connection: connection, lastSentSequence: 0)
+            self?.streamLoop(connection: connection, lastSentSequence: 0, confirmarUltimo: false)
         }))
 
         vigiarSaida(connection)
@@ -120,10 +120,21 @@ public final class MJPEGStreamerService {
         streamsLock.unlock()
     }
 
-    /// Envia apenas quadros novos. Reenviar o último quadro em loop desperdiçaria banda da LAN
-    /// (a imagem no navegador já permanece congelada sozinha quando nada é enviado), o que é
-    /// justamente o que sustenta o modo "pausado" sem tratamento especial.
-    private func streamLoop(connection: NWConnection, lastSentSequence: UInt64) {
+    /// Quanto esperar por um quadro novo antes de repetir o último, uma vez.
+    ///
+    /// O WebKit (Safari no Mac, no iPhone e no iPad) só desenha uma parte do multipart
+    /// quando a PRÓXIMA começa a chegar — é o bug 36536 do WebKit, aberto desde 2010. Medido
+    /// aqui com um WKWebView: mandando vermelho e depois verde e parando, a página ficava
+    /// vermelha. Numa aula isso é o professor digitar a última linha e parar para explicar,
+    /// e a turma no Safari não ver essa linha. Pior: o aluno que entrava com a tela do
+    /// professor parada não via imagem nenhuma. Repetir o último quadro uma vez faz o
+    /// navegador desenhar o de verdade; a repetição fica pendente, mas é idêntica.
+    static let atrasoDaConfirmacao: TimeInterval = 0.15
+
+    /// Envia quadros novos e, quando a imagem para, repete o último uma única vez (ver
+    /// `atrasoDaConfirmacao`). Repetir em laço desperdiçaria banda da LAN: com a tela parada
+    /// nada mais é enviado, e é isso que sustenta o modo "pausado" sem tratamento especial.
+    private func streamLoop(connection: NWConnection, lastSentSequence: UInt64, confirmarUltimo: Bool) {
         frameLock.lock()
         let currentFrame = latestFrameData
         let currentSequence = frameSequence
@@ -151,23 +162,35 @@ public final class MJPEGStreamerService {
             // vai chegar para acordar ninguém.
             let despertador = Despertador()
             let ficha = UUID()
-            let retomar: () -> Void = { [weak self] in
+            // O último quadro enviado, para a repetição. Só existe se ainda for o atual.
+            let paraConfirmar = (confirmarUltimo && currentSequence == lastSentSequence) ? currentFrame : nil
+            let retomar: (_ peloRelogio: Bool) -> Void = { [weak self] peloRelogio in
                 guard despertador.assumir() else { return }
                 guard let self else { return }
                 self.frameLock.lock()
                 self.esperandoQuadro.removeValue(forKey: ficha)
                 self.frameLock.unlock()
-                self.streamLoop(connection: connection, lastSentSequence: lastSentSequence)
+                if peloRelogio, let repetido = paraConfirmar {
+                    self.enviar(repetido, sequencia: lastSentSequence, por: connection, confirmarDepois: false)
+                } else {
+                    self.streamLoop(connection: connection, lastSentSequence: lastSentSequence,
+                                    confirmarUltimo: confirmarUltimo)
+                }
             }
 
-            esperandoQuadro[ficha] = retomar
+            esperandoQuadro[ficha] = { retomar(false) }
             frameLock.unlock()
 
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5, execute: retomar)
+            let espera = paraConfirmar != nil ? Self.atrasoDaConfirmacao : 0.5
+            DispatchQueue.global().asyncAfter(deadline: .now() + espera) { retomar(true) }
             return
         }
         frameLock.unlock()
 
+        enviar(jpeg, sequencia: currentSequence, por: connection, confirmarDepois: true)
+    }
+
+    private func enviar(_ jpeg: Data, sequencia: UInt64, por connection: NWConnection, confirmarDepois: Bool) {
         let frameHeader = "--frame\r\n" +
                           "Content-Type: image/jpeg\r\n" +
                           "Content-Length: \(jpeg.count)\r\n\r\n"
@@ -186,7 +209,7 @@ public final class MJPEGStreamerService {
                 self.encerrar(connection)
                 return
             }
-            self.streamLoop(connection: connection, lastSentSequence: currentSequence)
+            self.streamLoop(connection: connection, lastSentSequence: sequencia, confirmarUltimo: confirmarDepois)
         }))
     }
 }
