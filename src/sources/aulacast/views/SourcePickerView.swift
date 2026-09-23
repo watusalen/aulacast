@@ -66,6 +66,9 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
                         }
                     }
                     .padding(.bottom, 4)
+                    // Espaço para a barra de rolagem: no macOS ela flutua por cima do
+                    // conteúdo e cobria a borda direita dos cards da última coluna.
+                    .padding(.trailing, 14)
                 }
                 .frame(maxWidth: .infinity, minHeight: 150, alignment: .top)
             }

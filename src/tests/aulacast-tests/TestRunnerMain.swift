@@ -1610,6 +1610,55 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste da aba fechada: \(error.localizedDescription)")
         }
 
+        // TESTE 21: A janela transmitida some.
+        print("\n--- [21/21] Testes de Domínio: janela transmitida fechada ou minimizada ---")
+
+        assertTest(
+            !ScreenCaptureService.janelaExiste(CGWindowID(UInt32.max - 7)),
+            "Janela que não existe é reconhecida como sumida"
+        )
+
+        let servidorDaJanela = FakeServer()
+        let vmJanela = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: servidorDaJanela,
+            advertiserService: FakeAdvertiser(),
+            systemActivity: FakeSystemActivity()
+        )
+        vmJanela.startStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        vmJanela.captureSourceDidDisappear(sourceName: "Visual Studio Code")
+        assertTest(vmJanela.isPaused, "Janela sumiu: a turma recebe pausa em vez de imagem congelada")
+        assertTest(vmJanela.isStreaming, "A sessão continua de pé para retomar sem reconectar a turma")
+        assertTest(
+            servidorDaJanela.controlMessages.last?.type == "STREAM_PAUSED",
+            "Os alunos são avisados da pausa"
+        )
+        assertTest(
+            vmJanela.streamErrorMessage?.contains("Visual Studio Code") == true,
+            "O professor vê qual janela sumiu"
+        )
+
+        vmJanela.captureSourceIsAvailableAgain()
+        assertTest(!vmJanela.isPaused, "A janela voltou (ou outra fonte foi escolhida): a aula retoma sozinha")
+        assertTest(
+            servidorDaJanela.controlMessages.last?.type == "STREAM_RESUMED",
+            "Os alunos são avisados da volta"
+        )
+        assertTest(vmJanela.streamErrorMessage == nil, "O aviso some quando a aula volta")
+
+        // Pausa posta pelo professor não é desfeita pelo app.
+        vmJanela.togglePause()
+        vmJanela.captureSourceIsAvailableAgain()
+        assertTest(vmJanela.isPaused, "Pausa do professor não é desfeita quando uma janela volta")
+
+        // Se o professor pausou antes de a janela sumir, a volta dela também não retoma.
+        vmJanela.captureSourceDidDisappear(sourceName: "Safari")
+        vmJanela.captureSourceIsAvailableAgain()
+        assertTest(vmJanela.isPaused, "Com a aula já pausada pelo professor, a janela voltar não retoma")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

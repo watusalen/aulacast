@@ -24,6 +24,13 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     }
     private var trocaDeFonte: Task<Void, Never>?
 
+    /// Confere, enquanto uma janela é transmitida, se ela ainda existe.
+    ///
+    /// Fechar só a janela (com o aplicativo dela aberto) ou minimizá-la não gera erro no
+    /// ScreenCaptureKit: os quadros apenas param. O painel seguia "AO VIVO" e a turma ficava
+    /// olhando a última imagem congelada, sem ninguém saber o que tinha acontecido.
+    private var vigiaDaJanela: Task<Void, Never>?
+
     /// Idem para a qualidade: mudar durante a transmissão precisa surtir efeito imediato.
     @Published public var resolution: VideoResolution = .p1080 {
         didSet {
@@ -103,6 +110,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             await MainActor.run {
                 self.stream = stream
                 self.isRecording = true
+                self.vigiarJanelaTransmitida()
             }
         } catch {
             await MainActor.run {
@@ -199,9 +207,43 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         guard !Task.isCancelled, selectedSource?.id == source.id, self.stream === stream else { return }
         do {
             try await stream.updateContentFilter(filter)
+            vigiarJanelaTransmitida()
+            lifecycleObserver?.captureSourceIsAvailableAgain()
         } catch {
             await relatarErro("Não foi possível trocar a fonte: \(error.localizedDescription)")
         }
+    }
+
+    /// (Re)começa a vigiar a fonte atual. Monitor não some, então só janela é vigiada.
+    @MainActor
+    private func vigiarJanelaTransmitida() {
+        vigiaDaJanela?.cancel()
+        vigiaDaJanela = nil
+        guard let fonte = selectedSource, let janela = fonte.scWindow else { return }
+        let idDaJanela = janela.windowID
+        let nome = SourceNaming.title(fonte)
+
+        vigiaDaJanela = Task { @MainActor [weak self] in
+            var sumiu = false
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                guard let self, self.isRecording, self.selectedSource?.id == fonte.id else { return }
+                let existe = Self.janelaExiste(idDaJanela)
+                if !existe && !sumiu {
+                    sumiu = true
+                    self.lifecycleObserver?.captureSourceDidDisappear(sourceName: nome)
+                } else if existe && sumiu {
+                    sumiu = false
+                    self.lifecycleObserver?.captureSourceIsAvailableAgain()
+                }
+            }
+        }
+    }
+
+    /// A janela ainda está no servidor de janelas? Fechada ou minimizada, ela sai da lista.
+    public static func janelaExiste(_ id: CGWindowID) -> Bool {
+        let lista = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+        return !(lista ?? []).isEmpty
     }
 
     /// Guarda o erro e, com a transmissão no ar, avisa o painel. Antes o erro ficava só
@@ -235,6 +277,10 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
                 self.errorMessage = "Erro ao interromper captura: \(error.localizedDescription)"
             }
         }
+        await MainActor.run {
+            self.vigiaDaJanela?.cancel()
+            self.vigiaDaJanela = nil
+        }
         // Mesmo com erro o stream é abandonado: o painel já vai mostrar a transmissão
         // parada, e guardar a referência fazia o próximo "Iniciar" ser recusado (ou, antes,
         // criar um segundo stream por cima do primeiro).
@@ -266,8 +312,20 @@ extension ScreenCaptureService: SCStreamOutput, SCStreamDelegate {
     }
     
     public nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
-        let reason = error.localizedDescription
+        let erroDoSistema = error.localizedDescription
         Task { @MainActor in
+            self.vigiaDaJanela?.cancel()
+            self.vigiaDaJanela = nil
+
+            // Quando o aplicativo da janela transmitida fecha, o ScreenCaptureKit para com
+            // um genérico "Falha ao encontrar telas ou janelas para capturar". Dizer qual
+            // janela sumiu e o que fazer é o que o professor precisa ler.
+            var reason = erroDoSistema
+            if let fonte = self.selectedSource, let janela = fonte.scWindow,
+               !Self.janelaExiste(janela.windowID) {
+                reason = "A janela “\(SourceNaming.title(fonte))” foi fechada. "
+                    + "Escolha outra fonte e clique em Iniciar Transmissão."
+            }
             self.errorMessage = "Transmissão interrompida: \(reason)"
             self.isRecording = false
             self.stream = nil

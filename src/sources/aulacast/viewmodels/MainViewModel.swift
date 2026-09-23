@@ -25,6 +25,10 @@ public final class MainViewModel: ObservableObject {
     /// O botão fica desabilitado nesse meio-tempo: um duplo clique criava dois streams.
     @Published public private(set) var isStarting: Bool = false
 
+    /// A pausa atual foi posta pelo app porque a janela transmitida sumiu, e não pelo
+    /// professor. Só essa pausa é desfeita sozinha quando a janela volta.
+    private var pausadoPorqueAJanelaSumiu = false
+
     /// Erro que derrubou a transmissão sozinha (monitor desconectado, permissão revogada…).
     @Published public var streamErrorMessage: String?
 
@@ -211,6 +215,7 @@ public final class MainViewModel: ObservableObject {
                 self.isStreaming = true
                 self.isSessionOpen = true
                 self.isPaused = false
+                self.pausadoPorqueAJanelaSumiu = false
                 self.streamState.reset()
                 self.streamStartedAt = Date()
                 self.updateServerURL()
@@ -248,6 +253,7 @@ public final class MainViewModel: ObservableObject {
             self.isStreaming = false
             self.isSessionOpen = false
             self.isPaused = false
+            self.pausadoPorqueAJanelaSumiu = false
             self.streamState.reset()
             self.streamStartedAt = nil
             self.latestPreviewImage = nil
@@ -257,6 +263,12 @@ public final class MainViewModel: ObservableObject {
     /// Congela a imagem para os alunos sem encerrar a transmissão: o streamer MJPEG continua
     /// reenviando o último frame recebido, então basta parar de alimentá-lo com frames novos.
     public func togglePause() {
+        // O professor assumiu: a pausa passa a ser dele e não se desfaz sozinha.
+        pausadoPorqueAJanelaSumiu = false
+        alternarPausa()
+    }
+
+    private func alternarPausa() {
         isPaused.toggle()
         streamState.setPaused(isPaused)
         serverService.broadcastControlMessage(type: isPaused ? "STREAM_PAUSED" : "STREAM_RESUMED", payload: nil)
@@ -353,6 +365,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
         isStreaming = false
         isPaused = false
+        pausadoPorqueAJanelaSumiu = false
         streamState.reset()
         streamStartedAt = nil
         latestPreviewImage = nil
@@ -360,6 +373,26 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
 
     public func captureDidReportError(_ message: String) {
         streamErrorMessage = message
+    }
+
+    /// Pausa em vez de mostrar a última imagem congelada como se fosse ao vivo. Não troca
+    /// para o monitor inteiro por conta própria: o professor escolheu uma janela justamente
+    /// para não mostrar o resto da tela.
+    public func captureSourceDidDisappear(sourceName: String) {
+        guard isStreaming else { return }
+        streamErrorMessage = "A janela “\(sourceName)” foi fechada ou minimizada, e a transmissão "
+            + "foi pausada. Reabra a janela ou escolha outra fonte para continuar."
+        if !isPaused {
+            alternarPausa()
+            pausadoPorqueAJanelaSumiu = true
+        }
+    }
+
+    public func captureSourceIsAvailableAgain() {
+        guard pausadoPorqueAJanelaSumiu else { return }
+        pausadoPorqueAJanelaSumiu = false
+        if isPaused { alternarPausa() }
+        streamErrorMessage = nil
     }
 }
 

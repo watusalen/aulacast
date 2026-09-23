@@ -35,8 +35,15 @@ public protocol CaptureLifecycleObserverProtocol: AnyObject {
     /// Algo deu errado com a captura ainda de pé (troca de fonte ou de qualidade que não
     /// pegou): a turma segue vendo o que via antes, e o professor precisa saber.
     func captureDidReportError(_ message: String)
+    /// A janela transmitida sumiu (fechada ou minimizada) sem o ScreenCaptureKit reclamar:
+    /// os quadros simplesmente param de chegar.
+    func captureSourceDidDisappear(sourceName: String)
+    /// Há de novo o que transmitir: a janela voltou ou o professor escolheu outra fonte.
+    func captureSourceIsAvailableAgain()
 }
 
 public extension CaptureLifecycleObserverProtocol {
     func captureDidReportError(_ message: String) {}
+    func captureSourceDidDisappear(sourceName: String) {}
+    func captureSourceIsAvailableAgain() {}
 }
