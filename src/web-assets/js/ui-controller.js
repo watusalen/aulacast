@@ -1,6 +1,27 @@
 import { ConnectionState } from './config.js';
 import { StreamWatchdog } from './stream-watchdog.js';
 
+/** Abaixo desta largura o painel vira gaveta por cima do vídeo (mesmo corte do CSS). */
+const LARGURA_DA_GAVETA = '(max-width: 860px)';
+const CHAVE_PAINEL_FECHADO = 'aulacast.painelFechado';
+
+/** Preferência do aluno no computador; sem armazenamento, o painel começa aberto. */
+function lerPainelFechado() {
+  try {
+    return localStorage.getItem(CHAVE_PAINEL_FECHADO) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function salvarPainelFechado(fechado) {
+  try {
+    localStorage.setItem(CHAVE_PAINEL_FECHADO, fechado ? '1' : '0');
+  } catch (_) {
+    // Modo privado ou armazenamento bloqueado: só não lembra na próxima vez.
+  }
+}
+
 export class UIController {
   constructor() {
     this.statusBadge = document.getElementById('connectionStatus');
@@ -24,6 +45,14 @@ export class UIController {
     });
 
     this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    this.appEl = document.getElementById('app');
+    this.sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+    this.panelBadge = document.getElementById('panelBadge');
+    this.naoLidas = 0;
+    this.painelFechadoNoComputador = lerPainelFechado();
+    this.midiaDaGaveta = typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia(LARGURA_DA_GAVETA)
+      : null;
 
     // iPhone não põe elemento em tela cheia, e Safari antigo só tem a versão webkit.
     // Chamar a função que não existe lançava erro e o botão simplesmente não fazia nada.
@@ -38,6 +67,20 @@ export class UIController {
     if (this.sidebarBackdrop) {
       this.sidebarBackdrop.addEventListener('click', () => this.closeSidebar());
     }
+    if (this.sidebarCloseBtn) {
+      this.sidebarCloseBtn.addEventListener('click', () => this.closeSidebar());
+    }
+    // Esc fecha a gaveta no celular/tablet com teclado.
+    if (typeof document.addEventListener === 'function') {
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.ehGaveta() && this.painelVisivel()) this.closeSidebar();
+      });
+    }
+    // Girar o tablet (ou redimensionar a janela) troca de gaveta para coluna e vice-versa.
+    if (this.midiaDaGaveta && this.midiaDaGaveta.addEventListener) {
+      this.midiaDaGaveta.addEventListener('change', () => this.aplicarLayoutDoPainel());
+    }
+    this.aplicarLayoutDoPainel();
   }
 
   updateState(state, attempts = 0) {
@@ -152,24 +195,92 @@ export class UIController {
     }
   }
 
-  toggleSidebar() {
-    const isOpen = this.sidebar.classList.toggle('open');
-    if (isOpen) this.menuToggleBtn.classList.remove('novidade');
-    this.menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
-    this.atualizarFundoDaGaveta(isOpen);
+  /** Tela estreita: o painel é gaveta por cima do vídeo. Sem `matchMedia`, idem. */
+  ehGaveta() {
+    return this.midiaDaGaveta ? this.midiaDaGaveta.matches : true;
   }
 
-  /** Ponto no botão do menu enquanto há novidade que o aluno ainda não viu. */
-  marcarNovidade() {
-    if (!this.sidebar.classList.contains('open')) {
-      this.menuToggleBtn.classList.add('novidade');
+  painelVisivel() {
+    return this.ehGaveta()
+      ? this.sidebar.classList.contains('open')
+      : !this.painelFechadoNoComputador;
+  }
+
+  toggleSidebar() {
+    if (this.painelVisivel()) {
+      this.closeSidebar();
+    } else {
+      this.openSidebar();
     }
   }
 
+  openSidebar() {
+    if (this.ehGaveta()) {
+      this.sidebar.classList.add('open');
+      this.atualizarFundoDaGaveta(true);
+    } else {
+      this.painelFechadoNoComputador = false;
+      salvarPainelFechado(false);
+    }
+    this.aplicarLayoutDoPainel();
+  }
+
   closeSidebar() {
-    this.sidebar.classList.remove('open');
-    this.menuToggleBtn.setAttribute('aria-expanded', 'false');
-    this.atualizarFundoDaGaveta(false);
+    if (this.ehGaveta()) {
+      this.sidebar.classList.remove('open');
+      this.atualizarFundoDaGaveta(false);
+    } else {
+      this.painelFechadoNoComputador = true;
+      salvarPainelFechado(true);
+    }
+    this.aplicarLayoutDoPainel();
+  }
+
+  /** Deixa classes, botão e contador de acordo com o estado atual do painel. */
+  aplicarLayoutDoPainel() {
+    const gaveta = this.ehGaveta();
+    if (!gaveta) {
+      // Ao virar coluna, a gaveta aberta não pode ficar por cima de tudo.
+      this.sidebar.classList.remove('open');
+      this.atualizarFundoDaGaveta(false);
+    }
+    if (this.appEl) {
+      if (!gaveta && this.painelFechadoNoComputador) {
+        this.appEl.classList.add('painel-fechado');
+      } else {
+        this.appEl.classList.remove('painel-fechado');
+      }
+    }
+
+    const visivel = this.painelVisivel();
+    const rotulo = visivel ? 'Fechar conversa e arquivos' : 'Abrir conversa e arquivos';
+    this.menuToggleBtn.setAttribute('aria-expanded', String(visivel));
+    this.menuToggleBtn.setAttribute('aria-label', rotulo);
+    this.menuToggleBtn.title = rotulo;
+    if (visivel) {
+      this.menuToggleBtn.classList.add('ativo');
+      this.zerarNaoLidas();
+    } else {
+      this.menuToggleBtn.classList.remove('ativo');
+    }
+  }
+
+  /** Conta mensagens do professor e arquivos que chegam com o painel fechado. */
+  marcarNovidade(quantidade = 1) {
+    if (this.painelVisivel()) return;
+    this.naoLidas += quantidade;
+    this.atualizarContador();
+  }
+
+  zerarNaoLidas() {
+    this.naoLidas = 0;
+    this.atualizarContador();
+  }
+
+  atualizarContador() {
+    if (!this.panelBadge) return;
+    this.panelBadge.hidden = this.naoLidas === 0;
+    this.panelBadge.textContent = this.naoLidas > 9 ? '9+' : String(this.naoLidas);
   }
 
   atualizarFundoDaGaveta(aberta) {

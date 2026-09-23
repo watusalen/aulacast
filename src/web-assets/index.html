@@ -28,22 +28,26 @@
     </form>
   </div>
 
-  <div class="app">
+  <div id="app" class="app">
     <header class="header">
       <div class="header-left">
         <span class="logo">AulaCast</span>
-        <span class="header-sep"></span>
-        <span id="profName" class="prof-label">Professor</span>
-        <span class="header-sep"></span>
-        <span id="studentBadge" class="student-badge" hidden></span>
+        <span id="studentBadge" class="student-badge" title="Você entrou com este nome" hidden></span>
       </div>
       <div class="header-right">
         <div id="connectionStatus" class="badge connecting">
           <span class="dot"></span>
           <span class="status-text">Conectando...</span>
         </div>
-        <button id="menuToggleBtn" class="menu-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
-          <span></span><span></span><span></span>
+        <!-- Abre e fecha o painel de conversa e arquivos, em qualquer tamanho de tela. -->
+        <button id="menuToggleBtn" class="panel-toggle" type="button" aria-controls="sidebar"
+                aria-expanded="false" aria-label="Abrir conversa e arquivos" title="Abrir conversa e arquivos">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>
+          </svg>
+          <span class="panel-toggle-text">Conversa</span>
+          <span id="panelBadge" class="panel-badge" aria-label="novidades não lidas" hidden></span>
         </button>
       </div>
     </header>
@@ -90,13 +94,21 @@
         </div>
       </section>
 
-      <aside id="sidebar" class="sidebar">
+      <aside id="sidebar" class="sidebar" aria-label="Conversa e arquivos">
+        <div class="sidebar-top">
+          <span class="sidebar-title">Conversa e arquivos</span>
+          <button id="sidebarCloseBtn" class="sidebar-close" type="button" aria-label="Fechar painel" title="Fechar painel">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+
         <section id="filesSection" class="files" hidden>
-          <div class="sidebar-head">Arquivos do professor</div>
+          <div class="sidebar-head sidebar-head-files">Arquivos</div>
           <ul id="filesList" class="files-list"></ul>
         </section>
 
-        <div class="sidebar-head">Conversa com o professor</div>
+        <div class="sidebar-head sidebar-head-chat">Conversa com o professor</div>
 
         <section id="chatTab" class="panel active">
           <div id="chatMessages" class="messages" role="log" aria-live="polite">

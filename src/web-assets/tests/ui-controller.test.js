@@ -59,7 +59,10 @@ function montarDomFalso() {
     sidebar: criarElemento(),
     menuToggleBtn: criarElemento(),
     studentBadge: criarElemento(),
-    sidebarBackdrop: criarElemento()
+    sidebarBackdrop: criarElemento(),
+    app: criarElemento('app'),
+    sidebarCloseBtn: criarElemento(),
+    panelBadge: criarElemento()
   };
 
   globalThis.document = { getElementById: (id) => elementos[id] ?? null };
@@ -136,4 +139,99 @@ test('A conversa aberta no celular fecha ao tocar fora', () => {
   assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'false');
 
   ui.streamWatchdog.stop();
+});
+
+/** Simula a largura da tela: `true` = celular/tablet estreito (gaveta), `false` = computador. */
+function simularTela(estreita) {
+  const midia = { matches: estreita, ouvintes: [], addEventListener(_, fn) { this.ouvintes.push(fn); } };
+  globalThis.window.matchMedia = () => midia;
+  return midia;
+}
+
+function limparPainel() {
+  elementos.sidebar.classes.clear();
+  elementos.app.classes.clear();
+  elementos.menuToggleBtn.classes.clear();
+  elementos.menuToggleBtn.listeners = {};
+  elementos.sidebarCloseBtn.listeners = {};
+  elementos.sidebarBackdrop.listeners = {};
+}
+
+test('O botão X dentro do painel fecha a gaveta', () => {
+  limparPainel();
+  simularTela(true);
+  const ui = novoController();
+  ui.toggleSidebar();
+  assert.ok(elementos.sidebar.classList.contains('open'));
+  elementos.sidebarCloseBtn.dispatch('click');
+  assert.ok(!elementos.sidebar.classList.contains('open'), 'o X fecha');
+  ui.streamWatchdog.stop();
+  delete globalThis.window.matchMedia;
+});
+
+test('No computador, fechar o painel dá a largura toda ao vídeo, e o botão reabre', () => {
+  limparPainel();
+  const salvo = {};
+  globalThis.localStorage = { getItem: (k) => salvo[k] ?? null, setItem: (k, v) => { salvo[k] = v; } };
+  simularTela(false);
+  const ui = novoController();
+
+  assert.ok(!elementos.app.classList.contains('painel-fechado'), 'começa aberto');
+  assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'true');
+
+  ui.toggleSidebar();
+  assert.ok(elementos.app.classList.contains('painel-fechado'), 'fechar some com o painel');
+  assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'false');
+  assert.strictEqual(salvo['aulacast.painelFechado'], '1', 'a escolha fica guardada');
+
+  ui.toggleSidebar();
+  assert.ok(!elementos.app.classList.contains('painel-fechado'), 'o botão reabre');
+  ui.streamWatchdog.stop();
+  delete globalThis.localStorage;
+  delete globalThis.window.matchMedia;
+});
+
+test('Quem fechou o painel no computador o encontra fechado ao voltar', () => {
+  limparPainel();
+  globalThis.localStorage = { getItem: () => '1', setItem() {} };
+  simularTela(false);
+  const ui = novoController();
+  assert.ok(elementos.app.classList.contains('painel-fechado'));
+  ui.streamWatchdog.stop();
+  delete globalThis.localStorage;
+  delete globalThis.window.matchMedia;
+});
+
+test('Com o painel fechado, o contador soma as novidades e zera ao abrir', () => {
+  limparPainel();
+  simularTela(true);
+  const ui = novoController();
+
+  ui.marcarNovidade();
+  ui.marcarNovidade(2);
+  assert.strictEqual(elementos.panelBadge.hidden, false);
+  assert.strictEqual(elementos.panelBadge.textContent, '3');
+
+  ui.toggleSidebar();
+  assert.strictEqual(elementos.panelBadge.hidden, true, 'abrir o painel zera o contador');
+
+  ui.marcarNovidade();
+  assert.strictEqual(elementos.panelBadge.hidden, true, 'com o painel aberto não há o que avisar');
+  ui.streamWatchdog.stop();
+  delete globalThis.window.matchMedia;
+});
+
+test('Girar o tablet para a largura de computador fecha a gaveta que estava aberta', () => {
+  limparPainel();
+  const midia = simularTela(true);
+  const ui = novoController();
+  ui.toggleSidebar();
+  assert.ok(elementos.sidebar.classList.contains('open'));
+
+  midia.matches = false;
+  midia.ouvintes.forEach((fn) => fn());
+  assert.ok(!elementos.sidebar.classList.contains('open'), 'a gaveta não fica por cima do vídeo');
+  assert.strictEqual(elementos.sidebarBackdrop.hidden, true);
+  ui.streamWatchdog.stop();
+  delete globalThis.window.matchMedia;
 });

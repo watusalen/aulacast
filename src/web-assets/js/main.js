@@ -106,6 +106,8 @@ export class AulaCastApp {
 
       case 'CHAT_MESSAGE':
         this.chatManager.appendMessage(data.payload.sender, data.payload.text, data.payload.isProf);
+        // Resposta do professor com o painel fechado: o contador no botão avisa.
+        if (data.payload.isProf) this.ui.marcarNovidade();
         break;
 
       // O professor começou (ou recomeçou) a transmitir com a gente já conectado.
@@ -138,9 +140,9 @@ export class AulaCastApp {
    * reconectava via o último quadro congelado como se fosse ao vivo, e o aviso de pausa
    * de antes da queda podia ficar preso na tela depois de o professor já ter retomado.
    */
-  /** No celular a lista fica na gaveta fechada: o ponto no menu avisa que chegou arquivo. */
+  /** Com o painel fechado, o contador no botão avisa que chegou arquivo. */
   avisarArquivosNovos(novos) {
-    this.ui.marcarNovidade();
+    this.ui.marcarNovidade(novos.length);
     const nomes = novos.map((a) => a.name).join(', ');
     this.chatManager.mostrarAviso(`O professor compartilhou: ${nomes}`);
   }
