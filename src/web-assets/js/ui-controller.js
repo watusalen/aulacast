@@ -257,6 +257,9 @@ export class UIController {
     this.menuToggleBtn.setAttribute('aria-expanded', String(visivel));
     this.menuToggleBtn.setAttribute('aria-label', rotulo);
     this.menuToggleBtn.title = rotulo;
+    // Com o painel aberto o botão some: quem fecha é o X dentro do painel, e dois
+    // controles para a mesma coisa lado a lado só confundem.
+    this.menuToggleBtn.hidden = visivel;
     if (visivel) {
       this.menuToggleBtn.classList.add('ativo');
       this.zerarNaoLidas();

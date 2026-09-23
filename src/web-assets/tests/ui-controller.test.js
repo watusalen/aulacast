@@ -178,11 +178,13 @@ test('No computador, fechar o painel dá a largura toda ao vídeo, e o botão re
 
   assert.ok(!elementos.app.classList.contains('painel-fechado'), 'começa aberto');
   assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'true');
+  assert.strictEqual(elementos.menuToggleBtn.hidden, true, 'com o painel aberto o botão some: fecha pelo X');
 
   ui.toggleSidebar();
   assert.ok(elementos.app.classList.contains('painel-fechado'), 'fechar some com o painel');
   assert.strictEqual(elementos.menuToggleBtn.getAttribute('aria-expanded'), 'false');
   assert.strictEqual(salvo['aulacast.painelFechado'], '1', 'a escolha fica guardada');
+  assert.strictEqual(elementos.menuToggleBtn.hidden, false, 'com o painel fechado o ícone aparece para reabrir');
 
   ui.toggleSidebar();
   assert.ok(!elementos.app.classList.contains('painel-fechado'), 'o botão reabre');
