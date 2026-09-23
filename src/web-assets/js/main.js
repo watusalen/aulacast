@@ -143,8 +143,7 @@ export class AulaCastApp {
   /** Com o painel fechado, o contador no botão avisa que chegou arquivo. */
   avisarArquivosNovos(novos) {
     this.ui.marcarNovidade(novos.length);
-    const nomes = novos.map((a) => a.name).join(', ');
-    this.chatManager.mostrarAviso(`O professor compartilhou: ${nomes}`);
+    this.chatManager.mostrarArquivosNovos(novos);
   }
 
   aplicarEstadoDaTransmissao(payload) {

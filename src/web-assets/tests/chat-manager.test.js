@@ -17,6 +17,9 @@ function montarDomFalso() {
       scrollHeight: 100,
       hidden: false,
       disabled: false,
+      attrs: {},
+      href: '',
+      setAttribute(nome, valor) { this.attrs[nome] = valor; },
       appendChild(filho) { this.filhos.push(filho); },
       addEventListener() {},
       blur() {}
@@ -200,4 +203,42 @@ test('Chat começa liberado até o servidor dizer o contrário', () => {
   chat.handleSubmit({ preventDefault() {} });
 
   assert.strictEqual(enviadas.length, 1);
+});
+
+test('Arquivo novo vira um cartão com título e o arquivo como link', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  const antes = elementos.chatMessages.filhos.length;
+  chat.mostrarArquivosNovos([{ id: 'x1', name: 'Lista 3.pdf', size: 184000 }]);
+
+  const cartao = elementos.chatMessages.filhos[antes];
+  assert.strictEqual(cartao.className, 'chat-notice');
+  assert.strictEqual(cartao.filhos[0].filhos[0].textContent, 'Novo arquivo');
+  assert.match(cartao.filhos[0].filhos[1].textContent, /^\d{2}:\d{2}$/, 'a hora fica à parte, alinhada à direita');
+  const link = cartao.filhos[1].filhos[0].filhos[0];
+  assert.strictEqual(link.href, '/arquivos/x1');
+  assert.strictEqual(link.filhos[0].textContent, 'Lista 3.pdf');
+  assert.strictEqual(link.filhos[1].textContent, '184 KB');
+});
+
+test('Vários arquivos: um por linha, com o nome inteiro ao passar o mouse', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  const longo = 'Apostila completa de Estruturas de Dados – Capítulo 4 (versão revisada).pdf';
+  chat.mostrarArquivosNovos([
+    { id: 'a', name: 'a.zip', size: 10 },
+    { id: 'b', name: longo, size: 1200000 },
+    { id: 'c', name: '<b>c</b>.txt', size: 5 }
+  ]);
+  const cartao = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
+  assert.strictEqual(cartao.filhos[0].filhos[0].textContent, 'Novos arquivos (3)');
+  const linhas = cartao.filhos[1].filhos;
+  assert.strictEqual(linhas.length, 3, 'um item por arquivo, sem juntar nomes por vírgula');
+  assert.strictEqual(linhas[1].filhos[0].attrs.title, longo);
+  assert.strictEqual(linhas[2].filhos[0].filhos[0].textContent, '<b>c</b>.txt', 'nome vai como texto, não como HTML');
+});
+
+test('Lista vazia não cria cartão', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  const antes = elementos.chatMessages.filhos.length;
+  chat.mostrarArquivosNovos([]);
+  assert.strictEqual(elementos.chatMessages.filhos.length, antes);
 });

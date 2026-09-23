@@ -329,11 +329,102 @@ body {
   display: none;
 }
 
+/* Aviso do próprio app no chat (mensagem que não saiu por falta de conexão). */
 .chat-bubble.system {
-  align-self: center;
+  align-self: stretch;
+  max-width: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #2a1d1d;
+  border: 1px solid #4a2c2c;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #f0b4b0;
+}
+
+/* Cartão de arquivos novos: um arquivo por linha, já como link de download. */
+.chat-notice {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px 12px;
+  border-radius: 8px;
+  background: #161c28;
+  border: 1px solid #2a3550;
+}
+
+.chat-notice-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 12px;
-  opacity: .8;
-  font-style: italic;
+  font-weight: 600;
+  color: #a8c6f5;
+}
+
+.chat-notice-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-time {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-weight: 500;
+  color: #7f8aa0;
+}
+
+.chat-notice-title::before {
+  content: "";
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.chat-notice-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chat-notice-file {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 6px;
+  margin: 0 -6px;
+  border-radius: 5px;
+  color: #e2e2e4;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.chat-notice-file:hover,
+.chat-notice-file:focus-visible {
+  background: #1f2838;
+}
+
+.chat-notice-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-notice-size {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #8a8a90;
 }
 
 @media (max-width: 1100px) {
