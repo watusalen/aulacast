@@ -25,6 +25,7 @@ final class FakeCaptureService: ScreenCaptureProtocol {
     @Published var errorMessage: String?
     @Published var resolution: VideoResolution = .p1080
     @Published var frameRate: Int = 30
+    @Published var hiddenBundleIDs: Set<String> = []
 
     weak var frameReceiver: FrameReceiverProtocol?
     weak var lifecycleObserver: CaptureLifecycleObserverProtocol?

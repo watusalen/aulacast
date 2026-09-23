@@ -57,10 +57,11 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
                             SourceCard(
                                 source: source,
                                 thumbnail: thumbnails[source.id],
-                                isSelected: recorder.selectedSource?.id == source.id
-                            ) {
-                                recorder.selectedSource = source
-                            }
+                                isSelected: recorder.selectedSource?.id == source.id,
+                                isHidden: estaOculta(source),
+                                onSelect: { recorder.selectedSource = source },
+                                onToggleHidden: source.type == .window ? { alternarOculta(source) } : nil
+                            )
                         }
                     }
                     .padding(.horizontal, 16)
@@ -118,6 +119,22 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
         }.value
         thumbnails = geradas.imagens
     }
+
+    /// Só apps (fontes do tipo janela) podem ser ocultados — o monitor não se esconde
+    /// de si mesmo.
+    private func estaOculta(_ source: DisplaySource) -> Bool {
+        guard let bundleID = source.ownerBundleID else { return false }
+        return recorder.hiddenBundleIDs.contains(bundleID)
+    }
+
+    private func alternarOculta(_ source: DisplaySource) {
+        guard let bundleID = source.ownerBundleID else { return }
+        if recorder.hiddenBundleIDs.contains(bundleID) {
+            recorder.hiddenBundleIDs.remove(bundleID)
+        } else {
+            recorder.hiddenBundleIDs.insert(bundleID)
+        }
+    }
 }
 
 /// As imagens nascem na tarefa de fundo e só são lidas na principal depois dela
@@ -142,11 +159,18 @@ enum SourceNaming {
 /// Cartão de fonte em Material 3: miniatura com cantos grandes, título e legenda; o
 /// selecionado ganha contorno na cor primária e o selo de "check", como na escolha do
 /// que apresentar no Meet.
+///
+/// Um app (não o monitor, que não se esconde de si mesmo) pode ser ocultado da
+/// transmissão do monitor inteiro pelo menu de contexto — botão direito no cartão. Fica
+/// com um selo de "olho riscado" e a miniatura esmaecida, para diferenciar de "não
+/// selecionado" sem precisar de um painel à parte.
 struct SourceCard: View {
     let source: DisplaySource
     let thumbnail: NSImage?
     let isSelected: Bool
+    let isHidden: Bool
     let onSelect: () -> Void
+    let onToggleHidden: (() -> Void)?
 
     var body: some View {
         Button(action: onSelect) {
@@ -162,6 +186,7 @@ struct SourceCard: View {
                                 Image(nsImage: thumbnail)
                                     .resizable()
                                     .scaledToFill()
+                                    .opacity(isHidden ? 0.4 : 1)
                             } else {
                                 M3Icone(nome: source.type == .display ? "desktop_windows" : "web_asset", tamanho: 28)
                                     .foregroundColor(M3.onSurfaceVariant)
@@ -178,6 +203,16 @@ struct SourceCard: View {
                             M3Icone(nome: "check_circle", tamanho: 24, preenchido: true)
                                 .foregroundColor(M3.primary)
                                 .background(Circle().fill(M3.surface).padding(3))
+                                .padding(8)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if isHidden {
+                            M3Icone(nome: "visibility_off", tamanho: 16)
+                                .foregroundColor(M3.onSurface)
+                                .padding(5)
+                                .background(Circle().fill(M3.surface))
                                 .padding(8)
                                 .transition(.scale.combined(with: .opacity))
                         }
@@ -200,7 +235,32 @@ struct SourceCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(CardDeFonteEstilo())
-        .help(source.name)
+        .animation(M3.Mola.rapida, value: isHidden)
+        .help(onToggleHidden == nil ? source.name : "\(source.name) — botão direito oculta da transmissão")
+        .modifier(MenuDeOcultarFonte(isHidden: isHidden, alternar: onToggleHidden))
+    }
+}
+
+/// Só anexa o menu de contexto quando há o que ocultar (fontes do tipo janela).
+private struct MenuDeOcultarFonte: ViewModifier {
+    let isHidden: Bool
+    let alternar: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let alternar {
+            content.contextMenu {
+                Button {
+                    alternar()
+                } label: {
+                    Label(
+                        isHidden ? "Mostrar na transmissão" : "Ocultar da transmissão",
+                        systemImage: isHidden ? "eye" : "eye.slash"
+                    )
+                }
+            }
+        } else {
+            content
+        }
     }
 }
 
