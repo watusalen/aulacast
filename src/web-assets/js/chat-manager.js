@@ -44,12 +44,28 @@ export class ChatManager {
     const message = this.chatMessageInput.value.trim();
     if (!message) return;
 
-    this.onSendMessage({
+    // O nome do remetente é o da identificação, guardado pelo servidor.
+    const enviada = this.onSendMessage({
       type: 'CHAT_SEND',
-      payload: { sender: this.getStudentName(), text: message }
+      payload: { text: message }
     });
 
+    // Sem conexão a mensagem não sai. Antes o campo era limpo do mesmo jeito e a
+    // pergunta do aluno sumia sem aviso; agora o texto fica para ele reenviar.
+    if (enviada === false) {
+      this.mostrarAviso('Sem conexão: a mensagem não foi enviada. Tente de novo quando reconectar.');
+      return;
+    }
+
     this.chatMessageInput.value = '';
+  }
+
+  mostrarAviso(texto) {
+    const aviso = document.createElement('div');
+    aviso.className = 'chat-bubble system';
+    aviso.textContent = texto;
+    this.chatMessages.appendChild(aviso);
+    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
   }
 
   appendMessage(author, text, isProf = false) {
@@ -61,7 +77,8 @@ export class ChatManager {
 
     const authorElem = document.createElement('div');
     authorElem.className = 'chat-author';
-    authorElem.textContent = isProf ? `Prof. ${author} · ${time}` : `${author} · ${time}`;
+    // O servidor já manda "Professor" como remetente; prefixar "Prof." dava "Prof. Professor".
+    authorElem.textContent = `${author} · ${time}`;
 
     const textElem = document.createElement('div');
     textElem.className = 'chat-text';

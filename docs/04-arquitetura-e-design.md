@@ -62,7 +62,7 @@ flowchart TB
 - **Motivo de existir separado:** o TCP não respeita fronteira de mensagem. Uma leitura pode trazer dois frames colados ou metade de um, então o decodificador mantém um buffer próprio por conexão. Tratar cada leitura como exatamente um frame descartava mensagens em silêncio.
 
 #### 2.5. `BonjourAdvertiser`
-- **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` na porta 8080 usando `NWListener.service`. Permite que aparelhos da rede identifiquem a sala sem precisar saber o IP exato do professor.
+- **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` usando `NWListener.service`. O anúncio sai de um listener próprio, em porta efêmera (para não disputar a 8080), e leva a porta real do servidor no registro TXT (`port=8080`). Esse listener recusa qualquer conexão: sem um `newConnectionHandler` o `NWListener` não sobe e o anúncio falhava em silêncio.
 
 ---
 
@@ -71,21 +71,26 @@ flowchart TB
 Toda a comunicação interativa utiliza o protocolo WebSocket na rota `/ws`. As mensagens trafegam em formato JSON estruturado com o campo `type`.
 
 #### 3.1. Mensagem de Boas-Vindas (`CONNECTED`)
-Enviada pelo servidor assim que o aluno conecta. Carrega o estado atual do chat: sem isso,
-quem entra (ou reconecta) no meio da aula com o chat já desligado veria o campo de mensagem
-liberado e só descobriria o bloqueio ao ver o próprio texto sumir.
+Enviada pelo servidor assim que o aluno conecta. Carrega o estado atual do chat e da
+transmissão: sem isso, quem entra (ou reconecta) no meio da aula veria o campo de mensagem
+liberado com o chat desligado, ou o último quadro congelado como se a aula estivesse ao vivo
+quando ela está pausada ou encerrada. `stream` é `live`, `paused` ou `ended` (este com
+`reason`).
 ```json
 {
   "type": "CONNECTED",
   "payload": {
-    "chatEnabled": true
+    "chatEnabled": true,
+    "stream": "paused"
   }
 }
 ```
 
 #### 3.2. Identificação do Aluno (`IDENTIFY`)
-Enviada pelo aluno na entrada. O servidor **revalida** o nome e responde
-`IDENTIFY_ACCEPTED` ou `IDENTIFY_REJECTED`.
+Enviada pelo aluno na entrada. O servidor **revalida** o nome (de 2 a 40 caracteres) e
+responde `IDENTIFY_ACCEPTED` ou `IDENTIFY_REJECTED` (com `payload.reason`). Só depois disso o
+aluno aparece na lista do professor. O nome aceito fica guardado por conexão e é ele que
+assina o chat e a mão levantada.
 ```json
 {
   "type": "IDENTIFY",
@@ -107,13 +112,13 @@ Enviada pelo aluno quando a aula deixa de estar (ou volta a estar) à vista.
 ```
 
 #### 3.4. Notificação de "Levantar a Mão" (`RAISE_HAND`)
-Enviada pelo aluno para pedir ajuda. O servidor identifica o aluno pela **conexão**, e não
-pelo nome enviado, para que trocar de nome não crie um segundo registro na lista.
+Enviada pelo aluno para pedir ajuda, e reenviada ao reconectar se a mão continuar levantada.
+O servidor identifica o aluno pela **conexão** e usa o nome aceito no `IDENTIFY`; um
+`studentName` na mensagem é ignorado. Responde `RAISE_HAND_ACK` com o mesmo `active`.
 ```json
 {
   "type": "RAISE_HAND",
   "payload": {
-    "studentName": "Ana Beatriz Sousa",
     "active": true
   }
 }
@@ -121,12 +126,13 @@ pelo nome enviado, para que trocar de nome não crie um segundo registro na list
 
 #### 3.5. Envio de Mensagem de Chat (`CHAT_SEND`)
 Mensagem de aluno vai ao professor e retorna **somente ao autor**. Já a mensagem do professor
-é retransmitida a todos. O servidor é quem impõe essa separação — o cliente não decide.
+é retransmitida a todos. O servidor é quem impõe essa separação — o cliente não decide. O
+remetente é o nome aceito no `IDENTIFY` (um `sender` na mensagem é ignorado), e o texto é
+cortado em 1000 caracteres. A resposta chega como `CHAT_MESSAGE` (`sender`, `text`, `isProf`).
 ```json
 {
   "type": "CHAT_SEND",
   "payload": {
-    "sender": "Mariana",
     "text": "Professor, como compilar o código pelo Terminal?"
   }
 }
@@ -148,8 +154,10 @@ cliente adulterado que reative o campo segue sem alcançar o professor.
 ```
 
 #### 3.7. Estado da Transmissão
-Mensagens de controle enviadas pelo servidor: `STREAM_PAUSED` e `STREAM_RESUMED` quando o
-professor congela ou retoma a imagem, e `STREAM_ENDED` quando a captura termina.
+Mensagens de controle enviadas pelo servidor: `STREAM_STARTED` quando a transmissão começa
+(ou recomeça depois de uma queda), `STREAM_PAUSED` e `STREAM_RESUMED` quando o professor
+congela ou retoma a imagem, e `STREAM_ENDED` quando a captura termina. O último estado
+anunciado é repetido no `CONNECTED` de quem chega depois.
 ```json
 {
   "type": "STREAM_ENDED",
@@ -158,6 +166,17 @@ professor congela ou retoma a imagem, e `STREAM_ENDED` quando a captura termina.
   }
 }
 ```
+
+#### 3.8. Batimento (`PING` / `PONG`)
+O cliente manda `{"type":"PING"}` a cada 10 s e o servidor responde `{"type":"PONG"}`. Sem
+nenhuma mensagem do servidor por 25 s, o cliente dá a conexão por morta e reconecta; sem
+nenhum frame do cliente por 30 s, o servidor a encerra e tira o aluno da lista. É o que pega
+o notebook que dormiu ou saiu do Wi-Fi sem fechar a conexão.
+
+#### 3.9. Regras do protocolo impostas pelo servidor
+Frames do navegador precisam vir mascarados. Frames de controle têm até 125 bytes e não são
+fragmentados. Opcodes reservados e bits RSV encerram a conexão. Um `CLOSE` recebido é
+devolvido antes de fechar.
 
 ---
 

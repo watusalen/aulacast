@@ -11,7 +11,11 @@ public protocol NetworkServerProtocol: AnyObject {
     var presenceObserver: StudentPresenceObserverProtocol? { get set }
     var handRaiseObserver: HandRaiseObserverProtocol? { get set }
     var clientObserver: ClientObserverProtocol? { get set }
-    
+
+    /// Chamado quando o servidor cai depois de `start()` ter voltado sem erro (a porta já
+    /// estava em uso, por exemplo: essa falha só chega de forma assíncrona).
+    var onFailure: ((String) -> Void)? { get set }
+
     func start() throws
     func stop()
     func broadcastFrame(_ jpegData: Data)

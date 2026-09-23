@@ -1,4 +1,4 @@
-import { erroDoNome, normalizarNome, salvarIdentidade, carregarIdentidade } from './student-identity.js';
+import { erroDoNome, normalizarNome, salvarIdentidade, carregarIdentidade, esquecerIdentidade } from './student-identity.js';
 
 /**
  * Tela de entrada: o aluno diz o nome antes de ver a aula, para o professor saber quem
@@ -51,6 +51,9 @@ export class EntryGate {
 
   /** O servidor recusou (cliente adulterado ou nome vazio): traz a portaria de volta. */
   reabrirComErro(mensagem) {
+    // Sem isto o nome recusado continuava salvo: cada recarga entrava sozinha com ele
+    // e era barrada de novo, sem o aluno conseguir corrigir.
+    esquecerIdentidade();
     this.gate.hidden = false;
     this.submitBtn.disabled = false;
     this.submitBtn.textContent = 'Entrar na aula';

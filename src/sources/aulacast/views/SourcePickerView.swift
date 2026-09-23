@@ -101,17 +101,27 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     }
 
     private func captureThumbnails() async {
-        let provider = SourceThumbnailProvider()
-        var newThumbnails: [String: NSImage] = [:]
-        for source in recorder.availableSources {
-            if let image = provider.thumbnail(for: source) {
-                newThumbnails[source.id] = image
+        // Fora da thread principal. Como método de uma View, isto herda a MainActor, e
+        // capturar e reduzir uma imagem por janela ali congelava a interface a cada volta.
+        let fontes = recorder.availableSources
+        let geradas = await Task.detached(priority: .utility) { () -> Miniaturas in
+            let provider = SourceThumbnailProvider()
+            var imagens: [String: NSImage] = [:]
+            for source in fontes {
+                if let image = provider.thumbnail(for: source) {
+                    imagens[source.id] = image
+                }
             }
-        }
-        await MainActor.run {
-            thumbnails = newThumbnails
-        }
+            return Miniaturas(imagens: imagens)
+        }.value
+        thumbnails = geradas.imagens
     }
+}
+
+/// As imagens nascem na tarefa de fundo e só são lidas na principal depois dela
+/// terminar; o NSImage só se declara Sendable a partir do macOS 14.
+private struct Miniaturas: @unchecked Sendable {
+    let imagens: [String: NSImage]
 }
 
 /// Extrai nome do app / subtítulo do rótulo combinado de DisplaySource ("[App] Título").

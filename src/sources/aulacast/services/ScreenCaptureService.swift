@@ -13,9 +13,16 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     @Published public var selectedSource: DisplaySource? {
         didSet {
             guard isRecording, oldValue?.id != selectedSource?.id else { return }
-            Task { await applyContentFilterChange() }
+            // Uma troca por vez, e só a última vale. Cada troca montava o filtro por conta
+            // própria: o de monitor espera o sistema (centenas de ms), o de janela sai na
+            // hora. Clicar em Monitor e logo em uma Janela aplicava a janela primeiro e o
+            // monitor depois — a tela mostrava a janela escolhida e a turma via o monitor
+            // inteiro, justamente o contrário do que o professor quis esconder.
+            trocaDeFonte?.cancel()
+            trocaDeFonte = Task { @MainActor in await self.applyContentFilterChange() }
         }
     }
+    private var trocaDeFonte: Task<Void, Never>?
 
     /// Idem para a qualidade: mudar durante a transmissão precisa surtir efeito imediato.
     @Published public var resolution: VideoResolution = .p1080 {
@@ -74,6 +81,10 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     }
     
     public func startCapture() async {
+        // Uma segunda chamada com a captura já de pé criava outro SCStream e perdia a
+        // referência ao primeiro, que seguia capturando a tela até o app fechar.
+        guard stream == nil else { return }
+
         guard let source = selectedSource else {
             await MainActor.run {
                 self.errorMessage = "Nenhuma fonte selecionada."
@@ -125,11 +136,10 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         let processoAtual = ProcessInfo.processInfo.processIdentifier
 
         guard let conteudo = await conteudoCompartilhavel() else {
-            await MainActor.run {
-                self.errorMessage =
-                    "Não foi possível preparar a captura sem expor a janela do AulaCast. "
-                    + "Tente iniciar a transmissão de novo."
-            }
+            await relatarErro(
+                "Não foi possível preparar a captura sem expor a janela do AulaCast. "
+                + "Tente iniciar a transmissão de novo."
+            )
             return nil
         }
 
@@ -179,15 +189,29 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     }
 
     /// Troca a tela/janela transmitida sem derrubar a sessão: os alunos continuam conectados.
+    @MainActor
     private func applyContentFilterChange() async {
         guard let stream = self.stream,
               let source = selectedSource,
               let filter = await makeContentFilter(for: source) else { return }
+        // Enquanto o filtro era montado o professor pode ter escolhido outra fonte: essa
+        // troca mais nova é que vale, e esta não pode passar por cima dela.
+        guard !Task.isCancelled, selectedSource?.id == source.id, self.stream === stream else { return }
         do {
             try await stream.updateContentFilter(filter)
         } catch {
-            await MainActor.run {
-                self.errorMessage = "Não foi possível trocar a fonte: \(error.localizedDescription)"
+            await relatarErro("Não foi possível trocar a fonte: \(error.localizedDescription)")
+        }
+    }
+
+    /// Guarda o erro e, com a transmissão no ar, avisa o painel. Antes o erro ficava só
+    /// em `errorMessage`, que nenhuma tela lê: o professor via a fonte nova selecionada e
+    /// a turma seguia recebendo a antiga, sem aviso nenhum.
+    private func relatarErro(_ mensagem: String) async {
+        await MainActor.run {
+            self.errorMessage = mensagem
+            if self.isRecording {
+                self.lifecycleObserver?.captureDidReportError(mensagem)
             }
         }
     }
@@ -198,9 +222,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         do {
             try await stream.updateConfiguration(makeConfiguration())
         } catch {
-            await MainActor.run {
-                self.errorMessage = "Não foi possível aplicar a qualidade: \(error.localizedDescription)"
-            }
+            await relatarErro("Não foi possível aplicar a qualidade: \(error.localizedDescription)")
         }
     }
 
@@ -208,13 +230,18 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         guard let stream = self.stream else { return }
         do {
             try await stream.stopCapture()
-            await MainActor.run {
-                self.stream = nil
-                self.isRecording = false
-            }
         } catch {
             await MainActor.run {
                 self.errorMessage = "Erro ao interromper captura: \(error.localizedDescription)"
+            }
+        }
+        // Mesmo com erro o stream é abandonado: o painel já vai mostrar a transmissão
+        // parada, e guardar a referência fazia o próximo "Iniciar" ser recusado (ou, antes,
+        // criar um segundo stream por cima do primeiro).
+        await MainActor.run {
+            if self.stream === stream {
+                self.stream = nil
+                self.isRecording = false
             }
         }
     }

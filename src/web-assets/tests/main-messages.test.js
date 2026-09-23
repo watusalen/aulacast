@@ -50,7 +50,7 @@ const nomes = [
   'disconnectedState', 'pausedOverlay', 'handBanner', 'fullscreenBtn', 'sidebar',
   'menuToggleBtn', 'studentBadge', 'raiseHandBtn', 'handText', 'retryConnectionBtn',
   'chatForm', 'chatMessageInput', 'chatMessages', 'chatSendBtn',
-  'entryGate', 'entryForm', 'entryName', 'entryMatricula', 'entryError', 'entrySubmit'
+  'entryGate', 'entryForm', 'entryName', 'entryError', 'entrySubmit'
 ];
 for (const nome of nomes) elementos[nome] = criarElemento();
 
@@ -76,7 +76,7 @@ const { AulaCastApp } = await import('../js/main.js');
 
 function novoApp() {
   const app = new AulaCastApp();
-  // Sem rede nos testes: o app só precisa achar que está conectado para despachar.
+  // Sem rede nos testes: o despachante de mensagens não depende da conexão.
   app.socket.isConnected = () => false;
   return app;
 }
@@ -106,4 +106,55 @@ test('STREAM_STARTED devolve o vídeo a quem já estava conectado', () => {
 test('CONNECTED sem payload não derruba o cliente', () => {
   const app = novoApp();
   assert.doesNotThrow(() => app.handleServerMessage({ type: 'CONNECTED' }));
+});
+
+test('Quem conecta com a aula pausada vê o aviso de pausa', () => {
+  const app = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { chatEnabled: true, stream: 'paused' } });
+
+  assert.strictEqual(elementos.pausedOverlay.hidden, false);
+  app.ui.streamWatchdog.stop();
+});
+
+test('Quem conecta depois da queda vê "Transmissão encerrada", não um quadro velho', () => {
+  const app = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'ended', reason: 'Monitor desconectado.' } });
+
+  assert.strictEqual(
+    elementos.placeholder.querySelector('.placeholder-title').textContent,
+    'Transmissão encerrada'
+  );
+  assert.strictEqual(app.ui.streamWatchdog.wantsStream, false);
+});
+
+test('Reconectar tira o aviso de pausa que ficou de antes da queda', () => {
+  const app = novoApp();
+  app.handleServerMessage({ type: 'STREAM_PAUSED' });
+  app.ui.updateState('connected');
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live' } });
+
+  assert.strictEqual(elementos.pausedOverlay.hidden, true);
+  app.ui.streamWatchdog.stop();
+});
+
+test('Sem conexão, levantar a mão não finge que o professor foi avisado', () => {
+  const app = novoApp();
+  app.identidade = { name: 'Ana Beatriz' };
+  app.toggleHandRaise();
+
+  assert.strictEqual(app.isHandRaised, false);
+  assert.strictEqual(app.raiseHandBtn.getAttribute('aria-pressed'), null, 'o botão não muda');
+});
+
+test('Ao reconectar com a mão levantada, o pedido é reenviado ao servidor', () => {
+  const app = novoApp();
+  const enviadas = [];
+  app.socket.send = (m) => { enviadas.push(m); return true; };
+  app.identidade = { name: 'Ana Beatriz' };
+  app.isHandRaised = true;
+
+  app.enviarIdentificacao();
+
+  assert.ok(enviadas.some((m) => m.type === 'IDENTIFY'));
+  assert.ok(enviadas.some((m) => m.type === 'RAISE_HAND' && m.payload.active === true));
 });

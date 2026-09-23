@@ -37,12 +37,17 @@ public final class WebSocketFrameDecoder {
 
     private var buffer = Data()
     private let maxPayloadBytes: Int
+    /// Do lado do servidor, todo frame vindo do navegador precisa vir mascarado (RFC 6455,
+    /// seção 5.1). O decodificador também lê frames do próprio servidor nos testes, que
+    /// não têm máscara — por isso a exigência é ligada por quem usa.
+    private let exigirMascara: Bool
 
     /// Mensagem partida em vários frames, sendo remontada (opcode do primeiro + bytes já lidos).
     private var mensagemParcial: (opcode: UInt8, payload: Data)?
 
-    public init(maxPayloadBytes: Int = 1 << 20) {
+    public init(maxPayloadBytes: Int = 1 << 20, exigirMascara: Bool = false) {
         self.maxPayloadBytes = maxPayloadBytes
+        self.exigirMascara = exigirMascara
     }
 
     /// Acrescenta os bytes recebidos e devolve todas as mensagens completas disponíveis.
@@ -52,7 +57,7 @@ public final class WebSocketFrameDecoder {
         var encontrados: [WebSocketFrame] = []
 
         while true {
-            switch Self.parseSingleFrame(from: buffer, maxPayloadBytes: maxPayloadBytes) {
+            switch Self.parseSingleFrame(from: buffer, maxPayloadBytes: maxPayloadBytes, exigirMascara: exigirMascara) {
             case .incomplete:
                 return .frames(encontrados)
             case .invalid:
@@ -124,7 +129,11 @@ public final class WebSocketFrameDecoder {
         descartarTudo()
     }
 
-    static func parseSingleFrame(from data: Data, maxPayloadBytes: Int) -> SingleFrame {
+    static func parseSingleFrame(
+        from data: Data,
+        maxPayloadBytes: Int,
+        exigirMascara: Bool = false
+    ) -> SingleFrame {
         guard data.count >= 2 else { return .incomplete }
 
         let base = data.startIndex
@@ -134,6 +143,17 @@ public final class WebSocketFrameDecoder {
         let secondByte = data[base + 1]
         let isMasked = (secondByte & 0x80) != 0
         var payloadLength = Int(secondByte & 0x7F)
+
+        // Bits RSV só valem com extensão negociada, e o servidor não negocia nenhuma.
+        guard primeiroByte & 0x70 == 0 else { return .invalid }
+        // Opcodes 3-7 e 0xB-0xF são reservados.
+        guard [0x0, 0x1, 0x2, 0x8, 0x9, 0xA].contains(opcode) else { return .invalid }
+        guard isMasked || !exigirMascara else { return .invalid }
+        // Frame de controle tem no máximo 125 bytes e nunca é fragmentado. Sem este teto,
+        // um PING de 1 MB era devolvido inteiro como PONG.
+        if opcode >= 0x8 {
+            guard fin, payloadLength <= 125 else { return .invalid }
+        }
         var offset = 2
 
         if payloadLength == 126 {

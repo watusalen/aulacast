@@ -33,9 +33,18 @@ final class FakeCaptureService: ScreenCaptureProtocol {
     /// ScreenCaptureKit falha e o `isRecording` permanece falso.
     var falhaAoIniciar = false
 
+    /// Quantas vezes a captura foi pedida, e quanto cada pedido demora — o ScreenCaptureKit
+    /// real leva centenas de ms, que é a janela em que um duplo clique criava dois streams.
+    private(set) var inicios = 0
+    var atrasoAoIniciar: UInt64 = 0
+
     func fetchAvailableSources() async {}
 
     func startCapture() async {
+        inicios += 1
+        if atrasoAoIniciar > 0 {
+            try? await Task.sleep(nanoseconds: atrasoAoIniciar)
+        }
         if falhaAoIniciar {
             errorMessage = "Falha ao iniciar captura: permissão negada."
             return
@@ -67,13 +76,23 @@ final class FakeServer: NetworkServerProtocol {
     weak var handRaiseObserver: HandRaiseObserverProtocol?
     weak var clientObserver: ClientObserverProtocol?
     weak var presenceObserver: StudentPresenceObserverProtocol?
+    var onFailure: ((String) -> Void)?
+
+    /// Quadros entregues aos alunos, para conferir que a pausa de fato os segura.
+    private(set) var quadrosEnviados = 0
+
+    /// Reproduz a queda assíncrona do servidor real (porta ocupada, por exemplo).
+    func simularFalha(_ mensagem: String) {
+        isRunning = false
+        onFailure?(mensagem)
+    }
 
     /// Mensagens de controle enviadas aos alunos, para inspeção nos testes.
     private(set) var controlMessages: [(type: String, payload: [String: String]?)] = []
 
     func start() throws { isRunning = true }
     func stop() { isRunning = false }
-    func broadcastFrame(_ jpegData: Data) {}
+    func broadcastFrame(_ jpegData: Data) { quadrosEnviados += 1 }
     func broadcastChatMessage(_ message: ChatMessage) {}
     func broadcastControlMessage(type: String, payload: [String: String]?) {
         controlMessages.append((type: type, payload: payload))

@@ -19,6 +19,12 @@ public enum WebSocketFrameEncoder {
         payloadFrame(opcode: 0xA, payload: payload)
     }
 
+    /// Close de controle (opcode 0x8), devolvido ao navegador antes de fechar a conexão.
+    /// Sem ele o navegador registra um fechamento anormal (1006) em vez de um limpo.
+    public static func closeFrame(payload: Data = Data()) -> Data {
+        payloadFrame(opcode: 0x8, payload: payload.prefix(125))
+    }
+
     private static func payloadFrame(opcode: UInt8, payload: Data) -> Data {
         var frame = Data()
         frame.append(0x80 | (opcode & 0x0F)) // FIN + opcode

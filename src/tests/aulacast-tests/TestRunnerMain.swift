@@ -72,6 +72,13 @@ struct AulaCastTestRunner {
         let alunoDoHandshake = ConnectedClient(name: "Aluno-1.99", ipAddress: "192.168.1.99", isHandRaised: false)
         gerenciadorDeConexao.addOrUpdateClient(alunoDoHandshake)
 
+        // Antes de dizer o nome, a conexão não aparece para o professor.
+        assertTest(
+            gerenciadorDeConexao.identifiedClients.isEmpty,
+            "Conexão ainda sem nome não aparece na lista do professor"
+        )
+        gerenciadorDeConexao.identify(clientId: alunoDoHandshake.id, name: "Ana")
+
         assertTest(
             gerenciadorDeConexao.clients.first?.id == alunoDoHandshake.id,
             "Id gerado no handshake é preservado ao registrar o aluno"
@@ -117,7 +124,8 @@ struct AulaCastTestRunner {
             "Id do handshake sobrevive ao caminho completo até o gerenciador"
         )
 
-        // O aluno levanta a mão informando um nome digitado depois de entrar.
+        // O aluno diz o nome ao entrar e depois levanta a mão.
+        viewModel.didIdentifyStudent(clientId: alunoConectado.id, name: "Ana Beatriz")
         viewModel.didToggleHandRaise(clientId: alunoConectado.id, displayName: "Ana Beatriz", isRaised: true)
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -163,9 +171,7 @@ struct AulaCastTestRunner {
         let indexFile = tempAssetsDir.appendingPathComponent("index.html")
         try? "<html><body>Test</body></html>".write(to: indexFile, atomically: true, encoding: .utf8)
         
-        _ = StaticFileProviderService(webAssetsPath: tempAssetsDir)
-        assertTest(true, "Servidor de arquivos estáticos inicializado com sucesso")
-        
+        // (A entrega de arquivos de verdade é testada abaixo, com requisições reais.)
         try? FileManager.default.removeItem(at: tempAssetsDir)
 
         // TESTE 5: Servidor de Rede Local (NetworkListenerService)
@@ -173,11 +179,23 @@ struct AulaCastTestRunner {
         let serverService = NetworkListenerService(port: 8089, webAssetsPath: FileManager.default.temporaryDirectory)
         
         assertTest(serverService.port == 8089, "Porta do servidor atribuída corretamente")
-        assertTest(serverService.localIPAddress != "", "Endereço IP local resolvido pela interface de rede")
+        // O endereço sempre existe (há um reserva), então o que vale conferir é o formato.
+        var enderecoBinario = in_addr()
+        assertTest(
+            inet_pton(AF_INET, serverService.localIPAddress, &enderecoBinario) == 1,
+            "Endereço mostrado à turma é um IPv4 válido"
+        )
         
         do {
             try serverService.start()
             assertTest(serverService.isRunning == true, "Servidor de rede iniciado com sucesso na porta 8089")
+            // A flag sobe na hora; quem prova que a porta abriu é uma requisição de verdade.
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let resposta = try? await URLSession.shared.data(from: URL(string: "http://127.0.0.1:8089/nao-existe")!)
+            assertTest(
+                (resposta?.1 as? HTTPURLResponse) != nil,
+                "Servidor responde de fato na porta 8089"
+            )
             serverService.stop()
             assertTest(serverService.isRunning == false, "Servidor de rede encerrado de forma limpa")
         } catch {
@@ -323,6 +341,49 @@ struct AulaCastTestRunner {
             assertTest(false, "Payload remontado é idêntico ao enviado")
         }
 
+        // Do navegador para o servidor tudo vem mascarado; frames que a RFC proíbe derrubam.
+        let semMascara = WebSocketFrameEncoder.textFrame("oi")
+        assertTest(
+            WebSocketFrameDecoder(exigirMascara: true).consume(semMascara) == .protocolViolation,
+            "Servidor recusa frame sem máscara vindo do cliente"
+        )
+        var pingGigante = Data([0x89, 0x80 | 126, 0x00, 200, 0, 0, 0, 0])
+        pingGigante.append(Data(repeating: 0, count: 200))
+        assertTest(
+            WebSocketFrameDecoder().consume(pingGigante) == .protocolViolation,
+            "PING acima de 125 bytes é recusado (não vira PONG gigante)"
+        )
+        assertTest(
+            WebSocketFrameDecoder().consume(Data([0x83, 0x80, 0, 0, 0, 0])) == .protocolViolation,
+            "Opcode reservado é recusado"
+        )
+        assertTest(
+            WebSocketFrameDecoder().consume(Data([0xC1, 0x80, 0, 0, 0, 0])) == .protocolViolation,
+            "Bit RSV ligado sem extensão negociada é recusado"
+        )
+        assertTest(
+            WebSocketFrameEncoder.closeFrame().first == 0x88,
+            "Servidor sabe devolver CLOSE ao navegador"
+        )
+
+        // Roteamento pela linha de requisição, não por trecho solto do texto.
+        assertTest(
+            NetworkListenerService.linhaDeRequisicao("GET /stream?t=1 HTTP/1.1\r\nHost: x\r\n\r\n") == ("GET", "/stream"),
+            "Caminho do vídeo é lido sem a query string"
+        )
+        assertTest(
+            NetworkListenerService.linhaDeRequisicao("GET /stream-ajuda.html HTTP/1.1\r\n\r\n").caminho != "/stream",
+            "Arquivo que começa com /stream não é confundido com o vídeo"
+        )
+        assertTest(
+            !NetworkListenerService.pedeWebSocket("GET /?q=upgrade:%20websocket HTTP/1.1\r\nHost: x\r\n\r\n"),
+            "'upgrade: websocket' fora dos cabeçalhos não vira handshake"
+        )
+        assertTest(
+            NetworkListenerService.pedeWebSocket("GET /ws HTTP/1.1\r\nUpgrade: WebSocket\r\n\r\n"),
+            "Cabeçalho Upgrade é reconhecido sem depender de maiúsculas"
+        )
+
         // Comprimento de 8 bytes absurdo: precisa ser rejeitado, não virar alocação gigante.
         var absurdo = Data([0x81, 0xFF])
         absurdo.append(contentsOf: [UInt8](repeating: 0xFF, count: 8)) // comprimento gigantesco
@@ -391,7 +452,12 @@ struct AulaCastTestRunner {
             assertTest(coletor.conectados.count == 1, "Servidor registrou o aluno na conexão")
             assertTest(coletor.maos.count == 1, "Mão levantada trafegou pelo WebSocket real")
             assertTest(coletor.maos.first?.levantada == true, "Estado recebido é 'mão levantada'")
-            assertTest(coletor.maos.first?.nome == "Ana E2E", "Nome informado pelo aluno chega ao servidor")
+            // O nome da mão sai do servidor, não do campo que o navegador manda: aceitar esse
+            // campo deixava levantar a mão (ou renomear-se) sem passar pela validação.
+            assertTest(
+                coletor.maos.first?.nome.hasPrefix("Aluno-") == true,
+                "Nome enviado junto com a mão levantada é ignorado antes da identificação"
+            )
             assertTest(
                 coletor.maos.first?.id == coletor.conectados.first?.id,
                 "Id da mão levantada é o mesmo da conexão (não um registro novo)"
@@ -415,6 +481,20 @@ struct AulaCastTestRunner {
             assertTest(identificacaoAceita, "Servidor aceita a identificação do aluno pelo nome")
             assertTest(coletor.identificacoes.count == 1, "Identificação chega ao app do professor")
             assertTest(coletor.identificacoes.first?.nome == "Ana Beatriz", "O nome informado chega ao professor")
+
+            try? await socket.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"studentName\":\"Outra Pessoa\",\"active\":true}}"))
+            _ = await aguardarMensagem(contendo: "RAISE_HAND_ACK")
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            assertTest(
+                coletor.maos.last?.nome == "Ana Beatriz",
+                "Mão levantada leva o nome validado, não o que o navegador inventar"
+            )
+
+            // Nome comprido demais também é recusado.
+            let nomeLongo = String(repeating: "a", count: WebSocketHandlerService.maxNameLength + 1)
+            try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"\(nomeLongo)\"}}"))
+            let recusouLongo = await aguardarMensagem(contendo: "IDENTIFY_REJECTED")
+            assertTest(recusouLongo, "Servidor recusa nome acima do limite")
 
             // Nome vazio precisa ser recusado pelo servidor, e não só pelo navegador.
             try? await socket.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\" \"}}"))
@@ -462,6 +542,27 @@ struct AulaCastTestRunner {
 
             socketChatDesligado.cancel(with: .goingAway, reason: nil)
 
+            // Quem entra (ou reconecta) com a aula pausada ou encerrada precisa saber disso
+            // já nas boas-vindas, e não ver o último quadro como se fosse ao vivo.
+            func boasVindasDeNovoAluno() async -> String {
+                let s = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
+                s.resume()
+                defer { s.cancel(with: .goingAway, reason: nil) }
+                if case .string(let texto)? = try? await s.receive() { return texto }
+                return ""
+            }
+            assertTest((await boasVindasDeNovoAluno()).contains("\"stream\":\"live\""), "Boas-vindas dizem que a aula está ao vivo")
+            servidorE2E.broadcastControlMessage(type: "STREAM_PAUSED", payload: nil)
+            assertTest((await boasVindasDeNovoAluno()).contains("\"stream\":\"paused\""), "Quem entra durante a pausa já sabe que está pausado")
+            servidorE2E.broadcastControlMessage(type: "STREAM_ENDED", payload: ["reason": "Monitor desconectado"])
+            let encerrada = await boasVindasDeNovoAluno()
+            assertTest(
+                encerrada.contains("\"stream\":\"ended\"") && encerrada.contains("Monitor desconectado"),
+                "Quem entra depois da queda recebe o aviso e o motivo"
+            )
+            servidorE2E.broadcastControlMessage(type: "STREAM_STARTED", payload: nil)
+            assertTest((await boasVindasDeNovoAluno()).contains("\"stream\":\"live\""), "A volta da aula volta a valer nas boas-vindas")
+
             servidorE2E.stop()
         } catch {
             assertTest(false, "Falha no teste E2E de WebSocket: \(error.localizedDescription)")
@@ -475,9 +576,10 @@ struct AulaCastTestRunner {
         turma.addOrUpdateClient(aluno)
 
         assertTest(turma.clients.first?.hasIdentified == false, "Aluno começa sem identificação")
-        assertTest(turma.watchingCount == 1, "Aluno recém-conectado conta como assistindo")
+        assertTest(turma.watchingCount == 0, "Conexão sem nome ainda não conta como aluno assistindo")
 
         turma.identify(clientId: aluno.id, name: "Ana Beatriz")
+        assertTest(turma.watchingCount == 1, "Aluno identificado conta como assistindo")
         assertTest(turma.clients.first?.name == "Ana Beatriz", "Nome informado aparece na lista do professor")
         assertTest(turma.clients.first?.hasIdentified == true, "Aluno passa a constar como identificado")
 
@@ -503,10 +605,11 @@ struct AulaCastTestRunner {
         // perde a única confirmação visual de que os alunos estão vendo alguma coisa.
         print("\n--- [10/12] Testes de Domínio: prévia da transmissão ---")
 
+        let servidorDaPrevia = FakeServer()
         let vmPrevia = MainViewModel(
             captureService: FakeCaptureService(),
             encoderService: FakeEncoder(),
-            serverService: FakeServer(),
+            serverService: servidorDaPrevia,
             advertiserService: FakeAdvertiser()
         )
 
@@ -525,11 +628,18 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 400_000_000)
         assertTest(vmPrevia.latestPreviewImage != nil, "Quadro transmitido atualiza a prévia do professor")
 
-        // Pausado, a prévia não deve avançar — mas também não pode sumir.
+        // Pausado, a prévia não deve avançar — mas também não pode sumir. A espera passa
+        // do limite de 2 fps da prévia: sem isso o teste passava até sem a pausa.
+        try? await Task.sleep(nanoseconds: 600_000_000)
         vmPrevia.togglePause()
         let previaAntesDaPausa = vmPrevia.latestPreviewImage
+        let quadrosAntesDaPausa = servidorDaPrevia.quadrosEnviados
         vmPrevia.didReceiveEncodedFrame(data: jpegDeTeste, isKeyFrame: true)
         try? await Task.sleep(nanoseconds: 300_000_000)
+        assertTest(
+            servidorDaPrevia.quadrosEnviados == quadrosAntesDaPausa,
+            "Em pausa, nenhum quadro novo chega aos alunos"
+        )
         assertTest(
             vmPrevia.latestPreviewImage === previaAntesDaPausa,
             "Em pausa, a prévia congela no último quadro em vez de sumir"
@@ -796,6 +906,7 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 400_000_000)
         assertTest(atividade.isHoldingActivity, "Transmitindo, a proteção contra App Nap fica ativa")
         assertTest(atividade.inicios == 1, "A proteção é solicitada uma única vez")
+        assertTest(vmAtividade.isSessionOpen, "Transmitindo, a sessão consta como aberta")
         assertTest(
             atividade.ultimaRazao?.isEmpty == false,
             "A razão é informada ao sistema (aparece em diagnósticos de energia)"
@@ -837,6 +948,10 @@ struct AulaCastTestRunner {
             atividadeQueda.isHoldingActivity,
             "Com alunos ainda conectados, o Mac continua impedido de dormir"
         )
+        assertTest(
+            vmQueda.isSessionOpen && !vmQueda.isStreaming,
+            "Depois da queda a sessão segue aberta, e o painel oferece como encerrá-la"
+        )
 
         // E a proteção não fica pendurada para sempre: encerrar a transmissão a libera.
         vmQueda.stopStream()
@@ -849,6 +964,7 @@ struct AulaCastTestRunner {
             !servidorQueda.isRunning,
             "Parar a transmissão também baixa o servidor"
         )
+        assertTest(!vmQueda.isSessionOpen, "Encerrada a sessão, o botão de encerrar some")
 
         // Reiniciar depois da queda não pode acumular uma segunda proteção.
         let atividadeRetomada = FakeSystemActivity()
@@ -1415,6 +1531,83 @@ struct AulaCastTestRunner {
             servidorFluidez.stop()
         } catch {
             assertTest(false, "Falha no teste de entrega de quadros: \(error.localizedDescription)")
+        }
+
+        // TESTE 20: Início e queda do servidor.
+        print("\n--- [20/20] Testes de Domínio: duplo clique, porta ocupada e aba fechada ---")
+
+        let capturaLenta = FakeCaptureService()
+        capturaLenta.atrasoAoIniciar = 300_000_000
+        let vmDuploClique = MainViewModel(
+            captureService: capturaLenta,
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: FakeSystemActivity()
+        )
+        vmDuploClique.startStream()
+        vmDuploClique.startStream()
+        assertTest(vmDuploClique.isStarting, "Enquanto a captura sobe, o botão fica bloqueado")
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        assertTest(capturaLenta.inicios == 1, "Duplo clique em Iniciar não cria uma segunda captura")
+        assertTest(!vmDuploClique.isStarting, "Depois de subir, o botão volta a responder")
+
+        let servidorQueCai = FakeServer()
+        let atividadeDaPorta = FakeSystemActivity()
+        let vmPorta = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: servidorQueCai,
+            advertiserService: FakeAdvertiser(),
+            systemActivity: atividadeDaPorta
+        )
+        vmPorta.startStream()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        servidorQueCai.simularFalha("A porta 8080 já está em uso por outro aplicativo.")
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(!vmPorta.isStreaming, "Servidor que cai depois de subir tira o painel do 'AO VIVO'")
+        assertTest(
+            vmPorta.streamErrorMessage?.contains("em uso") == true,
+            "O professor vê por que o servidor caiu"
+        )
+        assertTest(!atividadeDaPorta.isHoldingActivity, "Sem servidor, o Mac volta a poder dormir")
+
+        // Aluno que fecha a aba com a tela parada: nada é enviado, então só a leitura
+        // pendente percebe a saída. Um socket comum (e não o NWConnection do teste acima)
+        // fecha com FIN, que é o que o navegador faz.
+        let servidorAba = NetworkListenerService(port: 8113, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorAba.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(UInt16(8113).bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            let conectou = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            let pedido = "GET /stream HTTP/1.1\r\nHost: x\r\n\r\n"
+            _ = pedido.withCString { send(fd, $0, strlen($0), 0) }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            assertTest(conectou == 0 && servidorAba.activeStreamCount == 1, "O vídeo aberto por um socket comum é contado")
+
+            // Lê os cabeçalhos antes de fechar, como o navegador: fechar com dados não lidos
+            // manda RST em vez de FIN, e o RST o servidor já percebia sozinho.
+            var lixo = [UInt8](repeating: 0, count: 4096)
+            _ = recv(fd, &lixo, lixo.count, 0)
+            close(fd)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            assertTest(
+                servidorAba.activeStreamCount == 0,
+                "Aba fechada com a tela parada libera a conexão do vídeo"
+            )
+            servidorAba.stop()
+        } catch {
+            assertTest(false, "Falha no teste da aba fechada: \(error.localizedDescription)")
         }
 
         // SUMÁRIO FINAL

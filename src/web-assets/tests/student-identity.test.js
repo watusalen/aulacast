@@ -40,3 +40,12 @@ test('Sem sessionStorage disponível, a aula não quebra', () => {
   assert.doesNotThrow(() => salvarIdentidade({ name: 'Ana' }));
   assert.strictEqual(carregarIdentidade(), null);
 });
+
+test('Nome é contado em letras, como no servidor, e tem teto', async () => {
+  const { erroDoNome, TAMANHO_MAXIMO_NOME } = await import('../js/student-identity.js');
+  // "é" decomposto (e + acento) é uma letra só: o servidor recusaria.
+  assert.ok(erroDoNome('e\u0301'));
+  assert.ok(erroDoNome('👍'));
+  assert.strictEqual(erroDoNome('a'.repeat(TAMANHO_MAXIMO_NOME)), null);
+  assert.ok(erroDoNome('a'.repeat(TAMANHO_MAXIMO_NOME + 1)));
+});

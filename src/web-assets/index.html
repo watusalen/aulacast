@@ -20,7 +20,7 @@
 
       <label class="entry-label" for="entryName">Seu nome completo</label>
       <input type="text" id="entryName" class="input entry-input" autocomplete="name"
-             placeholder="Ex.: Ana Beatriz Sousa" required>
+             placeholder="Ex.: Ana Beatriz Sousa" maxlength="40" required>
 
       <p id="entryError" class="entry-error" role="alert" hidden></p>
 
@@ -112,7 +112,7 @@
 
           <form id="chatForm" class="chat-form">
             <div class="send-row">
-              <input type="text" id="chatMessageInput" placeholder="Escreva para o professor..." required autocomplete="off" class="input input-msg">
+              <input type="text" id="chatMessageInput" placeholder="Escreva para o professor..." maxlength="1000" required autocomplete="off" class="input input-msg">
               <button type="submit" id="chatSendBtn" class="btn btn-send">Enviar</button>
             </div>
           </form>

@@ -243,6 +243,18 @@ public struct MainDashboardView: View {
                 fontSize: 18,
                 horizontalPadding: 0
             ))
+            .disabled(viewModel.isStarting)
+            .opacity(viewModel.isStarting ? 0.6 : 1)
+
+            // A captura caiu, mas a turma segue conectada: além de tentar de novo, o
+            // professor precisa de um jeito de encerrar a sessão e liberar o Mac.
+            if viewModel.isSessionOpen && !viewModel.isStreaming {
+                Button(action: { viewModel.stopStream() }) {
+                    Image(systemName: "stop.fill")
+                }
+                .buttonStyle(.acIcon(size: 50, cornerRadius: 10, fontSize: 17))
+                .help("Encerrar a sessão e desconectar a turma")
+            }
 
             Button(action: { viewModel.togglePause() }) {
                 Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")

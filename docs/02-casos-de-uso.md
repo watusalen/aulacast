@@ -27,7 +27,7 @@
   - *FA-03 (Pausar):* O professor congela a imagem para a turma sem encerrar a transmissão, e retoma depois.
 - **Exceções:**
   - *EX-01 (Permissão de Captura Negada):* Se a permissão de Gravação de Tela do macOS não tiver sido autorizada, o app **não inicia a transmissão** — nem a captura, nem o servidor — e exibe a tela explicativa com um botão que solicita a permissão e abre os Ajustes do Sistema na seção correta. A tela reaparece a cada tentativa de transmitir, e não apenas na abertura do app. Como o macOS só aplica a permissão a partir da próxima execução, a mesma tela oferece **Reabrir o AulaCast**, que fecha e reabre o aplicativo.
-  - *EX-02 (Captura interrompida pelo sistema):* Se a captura cair sozinha (monitor desconectado, permissão revogada), o app encerra a sessão, exibe o motivo ao professor e avisa os alunos com `STREAM_ENDED`, em vez de deixar a imagem congelada sem explicação.
+  - *EX-02 (Captura interrompida pelo sistema):* Se a captura cair sozinha (monitor desconectado, permissão revogada), o app exibe o motivo ao professor e avisa os alunos com `STREAM_ENDED`, em vez de deixar a imagem congelada sem explicação. O servidor continua no ar, para a turma seguir conectada: o professor pode iniciar a transmissão de novo ou encerrar a sessão pelo botão de parada ao lado de "Iniciar Transmissão".
 - **Pós-condição:** O stream de vídeo está ativo e a página Web do aluno fica disponível na rede local.
 
 ---
@@ -37,7 +37,7 @@
 - **Pré-condição:** O computador do aluno está conectado à mesma rede local (Wi-Fi/Ethernet) que o Mac do professor, e o UC-01 foi executado.
 - **Fluxo Principal:**
   1. O aluno abre qualquer navegador web (Chrome, Firefox, Safari, Edge).
-  2. O aluno digita a URL da sala fornecida pelo professor (ex: `http://192.168.1.15:8080` ou `http://aulacast-prof.local:8080`).
+  2. O aluno digita a URL da sala fornecida pelo professor (ex: `http://192.168.1.15:8080`).
   3. O navegador carrega a interface Web do AulaCast servida pelo app macOS.
   4. O sistema apresenta a tela de entrada e **só libera a aula após a identificação** (ver UC-06).
   5. O JavaScript do cliente estabelece uma conexão WebSocket com o servidor local.
@@ -45,7 +45,7 @@
   7. O cliente abre o fluxo de vídeo em `GET /stream` e a tela do professor passa a ser exibida no player.
 - **Exceções:**
   - *EX-01 (Servidor Indisponível):* Se o professor não tiver iniciado a transmissão, a página exibe "Reconectando à aula" e continua tentando sozinha, sem exigir recarregamento.
-  - *EX-02 (Queda apenas do vídeo):* Como o vídeo trafega numa conexão separada do WebSocket, o cliente vigia o fluxo e o restabelece por conta própria, mesmo que o canal de mensagens permaneça ativo.
+  - *EX-02 (Queda apenas do vídeo):* Como o vídeo trafega numa conexão separada do WebSocket, o cliente vigia o fluxo e o restabelece quando o navegador acusa erro nele, e sempre que o WebSocket reconecta. Limitação conhecida: Chrome e Safari não avisam quando uma resposta MJPEG já iniciada é cortada, então a queda só do vídeo, com o WebSocket de pé, pode deixar a imagem parada até a próxima reconexão.
 - **Pós-condição:** O aluno, já identificado, assiste à transmissão em tempo real.
 
 ---
@@ -104,8 +104,8 @@
   2. O aluno informa o **nome completo**.
   3. O cliente valida o preenchimento e sinaliza o erro específico quando houver (campo vazio ou nome curto demais).
   4. Ao enviar, o cliente transmite `IDENTIFY` pelo WebSocket.
-  5. O servidor **revalida o nome** e responde `IDENTIFY_ACCEPTED`.
-  6. A tela de entrada é liberada e o aluno passa a ver a transmissão.
+  5. A tela de entrada é liberada e o aluno passa a ver a transmissão.
+  6. O servidor **revalida o nome** (de 2 a 40 caracteres) e responde `IDENTIFY_ACCEPTED`; se responder `IDENTIFY_REJECTED`, a tela de entrada volta com o motivo e o nome salvo é descartado.
   7. O nome aparece na lista de presença do professor.
 - **Fluxos Alternativos:**
   - *FA-01 (Retorno na mesma sessão):* Se o aluno recarregar a página, a identificação guardada na sessão é reaproveitada e ele entra direto.

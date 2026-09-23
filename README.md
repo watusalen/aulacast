@@ -34,7 +34,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 ## Funcionalidades
 
 - Transmissão do monitor inteiro ou de uma janela específica, **trocável durante a aula** sem derrubar a transmissão
-- Qualidade ajustável ao vivo (720p/1080p, 15/30 fps)
+- Qualidade ajustável ao vivo (720p/1080p, 15/30/45 fps)
 - Pausar a transmissão sem encerrar a sessão
 - Entrada identificada: o aluno informa o **nome** antes de assistir
 - Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)

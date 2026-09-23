@@ -16,6 +16,9 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SAIDA="${1:-$RAIZ/build}"
+# Caminho absoluto: o script muda de pasta (src/, web-assets/) antes de usar a saída, e um
+# caminho relativo como `dist` acabava apontando para dentro de src/.
+SAIDA="$(mkdir -p "$SAIDA" && cd "$SAIDA" && pwd)"
 APP="$SAIDA/AulaCast.app"
 
 echo "==> Montando o aplicativo"

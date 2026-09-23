@@ -43,8 +43,11 @@ export class AulaCastApp {
 
     if (this.socket.isConnected()) {
       this.enviarIdentificacao();
-    } else {
-      this.socket.connect();
+    } else if (!this.socket.isConnecting()) {
+      // `retryNow` e não `connect`: se havia uma tentativa agendada (o aluno reenviou o
+      // nome durante a espera), ela é cancelada. Com `connect` ela disparava depois e
+      // derrubava a conexão recém-aberta.
+      this.socket.retryNow();
     }
   }
 
@@ -56,6 +59,13 @@ export class AulaCastApp {
     });
     // Reconectar cria uma conexão nova no servidor: é preciso reenviar a presença.
     this.presence.sincronizar();
+
+    // E a mão levantada: para o servidor o aluno reconectado começa de mão abaixada.
+    // Sem isto a página seguia dizendo "O professor foi avisado" com a mão já abaixada
+    // na lista dele, e o próximo clique só a "abaixava" — era preciso clicar duas vezes.
+    if (this.isHandRaised) {
+      this.socket.send({ type: 'RAISE_HAND', payload: { active: true } });
+    }
   }
 
   bindEvents() {
@@ -83,6 +93,7 @@ export class AulaCastApp {
         if (data.payload && typeof data.payload.chatEnabled === 'boolean') {
           this.chatManager.setEnabled(data.payload.chatEnabled);
         }
+        this.aplicarEstadoDaTransmissao(data.payload);
         break;
 
       case 'CHAT_STATE':
@@ -125,13 +136,39 @@ export class AulaCastApp {
     }
   }
 
+  /**
+   * Quem entra (ou reconecta) precisa ver a aula no estado em que ela está.
+   *
+   * Antes a conexão só trazia o estado do chat: com a aula pausada ou encerrada, quem
+   * reconectava via o último quadro congelado como se fosse ao vivo, e o aviso de pausa
+   * de antes da queda podia ficar preso na tela depois de o professor já ter retomado.
+   */
+  aplicarEstadoDaTransmissao(payload) {
+    if (!payload || !payload.stream) return;
+    switch (payload.stream) {
+      case 'paused':
+        this.ui.showStreaming();
+        this.ui.showPaused();
+        break;
+      case 'ended':
+        this.ui.showStreamEnded(payload.reason);
+        break;
+      case 'live':
+        this.ui.showStreaming();
+        break;
+    }
+  }
+
   toggleHandRaise() {
     if (!this.identidade) return;
+    // Sem conexão o pedido não chega ao professor. Mudar a tela mesmo assim dizia ao
+    // aluno "O professor foi avisado" sem ninguém ter sido avisado.
+    if (!this.socket.isConnected()) return;
     this.isHandRaised = !this.isHandRaised;
 
     this.socket.send({
       type: 'RAISE_HAND',
-      payload: { studentName: this.identidade.name, active: this.isHandRaised }
+      payload: { active: this.isHandRaised }
     });
 
     this.updateRaiseHandUI();

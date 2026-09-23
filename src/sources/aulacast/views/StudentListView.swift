@@ -13,12 +13,12 @@ public struct StudentListView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Alunos Conectados (\(clientManager.clients.count))")
+                Text("Alunos Conectados (\(clientManager.identifiedClients.count))")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(AC.textPrimary)
 
                 // Quantos estão realmente com a aula à vista, e não só conectados.
-                if !clientManager.clients.isEmpty {
+                if !clientManager.identifiedClients.isEmpty {
                     HStack(spacing: 4) {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 10))
@@ -48,7 +48,7 @@ public struct StudentListView: View {
 
             Divider()
 
-            if clientManager.clients.isEmpty {
+            if clientManager.identifiedClients.isEmpty {
                 VStack(spacing: 12) {
                     HStack(spacing: 6) {
                         Circle().stroke(AC.textSecondary, lineWidth: 2).frame(width: 18, height: 18)
@@ -73,7 +73,7 @@ public struct StudentListView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(clientManager.clients) { client in
+                        ForEach(clientManager.identifiedClients) { client in
                             VStack(spacing: 0) {
                                 HStack(spacing: 12) {
                                     // Olho aberto = está com a aula à vista; olho cortado =

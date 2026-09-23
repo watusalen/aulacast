@@ -37,6 +37,8 @@ public final class NetworkListenerService: NetworkServerProtocol {
         didSet { webSocketHandler.clientObserver = clientObserver }
     }
 
+    public var onFailure: ((String) -> Void)?
+
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private let connectionsLock = NSLock()
@@ -76,7 +78,18 @@ public final class NetworkListenerService: NetworkServerProtocol {
         listener.stateUpdateHandler = { [weak self] state in
             guard case .failed(let erro) = state else { return }
             print("[NetworkListener] Servidor falhou na porta \(self?.port ?? 0): \(erro)")
-            self?.isRunning = false
+            guard let self else { return }
+            self.isRunning = false
+            // Só baixar a flag não bastava: ninguém a lia, e o painel seguia "AO VIVO" com
+            // o servidor morto. Quem cuida da tela precisa ser avisado.
+            let mensagem: String
+            if case .posix(let codigo) = erro, codigo == .EADDRINUSE {
+                mensagem = "A porta \(self.port) já está em uso por outro aplicativo. "
+                    + "Feche-o e inicie a transmissão de novo."
+            } else {
+                mensagem = "O servidor da aula parou de funcionar (\(erro.localizedDescription))."
+            }
+            self.onFailure?(mensagem)
         }
 
         self.listener = listener
@@ -92,6 +105,11 @@ public final class NetworkListenerService: NetworkServerProtocol {
         self.connections.values.forEach { $0.cancel() }
         self.connections.removeAll()
         connectionsLock.unlock()
+
+        // Sessão nova começa sem o quadro nem o estado da anterior: senão quem abrisse a
+        // página na próxima aula veria por um instante a última tela da aula passada.
+        streamerService.reset()
+        webSocketHandler.reset()
 
         self.isRunning = false
     }
@@ -173,18 +191,41 @@ public final class NetworkListenerService: NetworkServerProtocol {
 
             let cabecalhos = buffer[buffer.startIndex..<fimDosCabecalhos.upperBound]
             let req = String(data: cabecalhos, encoding: .utf8) ?? ""
-            let reqLower = req.lowercased()
+            let (metodo, caminho) = Self.linhaDeRequisicao(req)
 
-            if reqLower.contains("upgrade: websocket") {
+            // Decide pela linha de requisição e pelo cabeçalho de verdade. Antes a busca era
+            // por trecho em qualquer lugar do texto: `GET /stream-ajuda.html` recebia o vídeo
+            // em vez do arquivo.
+            if Self.pedeWebSocket(req) {
                 let handled = self.webSocketHandler.handleHandshake(connection: connection, request: req)
                 if !handled {
                     print("[WebSocket Warning] Requisicao /ws nao concluiu handshake.")
                 }
-            } else if reqLower.contains("get /stream") {
+            } else if metodo == "GET" && caminho == "/stream" {
                 self.streamerService.serveStream(connection: connection)
             } else {
                 self.staticFileProvider.serve(connection: connection, request: req)
             }
+        }
+    }
+
+    /// Método e caminho (sem a query string) da primeira linha da requisição.
+    public static func linhaDeRequisicao(_ req: String) -> (metodo: String, caminho: String) {
+        let primeira = req.prefix { $0 != "\r" && $0 != "\n" }
+        let partes = primeira.split(separator: " ", omittingEmptySubsequences: true)
+        guard partes.count >= 2 else { return ("", "") }
+        let alvo = partes[1]
+        let caminho = alvo.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        return (String(partes[0]).uppercased(), String(caminho))
+    }
+
+    /// Verdadeiro se algum cabeçalho `Upgrade` pede websocket.
+    public static func pedeWebSocket(_ req: String) -> Bool {
+        req.components(separatedBy: "\r\n").dropFirst().contains { linha in
+            let partes = linha.split(separator: ":", maxSplits: 1)
+            guard partes.count == 2 else { return false }
+            return partes[0].trimmingCharacters(in: .whitespaces).lowercased() == "upgrade"
+                && partes[1].lowercased().contains("websocket")
         }
     }
 

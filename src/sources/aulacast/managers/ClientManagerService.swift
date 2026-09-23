@@ -28,7 +28,8 @@ public final class ClientManagerService: ObservableObject {
             }
             recalculateHandRaises()
         } else {
-            addOrUpdateClient(ConnectedClient(name: name, ipAddress: ip, isHandRaised: isHandRaised))
+            // Quem chega por aqui já vem com nome de verdade, então já conta como identificado.
+            addOrUpdateClient(ConnectedClient(name: name, ipAddress: ip, isHandRaised: isHandRaised, hasIdentified: true))
         }
     }
 
@@ -64,6 +65,7 @@ public final class ClientManagerService: ObservableObject {
         guard !name.isEmpty else { return }
         clients[index].name = name
         clients[index].hasIdentified = true
+        recalculateHandRaises()
     }
 
     /// Marca se a aba do aluno está visível na tela dele.
@@ -72,12 +74,21 @@ public final class ClientManagerService: ObservableObject {
         clients[index].isWatching = isWatching
     }
 
+    /// Alunos que já disseram o nome — são estes que o professor vê na lista.
+    ///
+    /// Toda conexão entra primeiro como "Aluno-x.y" e só vira aluno de verdade depois do
+    /// IDENTIFY. Mostrar todas punha na lista (e na contagem de quem assiste) quem teve o
+    /// nome recusado ou nunca chegou a se identificar.
+    public var identifiedClients: [ConnectedClient] {
+        clients.filter { $0.hasIdentified }
+    }
+
     /// Quantos alunos estão de fato com a transmissão à vista.
     public var watchingCount: Int {
-        clients.filter { $0.isWatching }.count
+        identifiedClients.filter { $0.isWatching }.count
     }
 
     private func recalculateHandRaises() {
-        handRaisedCount = clients.filter { $0.isHandRaised }.count
+        handRaisedCount = identifiedClients.filter { $0.isHandRaised }.count
     }
 }

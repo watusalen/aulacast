@@ -32,4 +32,11 @@ public protocol StudentPresenceObserverProtocol: AnyObject {
 @MainActor
 public protocol CaptureLifecycleObserverProtocol: AnyObject {
     func captureDidStopUnexpectedly(reason: String)
+    /// Algo deu errado com a captura ainda de pé (troca de fonte ou de qualidade que não
+    /// pegou): a turma segue vendo o que via antes, e o professor precisa saber.
+    func captureDidReportError(_ message: String)
+}
+
+public extension CaptureLifecycleObserverProtocol {
+    func captureDidReportError(_ message: String) {}
 }

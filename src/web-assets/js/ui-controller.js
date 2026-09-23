@@ -26,6 +26,11 @@ export class UIController {
 
     this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
 
+    // iPhone não põe elemento em tela cheia, e Safari antigo só tem a versão webkit.
+    // Chamar a função que não existe lançava erro e o botão simplesmente não fazia nada.
+    if (!this.videoWrap.requestFullscreen && !this.videoWrap.webkitRequestFullscreen) {
+      this.fullscreenBtn.hidden = true;
+    }
     this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
     this.menuToggleBtn.addEventListener('click', () => this.toggleSidebar());
 
@@ -133,6 +138,10 @@ export class UIController {
     this.placeholder.hidden = true;
     this.reconnectOverlay.hidden = true;
     this.disconnectedState.hidden = true;
+    // O aviso de pausa também: se o professor retomou enquanto o aluno estava sem
+    // conexão, o STREAM_RESUMED se perdeu e o aviso ficava por cima do vídeo ao vivo.
+    // Quem diz se a aula está pausada agora é a mensagem de boas-vindas.
+    this.hidePaused();
   }
 
   /// Mostra para o aluno com qual identidade ele entrou na aula.
@@ -169,12 +178,17 @@ export class UIController {
   toggleFullscreen() {
     // Coloca o container em tela cheia (e não a <img>), para que os controles
     // e os avisos continuem visíveis por cima do vídeo, como no YouTube.
-    if (!document.fullscreenElement) {
-      this.videoWrap.requestFullscreen().catch(err => {
-        console.error('Erro ao entrar em tela cheia:', err);
-      });
+    const emTelaCheia = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!emTelaCheia) {
+      const entrar = this.videoWrap.requestFullscreen || this.videoWrap.webkitRequestFullscreen;
+      if (!entrar) return;
+      const resultado = entrar.call(this.videoWrap);
+      if (resultado && resultado.catch) {
+        resultado.catch(err => console.error('Erro ao entrar em tela cheia:', err));
+      }
     } else {
-      document.exitFullscreen();
+      const sair = document.exitFullscreen || document.webkitExitFullscreen;
+      if (sair) sair.call(document);
     }
   }
 }

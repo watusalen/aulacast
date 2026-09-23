@@ -13,6 +13,18 @@ public final class MainViewModel: ObservableObject {
     @Published public var streamStartedAt: Date?
     @Published public var latestPreviewImage: NSImage?
 
+    /// Servidor no ar e alunos conectados, mesmo que a captura tenha caído.
+    ///
+    /// Depois que a captura cai sozinha `isStreaming` vira falso, mas o servidor e a
+    /// proteção contra o sono continuam segurados de propósito. Sem este estado o painel só
+    /// oferecia "Iniciar", e não havia como encerrar a sessão: o Mac nunca mais dormia e a
+    /// porta seguia aberta até o app fechar.
+    @Published public private(set) var isSessionOpen: Bool = false
+
+    /// Um início em andamento (esperando a permissão, o sistema e o ScreenCaptureKit).
+    /// O botão fica desabilitado nesse meio-tempo: um duplo clique criava dois streams.
+    @Published public private(set) var isStarting: Bool = false
+
     /// Erro que derrubou a transmissão sozinha (monitor desconectado, permissão revogada…).
     @Published public var streamErrorMessage: String?
 
@@ -114,6 +126,9 @@ public final class MainViewModel: ObservableObject {
         self.serverService.handRaiseObserver = self
         self.serverService.clientObserver = self
         self.serverService.isChatEnabled = self.isChatEnabled
+        self.serverService.onFailure = { [weak self] mensagem in
+            Task { @MainActor in self?.serverDidFail(mensagem) }
+        }
 
         self.updateServerURL()
 
@@ -135,7 +150,10 @@ public final class MainViewModel: ObservableObject {
     }
 
     public func startStream() {
+        guard !isStarting, !isStreaming else { return }
+        isStarting = true
         Task {
+            defer { self.isStarting = false }
             self.streamErrorMessage = nil
 
             // Sem permissão nem vale tentar: o ScreenCaptureKit falharia e o professor
@@ -191,6 +209,7 @@ public final class MainViewModel: ObservableObject {
                     reason: "Transmitindo a aula para os alunos na rede local"
                 )
                 self.isStreaming = true
+                self.isSessionOpen = true
                 self.isPaused = false
                 self.streamState.reset()
                 self.streamStartedAt = Date()
@@ -212,6 +231,14 @@ public final class MainViewModel: ObservableObject {
         }
     }
 
+    /// O servidor caiu depois de subir (porta ocupada por outro app, por exemplo).
+    /// Sem alunos para receber nada, não há sessão: encerra tudo e mostra o motivo.
+    private func serverDidFail(_ mensagem: String) {
+        guard isSessionOpen || isStreaming else { return }
+        stopStream()
+        streamErrorMessage = mensagem
+    }
+
     public func stopStream() {
         Task {
             await captureService.stopCapture()
@@ -219,6 +246,7 @@ public final class MainViewModel: ObservableObject {
             advertiserService.stopAdvertising()
             self.systemActivity.endTransmission()
             self.isStreaming = false
+            self.isSessionOpen = false
             self.isPaused = false
             self.streamState.reset()
             self.streamStartedAt = nil
@@ -328,6 +356,10 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         streamState.reset()
         streamStartedAt = nil
         latestPreviewImage = nil
+    }
+
+    public func captureDidReportError(_ message: String) {
+        streamErrorMessage = message
     }
 }
 

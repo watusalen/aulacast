@@ -263,6 +263,20 @@ body {
    ------------------------------------------------------------------ */
 
 /* Tela média: a conversa encolhe, mas continua ao lado do vídeo. */
+/* Fora do modo gaveta o fundo não existe. Estilizado só dentro da media query, ele
+   virava um terceiro item da grade ao girar o tablet com a conversa aberta, roubando
+   metade da altura do vídeo sem botão para fechá-lo. */
+.sidebar-backdrop {
+  display: none;
+}
+
+.chat-bubble.system {
+  align-self: center;
+  font-size: 12px;
+  opacity: .8;
+  font-style: italic;
+}
+
 @media (max-width: 1100px) {
   .content {
     grid-template-columns: 1fr 280px;
@@ -300,6 +314,7 @@ body {
   /* Fundo escuro atrás da gaveta: sem ele, o aluno abre a conversa e não
      descobre como fechar — tocar fora é o gesto que todo mundo tenta. */
   .sidebar-backdrop {
+    display: block;
     position: fixed;
     inset: 0;
     z-index: 19;

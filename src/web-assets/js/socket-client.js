@@ -5,6 +5,9 @@ import {
   RECONNECT_MAX_INTERVAL_MS
 } from './config.js';
 
+/** Sem nenhuma mensagem do servidor por este tempo, a conexão é dada como morta. */
+export const SERVER_SILENCE_TIMEOUT_MS = 25000;
+
 export class SocketClient {
   constructor(onStateChange, onMessage) {
     this.ws = null;
@@ -18,6 +21,7 @@ export class SocketClient {
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
     this.manuallyStopped = false;
+    this.lastMessageAt = 0;
   }
 
   /**
@@ -68,11 +72,13 @@ export class SocketClient {
 
   handleOpen() {
     this.reconnectAttempts = 0;
+    this.lastMessageAt = Date.now();
     this.onStateChange(ConnectionState.CONNECTED, 0);
     this.startHeartbeat();
   }
 
   handleMessage(event) {
+    this.lastMessageAt = Date.now();
     try {
       const data = JSON.parse(event.data);
       if (data.type !== 'PONG') {
@@ -104,10 +110,15 @@ export class SocketClient {
     return !!this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
+  isConnecting() {
+    return !!this.ws && this.ws.readyState === WebSocket.CONNECTING;
+  }
+
+  /** Devolve se a mensagem saiu, para quem chama não fingir que foi entregue. */
   send(data) {
-    if (this.isConnected()) {
-      this.ws.send(JSON.stringify(data));
-    }
+    if (!this.isConnected()) return false;
+    this.ws.send(JSON.stringify(data));
+    return true;
   }
 
   scheduleReconnect() {
@@ -123,6 +134,14 @@ export class SocketClient {
   startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
+      // O PONG é a prova de vida do servidor. Se o Mac dormiu ou o aluno trocou de
+      // ponto de acesso, o `onclose` pode levar minutos: nesse meio-tempo a página dizia
+      // "Conectado" com o vídeo congelado e o chat indo para lugar nenhum.
+      if (Date.now() - this.lastMessageAt > SERVER_SILENCE_TIMEOUT_MS) {
+        this.cleanup();
+        this.handleClose();
+        return;
+      }
       this.send({ type: 'PING' });
     }, 10000);
   }

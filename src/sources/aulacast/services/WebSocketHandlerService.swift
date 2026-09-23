@@ -8,23 +8,87 @@ public final class WebSocketHandlerService {
     public weak var handRaiseObserver: HandRaiseObserverProtocol?
     public weak var clientObserver: ClientObserverProtocol?
     public weak var presenceObserver: StudentPresenceObserverProtocol?
-    public var isChatEnabled: Bool = true
+    public var isChatEnabled: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return chatLiberado }
+        set { lock.lock(); chatLiberado = newValue; lock.unlock() }
+    }
+    private var chatLiberado = true
 
     private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
     /// Um decodificador por conexão, cada um com seu buffer de bytes incompletos.
     private var decoders: [ObjectIdentifier: WebSocketFrameDecoder] = [:]
+    /// Nome validado de cada aluno, pelo id da conexão.
+    ///
+    /// O remetente do chat e o nome da mão levantada saem daqui, e não do que o navegador
+    /// manda em cada mensagem: antes um aluno podia escrever ao professor assinando como
+    /// um colega (ou como "Professor") só trocando o campo `sender`.
+    private var nomes: [String: String] = [:]
+    /// Último estado da transmissão anunciado à turma, repetido no CONNECTED.
+    ///
+    /// Sem isto, quem reconectava (ou entrava no meio da aula) com a transmissão pausada
+    /// ou encerrada via o último quadro congelado como se a aula estivesse ao vivo.
+    private var estadoDaTransmissao: [String: String] = ["stream": "live"]
     private let lock = NSLock()
+
+    /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
+    ///
+    /// Um notebook que dorme ou sai do Wi-Fi não manda FIN: sem prazo, a conexão ficava
+    /// aberta para sempre e o aluno virava um fantasma na lista (às vezes com a mão
+    /// levantada, inflando o contador de dúvidas) ao lado da entrada nova dele.
+    private var ultimaAtividade: [ObjectIdentifier: Date] = [:]
+    private var alunoDaConexao: [ObjectIdentifier: String] = [:]
+    private var vigia: DispatchSourceTimer?
+
+    /// O navegador manda PING a cada 10 s; três batidas perdidas são conexão morta.
+    public static let tempoMaximoOcioso: TimeInterval = 30
 
     /// Teto de payload por frame. O cliente só envia JSON curto (chat, mão levantada);
     /// qualquer coisa maior é erro ou abuso e não deve virar alocação gigante.
     private static let maxPayloadBytes = 1 << 20 // 1 MB
 
-    public init() {}
+    /// Limites do que aparece na tela do professor. O navegador já corta antes, mas um
+    /// cliente adulterado mandava 900 KB de chat e o painel tentava desenhar tudo.
+    public static let maxNameLength = 40
+    public static let maxChatLength = 1000
+
+    public init() {
+        let vigia = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        vigia.schedule(deadline: .now() + 10, repeating: 10)
+        vigia.setEventHandler { [weak self] in self?.derrubarOciosas() }
+        vigia.resume()
+        self.vigia = vigia
+    }
+
+    deinit {
+        vigia?.cancel()
+    }
+
+    private func derrubarOciosas() {
+        let limite = Date().addingTimeInterval(-Self.tempoMaximoOcioso)
+        lock.lock()
+        let mortas = ultimaAtividade.filter { $0.value < limite }.compactMap { item -> (ObjectIdentifier, NWConnection, String)? in
+            guard let conexao = activeConnections[item.key], let aluno = alunoDaConexao[item.key] else { return nil }
+            return (item.key, conexao, aluno)
+        }
+        lock.unlock()
+
+        for (id, conexao, aluno) in mortas {
+            print("[WebSocket] Conexão sem sinal há \(Int(Self.tempoMaximoOcioso)) s; encerrando.")
+            removeConnection(id: id, clientId: aluno)
+            conexao.cancel()
+        }
+    }
 
     /// Realiza o Handshake HTTP 101 Switching Protocols com a chave Sec-WebSocket-Key
     public func handleHandshake(connection: NWConnection, request: String) -> Bool {
-        guard let clientKey = extractHeader("Sec-WebSocket-Key", from: request) else {
+        guard let clientKey = extractHeader("Sec-WebSocket-Key", from: request), !clientKey.isEmpty else {
             print("[WebSocket Warning] Cabecalho Sec-WebSocket-Key nao encontrado na requisicao.")
+            // Responder e fechar: antes a conexão ficava aberta sem resposta nenhuma, e
+            // qualquer um na rede podia empilhar sockets até esgotar os descritores do app.
+            let recusa = "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            connection.send(content: Data(recusa.utf8), completion: .contentProcessed({ _ in
+                connection.cancel()
+            }))
             return false
         }
 
@@ -45,6 +109,7 @@ public final class WebSocketHandlerService {
         let id = ObjectIdentifier(connection)
         lock.lock()
         activeConnections[id] = connection
+        ultimaAtividade[id] = Date()
         lock.unlock()
 
         // Extrai o IP do cliente
@@ -54,14 +119,21 @@ public final class WebSocketHandlerService {
         }
 
         let connectedClient = ConnectedClient(name: "Aluno-\(String(clientIp.suffix(4)))", ipAddress: clientIp, isHandRaised: false)
+        lock.lock()
+        alunoDaConexao[id] = connectedClient.id
+        lock.unlock()
         clientObserver?.didClientConnect(connectedClient)
 
         // Envia mensagem de boas-vindas CONNECTED com o estado atual do chat. Sem isto, quem
         // entra (ou reconecta) no meio da aula com o chat já desligado veria o campo liberado
         // e só descobriria o bloqueio ao ver a mensagem sumir.
+        lock.lock()
+        var boasVindas: [String: Any] = estadoDaTransmissao
+        boasVindas["chatEnabled"] = chatLiberado
+        lock.unlock()
         let welcomeDict: [String: Any] = [
             "type": "CONNECTED",
-            "payload": ["chatEnabled": isChatEnabled]
+            "payload": boasVindas
         ]
         if let data = try? JSONSerialization.data(withJSONObject: welcomeDict),
            let welcomeJSON = String(data: data, encoding: .utf8) {
@@ -118,6 +190,8 @@ public final class WebSocketHandlerService {
 
     /// Transmite uma mensagem de controle para todos os clientes web conectados.
     public func broadcastControlMessage(type: String, payload: [String: String]? = nil) {
+        registrarEstado(type: type, payload: payload)
+
         var jsonDict: [String: Any] = ["type": type]
         if let payload = payload {
             jsonDict["payload"] = payload
@@ -133,6 +207,32 @@ public final class WebSocketHandlerService {
         for conn in connections {
             sendTextFrame(connection: conn, text: jsonString)
         }
+    }
+
+    private func registrarEstado(type: String, payload: [String: String]?) {
+        let novo: [String: String]
+        switch type {
+        case "STREAM_STARTED", "STREAM_RESUMED": novo = ["stream": "live"]
+        case "STREAM_PAUSED": novo = ["stream": "paused"]
+        case "STREAM_ENDED": novo = ["stream": "ended", "reason": payload?["reason"] ?? ""]
+        default: return
+        }
+        lock.lock()
+        estadoDaTransmissao = novo
+        lock.unlock()
+    }
+
+    /// Volta ao estado de uma sessão nova (servidor parado e religado).
+    public func reset() {
+        lock.lock()
+        estadoDaTransmissao = ["stream": "live"]
+        lock.unlock()
+    }
+
+    private func nomeIdentificado(_ clientId: String, senão fallbackName: String) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return nomes[clientId] ?? fallbackName
     }
 
     /// Busca um cabecalho HTTP de forma estritamente case-insensitive
@@ -157,12 +257,8 @@ public final class WebSocketHandlerService {
         connection.receive(minimumIncompleteLength: 2, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self = self else { return }
 
-            if isComplete || error != nil {
-                self.removeConnection(id: connectionId, clientId: clientId)
-                return
-            }
-
-            if let data = data, !data.isEmpty {
+            // Bytes que chegam junto com o fim da conexão ainda são mensagens válidas.
+            if error == nil, let data = data, !data.isEmpty {
                 self.consumeFrames(
                     newBytes: data,
                     connection: connection,
@@ -170,6 +266,15 @@ public final class WebSocketHandlerService {
                     fallbackName: fallbackName,
                     connectionId: connectionId
                 )
+            }
+
+            if isComplete || error != nil {
+                // Cancelar é o que devolve o socket ao sistema. Só remover o registro deixava
+                // a conexão em CLOSE_WAIT até o app fechar — uma por aluno que fechou a tampa
+                // do notebook ou matou o navegador sem mandar CLOSE.
+                self.removeConnection(id: connectionId, clientId: clientId)
+                connection.cancel()
+                return
             }
 
             // Se o frame recebido acabou de encerrar a conexão (CLOSE ou frame malformado),
@@ -201,6 +306,9 @@ public final class WebSocketHandlerService {
         let estavaAtiva = activeConnections.removeValue(forKey: id) != nil
         // Sem isto, o buffer de recepção da conexão ficaria retido até o app fechar.
         decoders.removeValue(forKey: id)
+        nomes.removeValue(forKey: clientId)
+        ultimaAtividade.removeValue(forKey: id)
+        alunoDaConexao.removeValue(forKey: id)
         lock.unlock()
 
         guard estavaAtiva else { return }
@@ -220,8 +328,11 @@ public final class WebSocketHandlerService {
         connectionId: ObjectIdentifier
     ) {
         lock.lock()
+        if activeConnections[connectionId] != nil {
+            ultimaAtividade[connectionId] = Date()
+        }
         let decoder = decoders[connectionId] ?? {
-            let novo = WebSocketFrameDecoder(maxPayloadBytes: Self.maxPayloadBytes)
+            let novo = WebSocketFrameDecoder(maxPayloadBytes: Self.maxPayloadBytes, exigirMascara: true)
             decoders[connectionId] = novo
             return novo
         }()
@@ -230,6 +341,7 @@ public final class WebSocketHandlerService {
         let resultado = decoder.consume(newBytes)
 
         var encerrar = false
+        var respostaDeClose: Data?
 
         switch resultado {
         case .protocolViolation:
@@ -239,6 +351,9 @@ public final class WebSocketHandlerService {
             for frame in frames {
                 if frame.isClose {
                     encerrar = true
+                    // Devolve o CLOSE (com o código recebido) antes de fechar, como pede a
+                    // RFC 6455: sem isso o navegador registra uma queda anormal (1006).
+                    respostaDeClose = WebSocketFrameEncoder.closeFrame(payload: frame.payload.prefix(2))
                     break
                 }
                 if frame.isPing {
@@ -262,7 +377,13 @@ public final class WebSocketHandlerService {
 
         if encerrar {
             removeConnection(id: connectionId, clientId: clientId)
-            connection.cancel()
+            if let respostaDeClose {
+                connection.send(content: respostaDeClose, completion: .contentProcessed({ _ in
+                    connection.cancel()
+                }))
+            } else {
+                connection.cancel()
+            }
         }
     }
 
@@ -282,9 +403,9 @@ public final class WebSocketHandlerService {
         switch type {
         case "RAISE_HAND":
             let active = (payloadDict?["active"] as? Bool) ?? true
-            let informado = (payloadDict?["studentName"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let name = (informado?.isEmpty == false) ? informado! : fallbackName
+            // O nome vem do IDENTIFY já validado, não do campo `studentName` da mensagem:
+            // aceitá-lo pulava a validação e deixava levantar a mão em nome de um colega.
+            let name = nomeIdentificado(clientId, senão: fallbackName)
 
             // Identifica pela conexão: trocar de nome atualiza o registro existente
             // em vez de criar um segundo aluno fantasma na lista do professor.
@@ -296,9 +417,11 @@ public final class WebSocketHandlerService {
         case "CHAT_SEND":
             guard isChatEnabled else { return }
             let text = (payloadDict?["text"] as? String) ?? ""
-            let sender = (payloadDict?["sender"] as? String) ?? fallbackName
+            let sender = nomeIdentificado(clientId, senão: fallbackName)
 
-            let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedText = String(
+                text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxChatLength)
+            )
             if !trimmedText.isEmpty {
                 let chatMsg = ChatMessage(sender: sender, text: trimmedText, isProf: false)
 
@@ -320,6 +443,15 @@ public final class WebSocketHandlerService {
                 sendTextFrame(connection: connection, text: recusaJSON)
                 return
             }
+            guard nome.count <= Self.maxNameLength else {
+                let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"Use um nome com até \(Self.maxNameLength) caracteres.\"}}"
+                sendTextFrame(connection: connection, text: recusaJSON)
+                return
+            }
+
+            lock.lock()
+            nomes[clientId] = nome
+            lock.unlock()
 
             presenceObserver?.didIdentifyStudent(clientId: clientId, name: nome)
             sendTextFrame(connection: connection, text: "{\"type\":\"IDENTIFY_ACCEPTED\"}")

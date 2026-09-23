@@ -52,12 +52,13 @@ function classeDaUltimaMensagem(chatMessages) {
   return chatMessages.filhos[chatMessages.filhos.length - 1].className;
 }
 
-test('Mensagem do professor recebe o prefixo "Prof." e o horário', () => {
+test('Mensagem do professor mostra o remetente do servidor sem "Prof. Professor"', () => {
   const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
-  chat.appendMessage('Ana Souza', 'Aumentei a fonte do terminal.', true);
+  // É isto que o servidor manda de verdade (ChatManagerService).
+  chat.appendMessage('Professor', 'Aumentei a fonte do terminal.', true);
 
   const autor = autorDaUltimaMensagem(elementos.chatMessages);
-  assert.match(autor, /^Prof\. Ana Souza · \d{2}:\d{2}$/);
+  assert.match(autor, /^Professor · \d{2}:\d{2}$/);
   assert.match(classeDaUltimaMensagem(elementos.chatMessages), /prof/);
 });
 
@@ -94,18 +95,30 @@ test('O texto da mensagem é preservado', () => {
   assert.strictEqual(bolha.filhos[1].textContent, texto);
 });
 
-test('Enviar mensagem usa o nome vindo da identificação, não um campo do chat', () => {
+test('Enviar mensagem manda só o texto: o remetente é o nome que o servidor validou', () => {
   const enviadas = [];
-  const chat = new ChatManager((m) => enviadas.push(m), () => 'Ana Beatriz Sousa');
+  const chat = new ChatManager((m) => { enviadas.push(m); return true; }, () => 'Ana Beatriz Sousa');
 
   elementos.chatMessageInput.value = 'Professor, não estou enxergando.';
   chat.handleSubmit({ preventDefault() {} });
 
   assert.strictEqual(enviadas.length, 1);
   assert.strictEqual(enviadas[0].type, 'CHAT_SEND');
-  assert.strictEqual(enviadas[0].payload.sender, 'Ana Beatriz Sousa');
+  assert.strictEqual(enviadas[0].payload.sender, undefined);
   assert.strictEqual(enviadas[0].payload.text, 'Professor, não estou enxergando.');
   assert.strictEqual(elementos.chatMessageInput.value, '', 'campo é limpo após enviar');
+});
+
+test('Sem conexão a mensagem fica no campo e o aluno é avisado', () => {
+  const chat = new ChatManager(() => false, () => 'Ana Beatriz Sousa');
+  const antes = elementos.chatMessages.filhos.length;
+
+  elementos.chatMessageInput.value = 'Pergunta importante';
+  chat.handleSubmit({ preventDefault() {} });
+
+  assert.strictEqual(elementos.chatMessageInput.value, 'Pergunta importante', 'o texto não some');
+  assert.strictEqual(elementos.chatMessages.filhos.length, antes + 1, 'aparece um aviso');
+  assert.match(classeDaUltimaMensagem(elementos.chatMessages), /system/);
 });
 
 test('Mensagem vazia ou só com espaços não é enviada', () => {
