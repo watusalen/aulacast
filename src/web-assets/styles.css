@@ -309,7 +309,11 @@ body {
 .content {
   display: grid;
   grid-template-columns: 1fr 320px;
+  /* A linha da grade tem a altura da tela, e não a do conteúdo: é isso que deixa o
+     painel lateral rolar por dentro em vez de crescer para baixo da tela. */
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -859,9 +863,19 @@ body {
 }
 
 /* Sidebar */
+/* O painel é uma coluna de três partes: arquivos (até 40% da altura, rolando por
+   dentro), conversa (o resto, rolando por dentro) e o campo de envio, sempre visível
+   embaixo.
+
+   Cada parte precisa de `min-height: 0`. Sem isso o Chrome não encolhe um item flex
+   abaixo da altura do conteúdo: com muitos arquivos e mensagens a conversa crescia, e
+   o campo de envio e o botão Enviar iam para baixo da tela (reproduzido num notebook
+   1366x620). O WebKit é mais tolerante, por isso no Safari não aparecia. */
 .sidebar {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  height: 100%;
   background: #1a1a1a;
   border-left: 1px solid #2a2a2a;
   overflow: hidden;
@@ -945,13 +959,16 @@ body {
 /* Arquivos compartilhados pelo professor: ficam no topo do painel, acima da conversa,
    com altura limitada para não empurrar o chat para fora da tela. */
 .files {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-height: 0;
   max-height: 40%;
   display: flex;
   flex-direction: column;
 }
 
 .files-list {
+  flex: 1 1 auto;
+  min-height: 0;
   list-style: none;
   margin: 0;
   padding: 6px 8px;
@@ -1003,7 +1020,8 @@ body {
 /* Paineis */
 .panel {
   display: none;
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
 }
@@ -1014,7 +1032,8 @@ body {
 
 /* Mensagens */
 .messages {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1075,6 +1094,7 @@ body {
 
 /* Formulario de chat */
 .chat-form {
+  flex-shrink: 0;
   padding: 16px;
   display: flex;
   flex-direction: column;
