@@ -47,8 +47,8 @@ function criarElemento() {
 const elementos = {};
 const nomes = [
   'connectionStatus', 'videoStream', 'placeholder', 'reconnectOverlay', 'reconnectAttempt',
-  'disconnectedState', 'pausedOverlay', 'handBanner', 'fullscreenBtn', 'sidebar',
-  'menuToggleBtn', 'studentBadge', 'raiseHandBtn', 'handText', 'retryConnectionBtn',
+  'disconnectedState', 'pausedOverlay', 'fullscreenBtn', 'sidebar',
+  'menuToggleBtn', 'studentBadge', 'retryConnectionBtn',
   'chatForm', 'chatMessageInput', 'chatMessages', 'chatSendBtn',
   'entryGate', 'entryForm', 'entryName', 'entryError', 'entrySubmit'
 ];
@@ -137,24 +137,14 @@ test('Reconectar tira o aviso de pausa que ficou de antes da queda', () => {
   app.ui.streamWatchdog.stop();
 });
 
-test('Sem conexão, levantar a mão não finge que o professor foi avisado', () => {
-  const app = novoApp();
-  app.identidade = { name: 'Ana Beatriz' };
-  app.toggleHandRaise();
-
-  assert.strictEqual(app.isHandRaised, false);
-  assert.strictEqual(app.raiseHandBtn.getAttribute('aria-pressed'), null, 'o botão não muda');
-});
-
-test('Ao reconectar com a mão levantada, o pedido é reenviado ao servidor', () => {
+test('Ao reconectar, o aluno se identifica de novo e não manda mais mão levantada', () => {
   const app = novoApp();
   const enviadas = [];
   app.socket.send = (m) => { enviadas.push(m); return true; };
   app.identidade = { name: 'Ana Beatriz' };
-  app.isHandRaised = true;
 
   app.enviarIdentificacao();
 
   assert.ok(enviadas.some((m) => m.type === 'IDENTIFY'));
-  assert.ok(enviadas.some((m) => m.type === 'RAISE_HAND' && m.payload.active === true));
+  assert.ok(!enviadas.some((m) => m.type === 'RAISE_HAND'));
 });

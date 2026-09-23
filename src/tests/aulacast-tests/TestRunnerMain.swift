@@ -31,47 +31,34 @@ struct AulaCastTestRunner {
             }
         }
 
-        // TESTE 1: ClientManagerService (UC-03 & RF-11: Alunos e Levantar a Mão)
+        // TESTE 1: ClientManagerService (UC-03: lista de alunos)
         print("\n--- [1/12] Testes de Domínio: ClientManagerService ---")
         let clientManager = ClientManagerService()
-        
-        clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50", isHandRaised: false)
+
+        clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50")
         assertTest(clientManager.clients.count == 1, "Conexão de novo aluno registra no gerenciador")
         assertTest(clientManager.clients.first?.name == "Carlos - PC 04", "Nome do aluno registrado corretamente")
-        assertTest(clientManager.handRaisedCount == 0, "Contador de mãos levantadas inicia em zero")
-        
-        clientManager.addOrUpdateClient(name: "Carlos - PC 04", ip: "192.168.1.50", isHandRaised: true)
-        assertTest(clientManager.handRaisedCount == 1, "Notificação de Levantar a Mão incrementa contador")
-        
-        clientManager.addOrUpdateClient(name: "Mariana - PC 08", ip: "192.168.1.51", isHandRaised: true)
-        assertTest(clientManager.clients.count == 2, "Dois alunos registrados simultaneamente no gerenciador")
-        assertTest(clientManager.handRaisedCount == 2, "Múltiplos alunos levantando a mão incrementam contador")
-        
-        // Só o próprio aluno abaixa a mão (modelo do Google Meet): o professor observa.
-        if let client = clientManager.clients.first {
-            clientManager.setHandRaised(clientId: client.id, displayName: client.name, isRaised: false)
-            assertTest(clientManager.handRaisedCount == 1, "Aluno abaixando a própria mão decrementa o contador para 1")
-        }
 
-        // Trocar o nome exibido não pode criar um segundo registro para o mesmo aluno:
-        // era assim que surgiam alunos fantasmas de mão levantada, impossíveis de limpar.
+        clientManager.addOrUpdateClient(name: "Mariana - PC 08", ip: "192.168.1.51")
+        assertTest(clientManager.clients.count == 2, "Dois alunos registrados simultaneamente no gerenciador")
+
+        // Trocar o nome exibido não pode criar um segundo registro para o mesmo aluno.
         if let client = clientManager.clients.first {
             let totalAntes = clientManager.clients.count
-            clientManager.setHandRaised(clientId: client.id, displayName: "Carlos Eduardo", isRaised: true)
+            clientManager.identify(clientId: client.id, name: "Carlos Eduardo")
             assertTest(clientManager.clients.count == totalAntes, "Aluno que se identifica depois não vira registro duplicado")
             assertTest(clientManager.clients.first?.name == "Carlos Eduardo", "Nome exibido é atualizado no registro existente")
-            clientManager.setHandRaised(clientId: client.id, displayName: "Carlos Eduardo", isRaised: false)
         }
 
         // Um id desconhecido não deve inventar aluno na lista.
         let totalAntesDeIdInvalido = clientManager.clients.count
-        clientManager.setHandRaised(clientId: "id-inexistente", displayName: "Fantasma", isRaised: true)
-        assertTest(clientManager.clients.count == totalAntesDeIdInvalido, "Mão levantada de conexão desconhecida é ignorada")
+        clientManager.identify(clientId: "id-inexistente", name: "Fantasma")
+        assertTest(clientManager.clients.count == totalAntesDeIdInvalido, "Identificação de conexão desconhecida é ignorada")
 
         // Caminho real ponta a ponta: o id criado no handshake precisa sobreviver até o
-        // gerenciador, senão a mão levantada é descartada em silêncio (foi o que aconteceu).
+        // gerenciador, senão a identificação se perde em silêncio.
         let gerenciadorDeConexao = ClientManagerService()
-        let alunoDoHandshake = ConnectedClient(name: "Aluno-1.99", ipAddress: "192.168.1.99", isHandRaised: false)
+        let alunoDoHandshake = ConnectedClient(name: "Aluno-1.99", ipAddress: "192.168.1.99")
         gerenciadorDeConexao.addOrUpdateClient(alunoDoHandshake)
 
         // Antes de dizer o nome, a conexão não aparece para o professor.
@@ -85,21 +72,9 @@ struct AulaCastTestRunner {
             gerenciadorDeConexao.clients.first?.id == alunoDoHandshake.id,
             "Id gerado no handshake é preservado ao registrar o aluno"
         )
-
-        gerenciadorDeConexao.setHandRaised(clientId: alunoDoHandshake.id, displayName: "Ana", isRaised: true)
         assertTest(
-            gerenciadorDeConexao.handRaisedCount == 1,
-            "Mão levantada usando o id do handshake aparece para o professor"
-        )
-        assertTest(
-            gerenciadorDeConexao.clients.first?.isHandRaised == true,
-            "A linha do aluno fica marcada como mão levantada"
-        )
-
-        gerenciadorDeConexao.setHandRaised(clientId: alunoDoHandshake.id, displayName: "Ana", isRaised: false)
-        assertTest(
-            gerenciadorDeConexao.handRaisedCount == 0,
-            "O próprio aluno abaixando a mão zera o contador"
+            gerenciadorDeConexao.identifiedClients.first?.name == "Ana",
+            "Com o nome dito, o aluno aparece na lista do professor"
         )
 
         if let client = clientManager.clients.first {
@@ -117,7 +92,7 @@ struct AulaCastTestRunner {
             advertiserService: FakeAdvertiser()
         )
 
-        let alunoConectado = ConnectedClient(name: "Aluno-2.55", ipAddress: "192.168.2.55", isHandRaised: false)
+        let alunoConectado = ConnectedClient(name: "Aluno-2.55", ipAddress: "192.168.2.55")
         viewModel.didClientConnect(alunoConectado)
         try? await Task.sleep(nanoseconds: 150_000_000)
 
@@ -126,25 +101,15 @@ struct AulaCastTestRunner {
             "Id do handshake sobrevive ao caminho completo até o gerenciador"
         )
 
-        // O aluno diz o nome ao entrar e depois levanta a mão.
         viewModel.didIdentifyStudent(clientId: alunoConectado.id, name: "Ana Beatriz")
-        viewModel.didToggleHandRaise(clientId: alunoConectado.id, displayName: "Ana Beatriz", isRaised: true)
         try? await Task.sleep(nanoseconds: 150_000_000)
-
         assertTest(
-            viewModel.clientManager.handRaisedCount == 1,
-            "Mão levantada chega ao app do professor pelo caminho completo"
+            viewModel.clientManager.identifiedClients.first?.name == "Ana Beatriz",
+            "O nome chega ao app do professor pelo caminho completo"
         )
         assertTest(
             viewModel.clientManager.clients.count == 1,
             "Nome digitado não cria aluno duplicado no caminho completo"
-        )
-
-        viewModel.didToggleHandRaise(clientId: alunoConectado.id, displayName: "Ana Beatriz", isRaised: false)
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        assertTest(
-            viewModel.clientManager.handRaisedCount == 0,
-            "Aluno abaixa a própria mão pelo caminho completo"
         )
 
         // TESTE 2: ChatManagerService (UC-05 & RF-09: Chat Local Offline)
@@ -322,7 +287,7 @@ struct AulaCastTestRunner {
         assertTest(lidosColados == 2, "Dois frames colados numa leitura são ambos processados (lidos: \(lidosColados))")
 
         // Frame partido ao meio entre duas leituras.
-        let inteiro = frameDeTexto("{\"type\":\"RAISE_HAND\"}")
+        let inteiro = frameDeTexto("{\"type\":\"PRESENCE\"}")
         let metade = inteiro.count / 2
         let decodificadorPartido = WebSocketFrameDecoder()
         let primeiraMetade = quantosFrames(decodificadorPartido.consume(inteiro.prefix(metade)))
@@ -336,7 +301,7 @@ struct AulaCastTestRunner {
         if case .frames(let lista) = decodificadorConteudo.consume(inteiro.suffix(from: metade)),
            let frame = lista.first {
             assertTest(
-                String(data: frame.payload, encoding: .utf8) == "{\"type\":\"RAISE_HAND\"}",
+                String(data: frame.payload, encoding: .utf8) == "{\"type\":\"PRESENCE\"}",
                 "Payload remontado é idêntico ao enviado"
             )
         } else {
@@ -397,24 +362,19 @@ struct AulaCastTestRunner {
         )
 
         // TESTE 8: WebSocket real ponta a ponta contra o servidor do app.
-        // Cobre o handshake e o caminho da mão levantada depois da refatoração do decodificador.
+        // Cobre o handshake, a identificação e a presença pelo decodificador real.
         print("\n--- [8/12] Testes E2E: WebSocket real ---")
 
-        final class ColetorDeMaos: HandRaiseObserverProtocol, ClientObserverProtocol, StudentPresenceObserverProtocol, @unchecked Sendable {
+        final class ColetorDeEventos: ClientObserverProtocol, StudentPresenceObserverProtocol, @unchecked Sendable {
             private let trava = NSLock()
             private var _conectados: [ConnectedClient] = []
-            private var _maos: [(id: String, nome: String, levantada: Bool)] = []
             private var _identificacoes: [(id: String, nome: String)] = []
             private var _presencas: [(id: String, assistindo: Bool)] = []
 
             var conectados: [ConnectedClient] { trava.lock(); defer { trava.unlock() }; return _conectados }
-            var maos: [(id: String, nome: String, levantada: Bool)] { trava.lock(); defer { trava.unlock() }; return _maos }
             var identificacoes: [(id: String, nome: String)] { trava.lock(); defer { trava.unlock() }; return _identificacoes }
             var presencas: [(id: String, assistindo: Bool)] { trava.lock(); defer { trava.unlock() }; return _presencas }
 
-            func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool) {
-                trava.lock(); _maos.append((clientId, displayName, isRaised)); trava.unlock()
-            }
             func didClientConnect(_ client: ConnectedClient) {
                 trava.lock(); _conectados.append(client); trava.unlock()
             }
@@ -427,9 +387,8 @@ struct AulaCastTestRunner {
             }
         }
 
-        let coletor = ColetorDeMaos()
+        let coletor = ColetorDeEventos()
         let servidorE2E = NetworkListenerService(port: 8100, webAssetsPath: FileManager.default.temporaryDirectory)
-        servidorE2E.handRaiseObserver = coletor
         servidorE2E.clientObserver = coletor
         servidorE2E.presenceObserver = coletor
 
@@ -448,24 +407,15 @@ struct AulaCastTestRunner {
             }
             assertTest(handshakeOk, "Handshake WebSocket completa e envia CONNECTED")
 
-            try? await socket.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"studentName\":\"Ana E2E\",\"active\":true}}"))
+            // Uma página aberta com a versão antiga ainda pode mandar RAISE_HAND: o
+            // servidor ignora a mensagem sem derrubar o aluno.
+            try? await socket.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"active\":true}}"))
             try? await Task.sleep(nanoseconds: 400_000_000)
 
             assertTest(coletor.conectados.count == 1, "Servidor registrou o aluno na conexão")
-            assertTest(coletor.maos.count == 1, "Mão levantada trafegou pelo WebSocket real")
-            assertTest(coletor.maos.first?.levantada == true, "Estado recebido é 'mão levantada'")
-            // O nome da mão sai do servidor, não do campo que o navegador manda: aceitar esse
-            // campo deixava levantar a mão (ou renomear-se) sem passar pela validação.
-            assertTest(
-                coletor.maos.first?.nome.hasPrefix("Aluno-") == true,
-                "Nome enviado junto com a mão levantada é ignorado antes da identificação"
-            )
-            assertTest(
-                coletor.maos.first?.id == coletor.conectados.first?.id,
-                "Id da mão levantada é o mesmo da conexão (não um registro novo)"
-            )
 
-            // O servidor pode ter mensagens já na fila (o ACK da mão levantada, por exemplo),
+            // O servidor pode ter mensagens já na fila, então é preciso ler até achar a
+            // esperada em vez de assumir que vem primeiro.
             // então é preciso ler até achar a esperada em vez de assumir que vem primeiro.
             func aguardarMensagem(contendo trecho: String, tentativas: Int = 6) async -> Bool {
                 for _ in 0..<tentativas {
@@ -481,16 +431,12 @@ struct AulaCastTestRunner {
             try? await Task.sleep(nanoseconds: 300_000_000)
 
             assertTest(identificacaoAceita, "Servidor aceita a identificação do aluno pelo nome")
+            assertTest(
+                coletor.identificacoes.first?.id == coletor.conectados.first?.id,
+                "Mensagem antiga de mão levantada não derrubou a conexão: a identificação chega pelo mesmo aluno"
+            )
             assertTest(coletor.identificacoes.count == 1, "Identificação chega ao app do professor")
             assertTest(coletor.identificacoes.first?.nome == "Ana Beatriz", "O nome informado chega ao professor")
-
-            try? await socket.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"studentName\":\"Outra Pessoa\",\"active\":true}}"))
-            _ = await aguardarMensagem(contendo: "RAISE_HAND_ACK")
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            assertTest(
-                coletor.maos.last?.nome == "Ana Beatriz",
-                "Mão levantada leva o nome validado, não o que o navegador inventar"
-            )
 
             // Nome comprido demais também é recusado.
             let nomeLongo = String(repeating: "a", count: WebSocketHandlerService.maxNameLength + 1)
@@ -1280,8 +1226,8 @@ struct AulaCastTestRunner {
         // Numa turma real há homônimos — e, antes de se identificarem, todos os alunos se
         // chamam "Aluno-…". A saída de um deles não pode levar junto o colega de mesmo nome.
         let gerenciadorHomonimos = ClientManagerService()
-        let primeiraAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.20", isHandRaised: false)
-        let segundaAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.21", isHandRaised: true)
+        let primeiraAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.20")
+        let segundaAna = ConnectedClient(name: "Ana", ipAddress: "192.168.1.21")
         gerenciadorHomonimos.addOrUpdateClient(primeiraAna)
         gerenciadorHomonimos.addOrUpdateClient(segundaAna)
 
@@ -1293,10 +1239,6 @@ struct AulaCastTestRunner {
         assertTest(
             gerenciadorHomonimos.clients.first?.id == primeiraAna.id,
             "Quem sai é o dono da conexão que caiu, e não o primeiro homônimo da lista"
-        )
-        assertTest(
-            gerenciadorHomonimos.handRaisedCount == 0,
-            "A mão levantada de quem saiu não fica pendurada no contador"
         )
 
         // Um id que não existe (ou um nome no lugar do id) não pode remover ninguém.

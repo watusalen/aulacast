@@ -55,7 +55,6 @@ function montarDomFalso() {
     reconnectAttempt: criarElemento(),
     disconnectedState: criarElemento(),
     pausedOverlay: criarElemento(),
-    handBanner: criarElemento(),
     fullscreenBtn: criarElemento(),
     sidebar: criarElemento(),
     menuToggleBtn: criarElemento(),

@@ -399,23 +399,11 @@ body {
     min-height: 44px;
   }
 
-  .controls {
-    bottom: max(14px, env(safe-area-inset-bottom));
-  }
-
   .fs-btn {
     right: 12px;
     bottom: max(14px, env(safe-area-inset-bottom));
     width: 44px;
     height: 44px;
-  }
-
-  .hand-banner {
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    font-size: 12px;
-    padding: 7px 11px;
   }
 
   .reconnect-title,
@@ -462,21 +450,15 @@ body {
     margin-bottom: 10px;
   }
 
-  .controls {
-    bottom: 10px;
-  }
-
   .fs-btn {
     bottom: 10px;
   }
 }
 
 /* Toque em vez de mouse.
-   Os controles do vídeo ficam apagados e só acendem no `:hover` — gesto que não
-   existe em tela de toque. Sem isto, no celular eles vivem meio invisíveis e o
-   aluno não acha o botão de levantar a mão nem o de tela cheia. */
+   O botão de tela cheia fica apagado e só acende no `:hover` — gesto que não
+   existe em tela de toque. Sem isto, no celular ele vive meio invisível. */
 @media (hover: none) {
-  .controls,
   .fs-btn {
     opacity: 1;
   }
@@ -679,60 +661,6 @@ body {
   color: #999;
 }
 
-/* Banner de mao levantada */
-.hand-banner {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 13px;
-  border-radius: 999px;
-  background: rgba(220,160,0,.16);
-  border: 1px solid rgba(201,165,0,.5);
-  font-size: 13px;
-  font-weight: 600;
-  color: #e8c53a;
-}
-
-.hand-banner .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #c9a500;
-}
-
-
-
-
-
-.controls {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 12px;
-  background: rgba(18,18,20,.82);
-  border: 1px solid rgba(255,255,255,.1);
-  box-shadow: 0 8px 28px rgba(0,0,0,.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  opacity: .55;
-  transition: opacity .18s ease;
-  z-index: 5;
-}
-
-/* Some de vista durante a aula e reaparece ao aproximar o mouse ou navegar por teclado,
-   para não tampar o conteúdo que o professor está explicando. */
-.video-wrap:hover .controls,
-.controls:focus-within {
-  opacity: 1;
-}
 
 /* Botoes */
 .btn {
@@ -769,30 +697,6 @@ body {
 
 .btn-send:hover {
   background: #24344f;
-}
-
-.btn-hand {
-  background: #1f1f1f;
-  border-color: #3a3a3a;
-}
-
-.hand-dot {
-  display: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #c9a500;
-}
-
-.btn-hand.raised {
-  background: rgba(220,160,0,.18);
-  border-color: #c9a500;
-  color: #e8c53a;
-  font-weight: 700;
-}
-
-.btn-hand.raised .hand-dot {
-  display: inline-block;
 }
 
 /* Botão de tela cheia no canto inferior direito do vídeo (padrão YouTube). */
@@ -862,10 +766,6 @@ body {
   color: #e8e8e8;
   border-bottom: 1px solid #2a2a2a;
 }
-
-
-
-
 
 
 /* Paineis */
@@ -994,12 +894,5 @@ body {
 .btn-send:disabled:hover {
   background: #1e2c44;
 }
-
-
-
-
-
-
-
 
 

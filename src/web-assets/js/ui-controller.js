@@ -12,7 +12,6 @@ export class UIController {
     this.reconnectAttemptText = document.getElementById('reconnectAttempt');
     this.disconnectedState = document.getElementById('disconnectedState');
     this.pausedOverlay = document.getElementById('pausedOverlay');
-    this.handBanner = document.getElementById('handBanner');
     this.fullscreenBtn = document.getElementById('fullscreenBtn');
     this.sidebar = document.getElementById('sidebar');
     this.menuToggleBtn = document.getElementById('menuToggleBtn');
@@ -151,10 +150,6 @@ export class UIController {
       alvo.textContent = name;
       alvo.hidden = false;
     }
-  }
-
-  setHandRaised(isRaised) {
-    this.handBanner.hidden = !isRaised;
   }
 
   toggleSidebar() {

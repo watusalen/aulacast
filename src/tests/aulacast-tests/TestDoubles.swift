@@ -4,7 +4,7 @@ import AulaCastCore
 
 /// Dublês mínimos para montar um MainViewModel sem tocar em captura de tela nem em rede.
 /// Servem para testar a ligação entre as camadas — é justamente numa dessas emendas que
-/// o id do aluno se perdia e a mão levantada sumia sem erro nenhum.
+/// o id do aluno se perdia sem erro nenhum.
 
 /// Simula a permissão de Gravação de Tela, que numa máquina real depende de um clique
 /// do usuário nos Ajustes do Sistema e não pode ser exercitada por teste automatizado.
@@ -73,7 +73,6 @@ final class FakeServer: NetworkServerProtocol {
     var isChatEnabled: Bool = true
 
     weak var chatObserver: ChatObserverProtocol?
-    weak var handRaiseObserver: HandRaiseObserverProtocol?
     weak var clientObserver: ClientObserverProtocol?
     weak var presenceObserver: StudentPresenceObserverProtocol?
     var onFailure: ((String) -> Void)?

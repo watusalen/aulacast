@@ -8,11 +8,8 @@ import { PresenceReporter } from './presence-reporter.js';
 export class AulaCastApp {
   constructor() {
     this.ui = new UIController();
-    this.isHandRaised = false;
     this.identidade = null;
 
-    this.raiseHandBtn = document.getElementById('raiseHandBtn');
-    this.handText = document.getElementById('handText');
     this.retryConnectionBtn = document.getElementById('retryConnectionBtn');
 
     this.chatManager = new ChatManager(
@@ -59,17 +56,9 @@ export class AulaCastApp {
     });
     // Reconectar cria uma conexão nova no servidor: é preciso reenviar a presença.
     this.presence.sincronizar();
-
-    // E a mão levantada: para o servidor o aluno reconectado começa de mão abaixada.
-    // Sem isto a página seguia dizendo "O professor foi avisado" com a mão já abaixada
-    // na lista dele, e o próximo clique só a "abaixava" — era preciso clicar duas vezes.
-    if (this.isHandRaised) {
-      this.socket.send({ type: 'RAISE_HAND', payload: { active: true } });
-    }
   }
 
   bindEvents() {
-    this.raiseHandBtn.addEventListener('click', () => this.toggleHandRaise());
     this.retryConnectionBtn.addEventListener('click', () => this.socket.retryNow());
 
     // Minimizar, trocar de aba ou clicar em outro app conta como "não está vendo".
@@ -106,11 +95,6 @@ export class AulaCastApp {
 
       case 'CHAT_MESSAGE':
         this.chatManager.appendMessage(data.payload.sender, data.payload.text, data.payload.isProf);
-        break;
-
-      case 'RAISE_HAND_ACK':
-        this.isHandRaised = data.payload.active;
-        this.updateRaiseHandUI();
         break;
 
       // O professor começou (ou recomeçou) a transmitir com a gente já conectado.
@@ -156,35 +140,6 @@ export class AulaCastApp {
       case 'live':
         this.ui.showStreaming();
         break;
-    }
-  }
-
-  toggleHandRaise() {
-    if (!this.identidade) return;
-    // Sem conexão o pedido não chega ao professor. Mudar a tela mesmo assim dizia ao
-    // aluno "O professor foi avisado" sem ninguém ter sido avisado.
-    if (!this.socket.isConnected()) return;
-    this.isHandRaised = !this.isHandRaised;
-
-    this.socket.send({
-      type: 'RAISE_HAND',
-      payload: { active: this.isHandRaised }
-    });
-
-    this.updateRaiseHandUI();
-  }
-
-  updateRaiseHandUI() {
-    this.ui.setHandRaised(this.isHandRaised);
-
-    if (this.isHandRaised) {
-      this.raiseHandBtn.classList.add('raised');
-      this.raiseHandBtn.setAttribute('aria-pressed', 'true');
-      this.handText.textContent = 'Mão Levantada';
-    } else {
-      this.raiseHandBtn.classList.remove('raised');
-      this.raiseHandBtn.setAttribute('aria-pressed', 'false');
-      this.handText.textContent = 'Levantar a Mão';
     }
   }
 }

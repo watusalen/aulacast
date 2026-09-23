@@ -127,7 +127,6 @@ public final class MainViewModel: ObservableObject {
         self.encoderService.outputReceiver = self
         self.serverService.chatObserver = self
         self.serverService.presenceObserver = self
-        self.serverService.handRaiseObserver = self
         self.serverService.clientObserver = self
         self.serverService.isChatEnabled = self.isChatEnabled
         self.serverService.onFailure = { [weak self] mensagem in
@@ -401,15 +400,6 @@ extension MainViewModel: ChatObserverProtocol {
     public nonisolated func didReceiveChatMessage(_ message: ChatMessage) {
         Task { @MainActor in
             self.chatManager.addMessage(message)
-        }
-    }
-}
-
-// MARK: - HandRaiseObserverProtocol
-extension MainViewModel: HandRaiseObserverProtocol {
-    public nonisolated func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool) {
-        Task { @MainActor in
-            self.clientManager.setHandRaised(clientId: clientId, displayName: displayName, isRaised: isRaised)
         }
     }
 }

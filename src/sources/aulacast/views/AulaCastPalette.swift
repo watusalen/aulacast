@@ -45,7 +45,6 @@ public enum AC {
     public static let stopRed = Color(hex: 0xff453a)
     public static let liveGreen = Color(hex: 0x32d74b)
     public static let offlineRed = Color.dynamic(light: 0xb32b21, dark: 0xff6961)
-    public static let handOrange = Color(hex: 0xff9f0a)
 
     public static let chatBubbleOther = Color.dynamic(light: 0xececf0, dark: 0x3a3a41)
 }

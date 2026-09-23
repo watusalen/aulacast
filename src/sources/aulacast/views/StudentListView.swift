@@ -33,15 +33,6 @@ public struct StudentListView: View {
                 }
 
                 Spacer()
-                if clientManager.handRaisedCount > 0 {
-                    Text("Dúvidas: \(clientManager.handRaisedCount)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(AC.handOrange)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(AC.handOrange.opacity(0.16)))
-                        .overlay(Capsule().stroke(AC.handOrange.opacity(0.4), lineWidth: 1))
-                }
             }
             .padding(14)
             .background(AC.panelBG)
@@ -86,7 +77,7 @@ public struct StudentListView: View {
 
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(client.name)
-                                            .font(.system(size: 15, weight: client.isHandRaised ? .semibold : .regular))
+                                            .font(.system(size: 15))
                                             .foregroundColor(client.isWatching ? AC.textPrimary : AC.textSecondary)
                                             .lineLimit(1)
 
@@ -97,19 +88,9 @@ public struct StudentListView: View {
                                     }
 
                                     Spacer()
-
-                                    // Quem abaixa a mão é o próprio aluno, pelo botão dele.
-                                    // Aqui é só leitura, para o professor saber quem chamou.
-                                    if client.isHandRaised {
-                                        Image(systemName: "hand.raised.fill")
-                                            .font(.system(size: 13))
-                                            .foregroundColor(AC.handOrange)
-                                            .help("Levantou a mão")
-                                    }
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 11)
-                                .background(client.isHandRaised ? AC.handOrange.opacity(0.07) : Color.clear)
 
                                 Divider()
                             }

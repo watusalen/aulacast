@@ -6,7 +6,6 @@ public struct ConnectedClient: Identifiable, Codable, Hashable {
     public var name: String
     public var ipAddress: String
     public var connectedAt: Date
-    public var isHandRaised: Bool
 
     /// A aba do aluno está visível na tela dele? Um aluno pode estar conectado e mesmo assim
     /// não estar vendo a aula — com a janela minimizada ou em outra aba.
@@ -20,7 +19,6 @@ public struct ConnectedClient: Identifiable, Codable, Hashable {
         name: String,
         ipAddress: String,
         connectedAt: Date = Date(),
-        isHandRaised: Bool = false,
         hasIdentified: Bool = false,
         isWatching: Bool = true
     ) {
@@ -28,7 +26,6 @@ public struct ConnectedClient: Identifiable, Codable, Hashable {
         self.name = name
         self.ipAddress = ipAddress
         self.connectedAt = connectedAt
-        self.isHandRaised = isHandRaised
         self.hasIdentified = hasIdentified
         self.isWatching = isWatching
     }

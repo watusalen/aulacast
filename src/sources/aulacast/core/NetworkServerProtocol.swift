@@ -9,7 +9,6 @@ public protocol NetworkServerProtocol: AnyObject {
 
     var chatObserver: ChatObserverProtocol? { get set }
     var presenceObserver: StudentPresenceObserverProtocol? { get set }
-    var handRaiseObserver: HandRaiseObserverProtocol? { get set }
     var clientObserver: ClientObserverProtocol? { get set }
 
     /// Chamado quando o servidor cai depois de `start()` ter voltado sem erro (a porta já

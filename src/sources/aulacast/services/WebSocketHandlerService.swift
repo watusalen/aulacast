@@ -5,7 +5,6 @@ import CryptoKit
 /// Servico responsavel pela negociacao (Handshake RFC 6455) e transmissao bidirecional de mensagens WebSocket.
 public final class WebSocketHandlerService {
     public weak var chatObserver: ChatObserverProtocol?
-    public weak var handRaiseObserver: HandRaiseObserverProtocol?
     public weak var clientObserver: ClientObserverProtocol?
     public weak var presenceObserver: StudentPresenceObserverProtocol?
     public var isChatEnabled: Bool {
@@ -19,7 +18,7 @@ public final class WebSocketHandlerService {
     private var decoders: [ObjectIdentifier: WebSocketFrameDecoder] = [:]
     /// Nome validado de cada aluno, pelo id da conexão.
     ///
-    /// O remetente do chat e o nome da mão levantada saem daqui, e não do que o navegador
+    /// O remetente do chat sai daqui, e não do que o navegador
     /// manda em cada mensagem: antes um aluno podia escrever ao professor assinando como
     /// um colega (ou como "Professor") só trocando o campo `sender`.
     private var nomes: [String: String] = [:]
@@ -33,8 +32,8 @@ public final class WebSocketHandlerService {
     /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
     ///
     /// Um notebook que dorme ou sai do Wi-Fi não manda FIN: sem prazo, a conexão ficava
-    /// aberta para sempre e o aluno virava um fantasma na lista (às vezes com a mão
-    /// levantada, inflando o contador de dúvidas) ao lado da entrada nova dele.
+    /// aberta para sempre e o aluno virava um fantasma na lista, ao lado da entrada nova
+    /// dele.
     private var ultimaAtividade: [ObjectIdentifier: Date] = [:]
     private var alunoDaConexao: [ObjectIdentifier: String] = [:]
     private var vigia: DispatchSourceTimer?
@@ -42,7 +41,7 @@ public final class WebSocketHandlerService {
     /// O navegador manda PING a cada 10 s; três batidas perdidas são conexão morta.
     public static let tempoMaximoOcioso: TimeInterval = 30
 
-    /// Teto de payload por frame. O cliente só envia JSON curto (chat, mão levantada);
+    /// Teto de payload por frame. O cliente só envia JSON curto (chat, identificação);
     /// qualquer coisa maior é erro ou abuso e não deve virar alocação gigante.
     private static let maxPayloadBytes = 1 << 20 // 1 MB
 
@@ -118,7 +117,7 @@ public final class WebSocketHandlerService {
             clientIp = "\(host)"
         }
 
-        let connectedClient = ConnectedClient(name: "Aluno-\(String(clientIp.suffix(4)))", ipAddress: clientIp, isHandRaised: false)
+        let connectedClient = ConnectedClient(name: "Aluno-\(String(clientIp.suffix(4)))", ipAddress: clientIp)
         lock.lock()
         alunoDaConexao[id] = connectedClient.id
         lock.unlock()
@@ -401,19 +400,6 @@ public final class WebSocketHandlerService {
         let payloadDict = json["payload"] as? [String: Any]
 
         switch type {
-        case "RAISE_HAND":
-            let active = (payloadDict?["active"] as? Bool) ?? true
-            // O nome vem do IDENTIFY já validado, não do campo `studentName` da mensagem:
-            // aceitá-lo pulava a validação e deixava levantar a mão em nome de um colega.
-            let name = nomeIdentificado(clientId, senão: fallbackName)
-
-            // Identifica pela conexão: trocar de nome atualiza o registro existente
-            // em vez de criar um segundo aluno fantasma na lista do professor.
-            handRaiseObserver?.didToggleHandRaise(clientId: clientId, displayName: name, isRaised: active)
-
-            let ackJSON = "{\"type\":\"RAISE_HAND_ACK\",\"payload\":{\"active\":\(active)}}"
-            sendTextFrame(connection: connection, text: ackJSON)
-
         case "CHAT_SEND":
             guard isChatEnabled else { return }
             let text = (payloadDict?["text"] as? String) ?? ""

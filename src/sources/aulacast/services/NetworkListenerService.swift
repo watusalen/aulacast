@@ -30,9 +30,6 @@ public final class NetworkListenerService: NetworkServerProtocol {
     public weak var presenceObserver: StudentPresenceObserverProtocol? {
         didSet { webSocketHandler.presenceObserver = presenceObserver }
     }
-    public weak var handRaiseObserver: HandRaiseObserverProtocol? {
-        didSet { webSocketHandler.handRaiseObserver = handRaiseObserver }
-    }
     public weak var clientObserver: ClientObserverProtocol? {
         didSet { webSocketHandler.clientObserver = clientObserver }
     }
