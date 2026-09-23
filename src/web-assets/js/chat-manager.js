@@ -1,5 +1,3 @@
-import { formatarTamanho } from './files-list.js';
-
 export class ChatManager {
   /** O nome vem da identificação feita na entrada, não de um campo separado no chat. */
   constructor(onSendMessage, getStudentName) {
@@ -63,61 +61,35 @@ export class ChatManager {
   }
 
   /**
-   * Cartão no chat avisando dos arquivos que o professor acabou de compartilhar.
+   * Linha de sistema no chat avisando que chegou arquivo: só informa, não baixa.
    *
-   * Antes era uma frase em itálico com os nomes separados por vírgula: numa lista com
-   * nome comprido a quebra caía no meio dos nomes ("Lista de Exercícios / 3.pdf") e não
-   * dava para ver onde um arquivo terminava e o outro começava. Agora é um arquivo por
-   * linha, já como link de download, e o nome longo termina em reticências.
+   * O download fica num lugar só, a lista de Arquivos (onde o arquivo novo ganha a
+   * etiqueta "Novo"). Um cartão com links aqui criava um segundo caminho para a mesma
+   * coisa. Como mensagem de sistema, segue o padrão dos chats: uma linha, centralizada,
+   * em tom neutro, diferente das mensagens de verdade.
    */
   mostrarArquivosNovos(arquivos) {
     const lista = Array.isArray(arquivos) ? arquivos : [];
     if (lista.length === 0) return;
 
-    const cartao = document.createElement('div');
-    cartao.className = 'chat-notice';
+    const linha = document.createElement('div');
+    linha.className = 'chat-event';
+    linha.setAttribute('role', 'status');
 
-    // Título curto e hora à parte, alinhada à direita: juntos numa frase só, a hora
-    // caía sozinha na linha de baixo quando o painel é estreito.
-    const titulo = document.createElement('div');
-    titulo.className = 'chat-notice-title';
     const texto = document.createElement('span');
-    texto.className = 'chat-notice-text';
-    texto.textContent = lista.length === 1 ? 'Novo arquivo' : `Novos arquivos (${lista.length})`;
+    texto.className = 'chat-event-text';
+    texto.textContent = lista.length === 1
+      ? `Novo arquivo: ${lista[0].name}`
+      : `${lista.length} arquivos novos`;
+    if (lista.length === 1) texto.setAttribute('title', lista[0].name);
+
     const hora = document.createElement('span');
-    hora.className = 'chat-notice-time';
+    hora.className = 'chat-event-time';
     hora.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    titulo.appendChild(texto);
-    titulo.appendChild(hora);
-    cartao.appendChild(titulo);
 
-    const itens = document.createElement('ul');
-    itens.className = 'chat-notice-files';
-    for (const arquivo of lista) {
-      const item = document.createElement('li');
-      const link = document.createElement('a');
-      link.className = 'chat-notice-file';
-      link.href = `/arquivos/${encodeURIComponent(arquivo.id)}`;
-      link.setAttribute('download', arquivo.name);
-      // O nome inteiro aparece ao passar o mouse, já que na linha ele pode ser cortado.
-      link.setAttribute('title', arquivo.name);
-
-      const nome = document.createElement('span');
-      nome.className = 'chat-notice-name';
-      nome.textContent = arquivo.name;
-
-      const tamanho = document.createElement('span');
-      tamanho.className = 'chat-notice-size';
-      tamanho.textContent = formatarTamanho(arquivo.size);
-
-      link.appendChild(nome);
-      link.appendChild(tamanho);
-      item.appendChild(link);
-      itens.appendChild(item);
-    }
-    cartao.appendChild(itens);
-
-    this.chatMessages.appendChild(cartao);
+    linha.appendChild(texto);
+    linha.appendChild(hora);
+    this.chatMessages.appendChild(linha);
     this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
   }
 

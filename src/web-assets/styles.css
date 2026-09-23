@@ -342,89 +342,58 @@ body {
   color: #f0b4b0;
 }
 
-/* Cartão de arquivos novos: um arquivo por linha, já como link de download. */
-.chat-notice {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 10px 8px 12px;
-  border-radius: 8px;
-  background: #161c28;
-  border: 1px solid #2a3550;
-}
-
-.chat-notice-title {
+/* Mensagem de sistema (chegou arquivo): uma linha centralizada, neutra, sem nada
+   para clicar — diferente das mensagens de verdade, como nos chats em geral. */
+.chat-event {
+  align-self: center;
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #222225;
+  color: #9a9aa2;
   font-size: 12px;
-  font-weight: 600;
-  color: #a8c6f5;
+  cursor: default;
+  user-select: none;
 }
 
-.chat-notice-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-notice-time {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-weight: 500;
-  color: #7f8aa0;
-}
-
-.chat-notice-title::before {
+.chat-event::before {
   content: "";
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   background: currentColor;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-.chat-notice-files {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.chat-notice-file {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 6px;
-  margin: 0 -6px;
-  border-radius: 5px;
-  color: #e2e2e4;
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.chat-notice-file:hover,
-.chat-notice-file:focus-visible {
-  background: #1f2838;
-}
-
-.chat-notice-name {
+.chat-event-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chat-notice-size {
+.chat-event-time {
   flex-shrink: 0;
-  font-size: 12px;
-  color: #8a8a90;
+  color: #6f6f76;
+}
+
+/* Etiqueta "Novo" no arquivo que chegou durante a aula, até o aluno baixá-lo.
+   Tom esmaecido (fundo a ~18%): é informação, não alarme. */
+.file-new {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(76, 141, 255, .18);
+  color: #a8c6f5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 1100px) {

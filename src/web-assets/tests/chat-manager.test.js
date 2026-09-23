@@ -205,38 +205,39 @@ test('Chat começa liberado até o servidor dizer o contrário', () => {
   assert.strictEqual(enviadas.length, 1);
 });
 
-test('Arquivo novo vira um cartão com título e o arquivo como link', () => {
+test('Arquivo novo vira uma linha de sistema, sem nada para clicar', () => {
   const chat = new ChatManager(() => true, () => 'Ana');
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([{ id: 'x1', name: 'Lista 3.pdf', size: 184000 }]);
 
-  const cartao = elementos.chatMessages.filhos[antes];
-  assert.strictEqual(cartao.className, 'chat-notice');
-  assert.strictEqual(cartao.filhos[0].filhos[0].textContent, 'Novo arquivo');
-  assert.match(cartao.filhos[0].filhos[1].textContent, /^\d{2}:\d{2}$/, 'a hora fica à parte, alinhada à direita');
-  const link = cartao.filhos[1].filhos[0].filhos[0];
-  assert.strictEqual(link.href, '/arquivos/x1');
-  assert.strictEqual(link.filhos[0].textContent, 'Lista 3.pdf');
-  assert.strictEqual(link.filhos[1].textContent, '184 KB');
+  const linha = elementos.chatMessages.filhos[antes];
+  assert.strictEqual(linha.className, 'chat-event');
+  assert.strictEqual(linha.attrs.role, 'status');
+  assert.strictEqual(linha.filhos[0].textContent, 'Novo arquivo: Lista 3.pdf');
+  assert.match(linha.filhos[1].textContent, /^\d{2}:\d{2}$/);
+  const temLink = (el) => el.href || (el.filhos || []).some(temLink);
+  assert.ok(!temLink(linha), 'o download fica só na lista de Arquivos');
 });
 
-test('Vários arquivos: um por linha, com o nome inteiro ao passar o mouse', () => {
+test('Vários arquivos: a linha diz quantos, sem listar nomes', () => {
   const chat = new ChatManager(() => true, () => 'Ana');
-  const longo = 'Apostila completa de Estruturas de Dados – Capítulo 4 (versão revisada).pdf';
   chat.mostrarArquivosNovos([
     { id: 'a', name: 'a.zip', size: 10 },
-    { id: 'b', name: longo, size: 1200000 },
-    { id: 'c', name: '<b>c</b>.txt', size: 5 }
+    { id: 'b', name: '<b>c</b>.txt', size: 5 },
+    { id: 'c', name: 'c.pdf', size: 5 }
   ]);
-  const cartao = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
-  assert.strictEqual(cartao.filhos[0].filhos[0].textContent, 'Novos arquivos (3)');
-  const linhas = cartao.filhos[1].filhos;
-  assert.strictEqual(linhas.length, 3, 'um item por arquivo, sem juntar nomes por vírgula');
-  assert.strictEqual(linhas[1].filhos[0].attrs.title, longo);
-  assert.strictEqual(linhas[2].filhos[0].filhos[0].textContent, '<b>c</b>.txt', 'nome vai como texto, não como HTML');
+  const linha = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
+  assert.strictEqual(linha.filhos[0].textContent, '3 arquivos novos');
 });
 
-test('Lista vazia não cria cartão', () => {
+test('Nome com HTML aparece como texto na linha de sistema', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  chat.mostrarArquivosNovos([{ id: 'h', name: '<img src=x onerror=alert(1)>', size: 1 }]);
+  const linha = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
+  assert.strictEqual(linha.filhos[0].textContent, 'Novo arquivo: <img src=x onerror=alert(1)>');
+});
+
+test('Lista vazia não cria aviso', () => {
   const chat = new ChatManager(() => true, () => 'Ana');
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([]);

@@ -29,10 +29,21 @@ export class FilesList {
     this.list = document.getElementById('filesList');
     this.onNovidade = onNovidade || (() => {});
     this.idsConhecidos = null;
+    /** Arquivos que chegaram durante a aula e o aluno ainda não baixou. */
+    this.naoBaixados = new Set();
   }
 
   render(arquivos) {
     const lista = Array.isArray(arquivos) ? arquivos : [];
+
+    // Só é novidade o que chega com a aula em andamento: a primeira lista (ao entrar
+    // ou reconectar) não é novidade para ninguém.
+    const ids = new Set(lista.map((a) => a.id));
+    let novos = [];
+    if (this.idsConhecidos) {
+      novos = lista.filter((a) => !this.idsConhecidos.has(a.id));
+      for (const a of novos) this.naoBaixados.add(a.id);
+    }
     this.section.hidden = lista.length === 0;
 
     while (this.list.firstChild) this.list.removeChild(this.list.firstChild);
@@ -45,6 +56,7 @@ export class FilesList {
       link.className = 'file-link';
       link.href = `/arquivos/${encodeURIComponent(arquivo.id)}`;
       link.setAttribute('download', arquivo.name);
+      link.addEventListener('click', () => this.marcarComoBaixado(arquivo.id, item));
 
       const nome = document.createElement('span');
       nome.className = 'file-name';
@@ -55,18 +67,28 @@ export class FilesList {
       tamanho.textContent = formatarTamanho(arquivo.size);
 
       link.appendChild(nome);
+      if (this.naoBaixados.has(arquivo.id)) {
+        const etiqueta = document.createElement('span');
+        etiqueta.className = 'file-new';
+        etiqueta.textContent = 'Novo';
+        link.appendChild(etiqueta);
+      }
       link.appendChild(tamanho);
       item.appendChild(link);
       this.list.appendChild(item);
     }
 
-    // Avisa só do que é novo de verdade: a primeira lista (ao entrar na aula ou
-    // reconectar) não é novidade para ninguém.
-    const ids = new Set(lista.map((a) => a.id));
-    if (this.idsConhecidos) {
-      const novos = lista.filter((a) => !this.idsConhecidos.has(a.id));
-      if (novos.length > 0) this.onNovidade(novos);
-    }
+    if (novos.length > 0) this.onNovidade(novos);
     this.idsConhecidos = ids;
+    for (const id of this.naoBaixados) {
+      if (!ids.has(id)) this.naoBaixados.delete(id);
+    }
+  }
+
+  /** A etiqueta "Novo" sai quando o aluno baixa o arquivo: cumpriu o papel dela. */
+  marcarComoBaixado(id, item) {
+    this.naoBaixados.delete(id);
+    const etiqueta = item.querySelector ? item.querySelector('.file-new') : null;
+    if (etiqueta && etiqueta.parentNode) etiqueta.parentNode.removeChild(etiqueta);
   }
 }
