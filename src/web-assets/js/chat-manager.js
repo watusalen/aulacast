@@ -135,12 +135,21 @@ export class ChatManager {
   }
 
   /**
+   * Verdadeiro para o eco da própria mensagem do aluno (nunca para o professor).
+   * Exposto à parte porque `main.js` precisa do mesmo critério para decidir se marca
+   * novidade no botão do chat: mensagem de colega avisa, o próprio eco não.
+   */
+  isOwnMessage(author, isProf = false) {
+    return !isProf && (author === this.getStudentName());
+  }
+
+  /**
    * Mensagem no desenho do chat do Meet: sem balão, com nome (ou "Você"), hora e texto.
    * Só nas mensagens do professor os links viram clicáveis: o eco do que o próprio aluno
    * escreveu fica como ele digitou.
    */
   appendMessage(author, text, isProf = false) {
-    const isOwn = !isProf && (author === this.getStudentName());
+    const isOwn = this.isOwnMessage(author, isProf);
     const mensagem = document.createElement('div');
     mensagem.className = `msg${isProf ? ' msg-prof' : ''}${isOwn ? ' msg-own' : ''}`;
 

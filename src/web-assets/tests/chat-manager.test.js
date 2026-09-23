@@ -108,6 +108,15 @@ test('Mensagem do professor nunca é marcada como do aluno', () => {
   assert.strictEqual(cabecaDaUltima().autor, 'Ana Beatriz');
 });
 
+test('isOwnMessage segue o mesmo critério do "Você" em appendMessage', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
+
+  assert.strictEqual(chat.isOwnMessage('Ana Beatriz', false), true);
+  assert.strictEqual(chat.isOwnMessage('Carlos Eduardo', false), false, 'mensagem de colega não é própria');
+  // O nome coincidir não basta: sendo do professor, precedência é dele.
+  assert.strictEqual(chat.isOwnMessage('Ana Beatriz', true), false);
+});
+
 test('O texto da mensagem é preservado', () => {
   const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
   const texto = 'Qual a diferença entre let e var?';

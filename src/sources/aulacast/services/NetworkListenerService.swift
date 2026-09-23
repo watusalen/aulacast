@@ -23,6 +23,10 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         set { webSocketHandler.isChatEnabled = newValue }
     }
 
+    public var isStudentChatVisibleToClass: Bool {
+        get { webSocketHandler.isStudentChatVisibleToClass }
+        set { webSocketHandler.isStudentChatVisibleToClass = newValue }
+    }
 
     public weak var chatObserver: ChatObserverProtocol? {
         didSet { webSocketHandler.chatObserver = chatObserver }

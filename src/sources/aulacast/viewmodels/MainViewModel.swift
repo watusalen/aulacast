@@ -102,6 +102,16 @@ public final class MainViewModel: ObservableObject {
         }
     }
 
+    /// Desligado por padrão: mensagem de aluno continua só com o professor. Diferente de
+    /// `isChatEnabled`, não há nada visual para mudar no cliente do aluno — o campo de
+    /// escrever continua igual dos dois lados, só muda quem recebe depois. Por isso, sem
+    /// `broadcastControlMessage`: nenhum cliente web reage a esse aviso hoje.
+    @Published public var isStudentChatVisibleToClass: Bool = false {
+        didSet {
+            serverService.isStudentChatVisibleToClass = isStudentChatVisibleToClass
+        }
+    }
+
     public let captureService: any ScreenCaptureProtocol
     public let advertiserService: ServiceAdvertiserProtocol
 
@@ -181,6 +191,7 @@ public final class MainViewModel: ObservableObject {
         self.serverService.clientObserver = self
         self.serverService.handRaiseObserver = self
         self.serverService.isChatEnabled = self.isChatEnabled
+        self.serverService.isStudentChatVisibleToClass = self.isStudentChatVisibleToClass
         self.serverService.onFailure = { [weak self] mensagem in
             Task { @MainActor in self?.serverDidFail(mensagem) }
         }
