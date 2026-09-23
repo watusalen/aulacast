@@ -45,7 +45,20 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             Task { await applyConfigurationChange() }
         }
     }
-    
+
+    /// Apps que o professor marcou para nunca aparecer quando o monitor inteiro é a fonte.
+    ///
+    /// Só vale para a captura de monitor: uma janela específica como fonte já mostra só ela,
+    /// então não há nada para esconder dentro dela. Some da transmissão mesmo em tela cheia,
+    /// igual ao que já acontece com a própria janela do AulaCast — ver `filtroDeMonitor`.
+    @Published public var hiddenBundleIDs: Set<String> = [] {
+        didSet {
+            guard isRecording, oldValue != hiddenBundleIDs, selectedSource?.type == .display else { return }
+            trocaDeFonte?.cancel()
+            trocaDeFonte = Task { @MainActor in await self.applyContentFilterChange() }
+        }
+    }
+
     public weak var frameReceiver: FrameReceiverProtocol?
     public weak var lifecycleObserver: CaptureLifecycleObserverProtocol?
     
@@ -129,11 +142,14 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         return nil
     }
 
-    /// Monitor inteiro, com a janela do próprio AulaCast fora do quadro.
+    /// Monitor inteiro, com a janela do próprio AulaCast e os apps marcados como ocultos
+    /// fora do quadro.
     ///
     /// Isto não é cosmético: o painel do professor mostra a conversa reservada com cada
     /// aluno e a lista da turma. Se ele entrar na transmissão, a sala inteira vê — além do
-    /// espelho infinito da prévia exibindo a si mesma.
+    /// espelho infinito da prévia exibindo a si mesma. Os apps de `hiddenBundleIDs` seguem
+    /// a mesma lógica por escolha do professor (Mensagens, um gerenciador de senhas etc.):
+    /// somem mesmo em tela cheia, porque a exclusão é por aplicativo, não por janela.
     ///
     /// Antes a exclusão falhava **em silêncio**: a consulta ao sistema era feita com `try?`
     /// e, quando não respondia, devolvia lista vazia — nada era excluído e a transmissão
@@ -142,6 +158,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     /// turma ver o que não devia.
     private func filtroDeMonitor(_ display: SCDisplay) async -> SCContentFilter? {
         let processoAtual = ProcessInfo.processInfo.processIdentifier
+        let escondidos = hiddenBundleIDs
 
         guard let conteudo = await conteudoCompartilhavel() else {
             await relatarErro(
@@ -151,23 +168,30 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             return nil
         }
 
-        let nossosAplicativos = conteudo.applications.filter { $0.processID == processoAtual }
-        if !nossosAplicativos.isEmpty {
+        func éParaEsconder(_ bundleID: String?) -> Bool {
+            guard let bundleID, !bundleID.isEmpty else { return false }
+            return escondidos.contains(bundleID)
+        }
+
+        let aplicativosAExcluir = conteudo.applications.filter {
+            $0.processID == processoAtual || éParaEsconder($0.bundleIdentifier)
+        }
+        if !aplicativosAExcluir.isEmpty {
             return SCContentFilter(
                 display: display,
-                excludingApplications: nossosAplicativos,
+                excludingApplications: aplicativosAExcluir,
                 exceptingWindows: []
             )
         }
 
-        // O AulaCast pode não constar na lista de aplicativos compartilháveis (acontece
-        // quando ele está minimizado ou a janela ainda não foi registrada). Excluir pelas
-        // janelas chega ao mesmo resultado sem depender daquela lista — e uma lista vazia
-        // aqui é legítima: sem janela na tela, não há o que esconder.
-        let nossasJanelas = conteudo.windows.filter {
-            $0.owningApplication?.processID == processoAtual
+        // Nenhum dos dois consta na lista de aplicativos compartilháveis (acontece com o
+        // AulaCast minimizado, ou um app oculto que não está rodando). Excluir pelas janelas
+        // chega ao mesmo resultado sem depender daquela lista — e uma lista vazia aqui é
+        // legítima: sem janela na tela, não há o que esconder.
+        let janelasAExcluir = conteudo.windows.filter {
+            $0.owningApplication?.processID == processoAtual || éParaEsconder($0.owningApplication?.bundleIdentifier)
         }
-        return SCContentFilter(display: display, excludingWindows: nossasJanelas)
+        return SCContentFilter(display: display, excludingWindows: janelasAExcluir)
     }
 
     /// Duas tentativas: logo depois de abrir o app a primeira consulta às vezes falha.

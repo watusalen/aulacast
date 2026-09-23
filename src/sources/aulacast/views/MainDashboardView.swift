@@ -18,6 +18,7 @@ private struct ImagemCapturada: @unchecked Sendable {
 public struct MainDashboardView: View {
     @EnvironmentObject private var viewModel: MainViewModel
     @State private var mostrarQualidade = false
+    @State private var mostrarPrivacidade = false
 
     /// Painel lateral aberto ou fechado, e qual área, lembrados entre aberturas.
     /// Na primeira abertura mostra "Apresentar": é o primeiro passo de qualquer aula.
@@ -327,6 +328,15 @@ public struct MainDashboardView: View {
             // vale na hora, então não há nada a confirmar.
             .popover(isPresented: $mostrarQualidade, arrowEdge: .top) {
                 QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
+            }
+
+            M3BotaoDeIcone(
+                icone: "visibility_off",
+                selecionado: mostrarPrivacidade,
+                ajuda: "Ocultar apps da transmissão"
+            ) { mostrarPrivacidade.toggle() }
+            .popover(isPresented: $mostrarPrivacidade, arrowEdge: .top) {
+                PrivacySettingsView(captureService: resolvedCaptureService)
             }
 
             // A captura caiu, mas a turma segue conectada: além de tentar de novo, o
