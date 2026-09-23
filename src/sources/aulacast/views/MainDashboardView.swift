@@ -48,7 +48,10 @@ public struct MainDashboardView: View {
             // Painel Direito: Alunos e Chat (SRP e ISP)
             VSplitView {
                 StudentListView(clientManager: viewModel.clientManager, serverURLString: viewModel.serverURLString)
-                    .frame(minHeight: 220)
+                    .frame(minHeight: 180)
+
+                SharedFilesPanelView(viewModel: viewModel)
+                    .frame(minHeight: 150)
 
                 ChatPanelView(viewModel: viewModel)
                     .frame(minHeight: 220)

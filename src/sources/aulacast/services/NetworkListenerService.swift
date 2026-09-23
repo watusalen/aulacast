@@ -46,6 +46,7 @@ public final class NetworkListenerService: NetworkServerProtocol {
     private let staticFileProvider: StaticFileProviderService
     private let streamerService: MJPEGStreamerService
     private let webSocketHandler: WebSocketHandlerService
+    private let downloads = FileDownloadService()
 
     public init(port: UInt16 = 8080, webAssetsPath: URL) {
         self.port = port
@@ -126,6 +127,11 @@ public final class NetworkListenerService: NetworkServerProtocol {
         webSocketHandler.broadcastControlMessage(type: type, payload: payload)
     }
 
+    public func updateSharedFiles(_ files: [SharedFile]) {
+        downloads.atualizar(files)
+        webSocketHandler.anunciarArquivos(files)
+    }
+
     private func handleConnection(_ connection: NWConnection) {
         let id = ObjectIdentifier(connection)
 
@@ -200,6 +206,8 @@ public final class NetworkListenerService: NetworkServerProtocol {
                 }
             } else if metodo == "GET" && caminho == "/stream" {
                 self.streamerService.serveStream(connection: connection)
+            } else if metodo == "GET" && caminho.hasPrefix(FileDownloadService.prefixoDaRota) {
+                self.downloads.serve(connection: connection, caminho: caminho)
             } else {
                 self.staticFileProvider.serve(connection: connection, request: req)
             }

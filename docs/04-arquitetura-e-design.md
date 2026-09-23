@@ -53,7 +53,7 @@ flowchart TB
   - `GET /`: Entrega o arquivo `index.html` (Player do Aluno).
   - `GET /styles.css` e `GET /js/*`: Recursos estáticos do cliente.
   - `GET /stream`: Fluxo de vídeo em `multipart/x-mixed-replace` (MJPEG), consumido por uma tag `<img>`.
-- **Rota WebSocket (`/ws`):** Gerencia conexões ativas e a troca de mensagens JSON (identificação, presença, chat e dúvidas).
+- **Rota WebSocket (`/ws`):** Gerencia conexões ativas e a troca de mensagens JSON (identificação, presença, chat e lista de arquivos).
 
 > **O vídeo não trafega pelo WebSocket.** São duas conexões independentes: MJPEG sobre HTTP para a imagem e WebSocket para as mensagens. Por isso o cliente vigia as duas separadamente — uma pode cair enquanto a outra segue viva.
 
@@ -90,7 +90,7 @@ quando ela está pausada ou encerrada. `stream` é `live`, `paused` ou `ended` (
 Enviada pelo aluno na entrada. O servidor **revalida** o nome (de 2 a 40 caracteres) e
 responde `IDENTIFY_ACCEPTED` ou `IDENTIFY_REJECTED` (com `payload.reason`). Só depois disso o
 aluno aparece na lista do professor. O nome aceito fica guardado por conexão e é ele que
-assina o chat e a mão levantada.
+assina o chat.
 ```json
 {
   "type": "IDENTIFY",
@@ -111,15 +111,22 @@ Enviada pelo aluno quando a aula deixa de estar (ou volta a estar) à vista.
 }
 ```
 
-#### 3.4. Notificação de "Levantar a Mão" (`RAISE_HAND`)
-Enviada pelo aluno para pedir ajuda, e reenviada ao reconectar se a mão continuar levantada.
-O servidor identifica o aluno pela **conexão** e usa o nome aceito no `IDENTIFY`; um
-`studentName` na mensagem é ignorado. Responde `RAISE_HAND_ACK` com o mesmo `active`.
+#### 3.4. Arquivos Compartilhados (`FILES` e `GET /arquivos/<id>`)
+Enviada pelo servidor a todos quando o professor compartilha ou remove um arquivo; a mesma
+lista vai em `payload.files` do `CONNECTED`. O download é uma requisição HTTP comum na porta
+8080: o servidor só entrega arquivos da lista, pelo `id` sorteado, como
+`application/octet-stream` com `Content-Disposition: attachment` (nome original em UTF-8,
+RFC 6266/5987, e um nome só ASCII de reserva). O arquivo é lido do disco em pedaços de
+256 KB, e o próximo só sai quando o anterior foi entregue — um arquivo grande não vai
+inteiro para a memória. Id desconhecido, arquivo removido ou apagado do disco: 404.
+(`RAISE_HAND`, que ocupava esta seção, foi removido; o servidor ignora a mensagem.)
 ```json
 {
-  "type": "RAISE_HAND",
+  "type": "FILES",
   "payload": {
-    "active": true
+    "files": [
+      { "id": "5E0C…", "name": "Lista 3.pdf", "size": 184320 }
+    ]
   }
 }
 ```
@@ -214,9 +221,11 @@ sequenceDiagram
     Aluno->>Net: PRESENCE (visible: false) ao sair da tela
     Net-->>App: Marca o aluno como "não assistindo"
 
-    Aluno->>Net: RAISE_HAND (active: true)
-    Net->>App: Encaminha notificação de dúvida
-    App-->>Prof: Exibe o ícone de mão levantada e incrementa o contador
+    Prof->>App: Compartilha "Lista 3.pdf"
+    App->>Net: Atualiza a lista de arquivos
+    Net-->>Aluno: FILES (lista nova)
+    Aluno->>Net: GET /arquivos/<id>
+    Net-->>Aluno: Arquivo, em pedaços de 256 KB
 ```
 
 ---

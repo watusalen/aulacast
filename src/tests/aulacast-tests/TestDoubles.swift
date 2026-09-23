@@ -92,6 +92,10 @@ final class FakeServer: NetworkServerProtocol {
     func start() throws { isRunning = true }
     func stop() { isRunning = false }
     func broadcastFrame(_ jpegData: Data) { quadrosEnviados += 1 }
+
+    /// Última lista de arquivos entregue ao servidor.
+    private(set) var arquivosCompartilhados: [SharedFile] = []
+    func updateSharedFiles(_ files: [SharedFile]) { arquivosCompartilhados = files }
     func broadcastChatMessage(_ message: ChatMessage) {}
     func broadcastControlMessage(type: String, payload: [String: String]?) {
         controlMessages.append((type: type, payload: payload))

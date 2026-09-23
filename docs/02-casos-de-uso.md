@@ -4,7 +4,7 @@
 ---
 
 ### Mapeamento de Atores
-- **Professor (Host):** Usuário do aplicativo nativo no macOS responsável por iniciar a transmissão, acompanhar a presença da turma e responder às dúvidas.
+- **Professor (Host):** Usuário do aplicativo nativo no macOS responsável por iniciar a transmissão, acompanhar a presença da turma, compartilhar arquivos e responder às dúvidas.
 - **Aluno (Cliente):** Usuário do cliente Web que se identifica e conecta à sala na rede local para acompanhar a aula e enviar dúvidas.
 - **Sistema (AulaCast Server):** O módulo de backend nativo em Swift rodando no Mac que gerencia a captura de tela, codificação, servidor HTTP/WebSocket e o estado da sala.
 
@@ -51,19 +51,8 @@
 
 ---
 
-### UC-03: Levantar a Mão (Pedir Ajuda)
-- **Ator Principal:** Aluno
-- **Atores Secundários:** Professor, Sistema
-- **Pré-condição:** O aluno está conectado à transmissão (UC-02 ativo).
-- **Fluxo Principal:**
-  1. O aluno clica no botão **"Levantar a Mão"** na interface Web.
-  2. O cliente Web envia uma mensagem WebSocket do tipo `RAISE_HAND` com a identificação do aluno.
-  3. O aplicativo macOS do professor recebe a notificação.
-  4. O sistema incrementa o contador de dúvidas no painel principal.
-  5. A linha do aluno é destacada na lista, com o ícone de mão levantada.
-- **Fluxo Alternativo:**
-  - *FA-01 (Abaixar a Mão):* O aluno clica novamente no botão, cancelando o pedido. O professor é atualizado.
-- **Regra de negócio:** Assim como no Google Meet, **somente o próprio aluno abaixa a própria mão**. O professor apenas observa quem está com a mão levantada; não há ação de "marcar como atendido".
+### ~~UC-03: Levantar a Mão (Pedir Ajuda)~~
+**Removido.** O botão foi retirado a pedido do professor; o aluno pede ajuda pelo chat reservado (UC-04). Uma página antiga que ainda envie `RAISE_HAND` é ignorada pelo servidor, sem derrubar o aluno.
 
 ---
 
@@ -128,3 +117,22 @@
   4. O app do professor atualiza o ícone da linha do aluno: **olho aberto** para quem está acompanhando, **olho cortado** para quem está apenas conectado.
   5. O cabeçalho da lista mostra quantos alunos estão realmente com a transmissão à vista.
 - **Regra de negócio:** "Conectado" e "assistindo" são estados distintos. A contagem de presença efetiva considera apenas quem está com a aula visível.
+
+---
+
+### UC-08: Compartilhar Arquivos com a Turma
+- **Ator Principal:** Professor
+- **Atores Secundários:** Aluno, Sistema
+- **Pré-condição:** O app está aberto; para os alunos baixarem, o servidor precisa estar no ar (UC-01).
+- **Fluxo Principal:**
+  1. O professor clica em **Compartilhar** no painel "Arquivos da Aula" (ou arrasta arquivos para ele) e escolhe um ou mais arquivos, de qualquer tipo.
+  2. O sistema registra cada arquivo com um identificador sorteado e envia a lista nova a todos os alunos conectados (`FILES`).
+  3. A página do aluno mostra "Arquivos do professor" com nome e tamanho; no celular, o botão do menu ganha um ponto e o chat avisa "O professor compartilhou: …".
+  4. O aluno toca no arquivo e o navegador o baixa (`GET /arquivos/<id>`), com o nome original.
+- **Fluxos Alternativos:**
+  - *FA-01 (Parar de compartilhar):* O professor remove o arquivo da lista; ele some da página dos alunos e o link passa a responder 404.
+  - *FA-02 (Aluno chega depois):* A lista vai nas boas-vindas (`CONNECTED`).
+- **Exceções:**
+  - *EX-01 (Pasta):* Pastas não são compartilhadas; o painel pede para compactá-las antes.
+  - *EX-02 (Arquivo apagado ou movido do disco):* O download responde 404, sem afetar a transmissão.
+- **Regra de negócio:** O aluno só alcança os arquivos da lista, pelo identificador; não há como chegar a outro arquivo do Mac pela URL.

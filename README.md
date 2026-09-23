@@ -23,7 +23,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 │         ↓            │ ───────────────► │  (Chrome, Firefox,       │
 │  Codificação JPEG    │                  │   Safari, Edge)          │
 │         ↓            │   WebSocket      │                          │
-│  Servidor local      │ ◄──────────────► │  Chat · Mão levantada    │
+│  Servidor local      │ ◄──────────────► │  Chat · Arquivos         │
 └──────────────────────┘                  └──────────────────────────┘
         Bonjour (_aulacast._tcp) na rede local
 ```
@@ -38,7 +38,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 - Pausar a transmissão sem encerrar a sessão
 - Entrada identificada: o aluno informa o **nome** antes de assistir
 - Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)
-- Levantar a mão — só o próprio aluno abaixa, como no Google Meet
+- Compartilhamento de arquivos de qualquer tipo: o professor escolhe (ou arrasta) e a turma baixa pela página da aula, sem internet
 - Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros)
 - Reconexão automática do vídeo e do chat quando a rede oscila
 

@@ -48,7 +48,7 @@ const elementos = {};
 const nomes = [
   'connectionStatus', 'videoStream', 'placeholder', 'reconnectOverlay', 'reconnectAttempt',
   'disconnectedState', 'pausedOverlay', 'fullscreenBtn', 'sidebar',
-  'menuToggleBtn', 'studentBadge', 'retryConnectionBtn',
+  'menuToggleBtn', 'studentBadge', 'retryConnectionBtn', 'filesSection', 'filesList',
   'chatForm', 'chatMessageInput', 'chatMessages', 'chatSendBtn',
   'entryGate', 'entryForm', 'entryName', 'entryError', 'entrySubmit'
 ];
@@ -147,4 +147,14 @@ test('Ao reconectar, o aluno se identifica de novo e não manda mais mão levant
 
   assert.ok(enviadas.some((m) => m.type === 'IDENTIFY'));
   assert.ok(!enviadas.some((m) => m.type === 'RAISE_HAND'));
+});
+
+test('Arquivo novo compartilhado aparece na lista e marca o menu no celular', () => {
+  const app = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live', files: [] } });
+  app.handleServerMessage({ type: 'FILES', payload: { files: [{ id: 'f1', name: 'Lista 1.pdf', size: 2048 }] } });
+
+  assert.strictEqual(elementos.filesSection.hidden, false);
+  assert.ok(elementos.menuToggleBtn.classList.contains('novidade'), 'o menu ganha o ponto de novidade');
+  app.ui.streamWatchdog.stop();
 });

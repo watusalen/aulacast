@@ -3,6 +3,7 @@ import { UIController } from './ui-controller.js';
 import { ChatManager } from './chat-manager.js';
 import { EntryGate } from './entry-gate.js';
 import { PresenceReporter } from './presence-reporter.js';
+import { FilesList } from './files-list.js';
 
 /** Exportada para que o despachante de mensagens possa ser exercitado pelos testes. */
 export class AulaCastApp {
@@ -23,6 +24,8 @@ export class AulaCastApp {
     );
 
     this.presence = new PresenceReporter((mensagem) => this.socket.send(mensagem));
+
+    this.files = new FilesList({ onNovidade: (novos) => this.avisarArquivosNovos(novos) });
 
     this.entryGate = new EntryGate({
       onIdentified: (identidade) => this.entrarNaAula(identidade)
@@ -83,6 +86,14 @@ export class AulaCastApp {
           this.chatManager.setEnabled(data.payload.chatEnabled);
         }
         this.aplicarEstadoDaTransmissao(data.payload);
+        if (data.payload && Array.isArray(data.payload.files)) {
+          this.files.render(data.payload.files);
+        }
+        break;
+
+      // O professor compartilhou (ou tirou) um arquivo.
+      case 'FILES':
+        this.files.render(data.payload && data.payload.files);
         break;
 
       case 'CHAT_STATE':
@@ -127,6 +138,13 @@ export class AulaCastApp {
    * reconectava via o último quadro congelado como se fosse ao vivo, e o aviso de pausa
    * de antes da queda podia ficar preso na tela depois de o professor já ter retomado.
    */
+  /** No celular a lista fica na gaveta fechada: o ponto no menu avisa que chegou arquivo. */
+  avisarArquivosNovos(novos) {
+    this.ui.marcarNovidade();
+    const nomes = novos.map((a) => a.name).join(', ');
+    this.chatManager.mostrarAviso(`O professor compartilhou: ${nomes}`);
+  }
+
   aplicarEstadoDaTransmissao(payload) {
     if (!payload || !payload.stream) return;
     switch (payload.stream) {

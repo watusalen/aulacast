@@ -20,6 +20,8 @@ public protocol NetworkServerProtocol: AnyObject {
     func broadcastFrame(_ jpegData: Data)
     func broadcastChatMessage(_ message: ChatMessage)
     func broadcastControlMessage(type: String, payload: [String: String]?)
+    /// Troca a lista de arquivos que a turma pode baixar e avisa quem está conectado.
+    func updateSharedFiles(_ files: [SharedFile])
 }
 
 /// Abstração para registradores de serviço Bonjour/mDNS (DIP).

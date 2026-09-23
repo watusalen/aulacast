@@ -56,39 +56,8 @@ Cenário: Transmitir apenas uma janela específica
 
 ---
 
-### US-04: Notificação de Dúvida ("Levantar a Mão")
-- **Como** Aluno com dúvida durante a explicação,
-- **Eu quero** clicar no botão "Levantar a Mão" na minha tela,
-- **Para que** o professor saiba que preciso de ajuda sem eu ter que interromper a explicação falada.
-
-#### Critérios de Aceite (Gherkin):
-```gherkin
-Cenário: Aluno sinaliza dúvida ao professor
-  Dado que já me identifiquei e estou assistindo à aula pelo player web
-  Quando eu clicar no botão "Levantar a Mão"
-  Então o botão deve mudar de estado para "Mão Levantada"
-  E devo ver o aviso "O professor foi avisado da sua dúvida"
-  E meu nome deve aparecer destacado na lista do professor, com o ícone de mão levantada.
-```
-
----
-
-### US-05: Acompanhar Dúvidas da Turma
-- **Como** Professor,
-- **Eu quero** ver a lista dos alunos que estão com a mão levantada,
-- **Para que** eu saiba quem precisa de ajuda sem interromper minha explicação.
-
-#### Critérios de Aceite (Gherkin):
-```gherkin
-Cenário: Visualizar dúvidas pendentes
-  Dado que os alunos "Carlos" e "Mariana" levantaram a mão
-  Quando eu olhar para o app AulaCast
-  Então devo ver o contador "Dúvidas: 2"
-  E as linhas de "Carlos" e "Mariana" devem exibir o ícone de mão levantada
-  E o contador só deve baixar quando o próprio aluno abaixar a mão.
-```
-
-> **Decisão de projeto:** seguindo o modelo do Google Meet, o professor não abaixa a mão de ninguém — quem levantou é quem cancela. Isso evita que o professor "resolva" uma dúvida que o aluno ainda considera aberta.
+### ~~US-04: Notificação de Dúvida ("Levantar a Mão")~~ e ~~US-05: Acompanhar Dúvidas da Turma~~
+**Removidas.** O recurso de levantar a mão foi retirado a pedido do professor; dúvidas vão pelo chat reservado (US-07).
 
 ---
 
@@ -186,4 +155,26 @@ Cenário: Aluno retorna à aula
   Quando ela voltar para a página da transmissão
   Então a linha dela deve voltar a exibir o ícone de olho aberto
   E o contador de alunos assistindo deve aumentar em 1.
+```
+
+---
+
+### US-10: Receber Arquivos do Professor
+- **Como** Aluno,
+- **Eu quero** baixar pela página da aula os arquivos que o professor compartilhar,
+- **Para que** eu tenha o material (lista de exercícios, projeto inicial, slides) sem depender de internet, e-mail ou pendrive.
+
+#### Critérios de Aceite (Gherkin):
+```gherkin
+Cenário: Professor compartilha um arquivo durante a aula
+  Dado que estou assistindo à aula
+  Quando o professor compartilhar "Lista 3.pdf"
+  Então devo ver "Lista 3.pdf" em "Arquivos do professor", com o tamanho
+  E ao tocar nele o navegador deve baixar o arquivo com esse nome.
+
+Cenário: Professor para de compartilhar
+  Dado que "Lista 3.pdf" está na minha lista
+  Quando o professor remover o arquivo
+  Então ele deve sumir da minha página
+  E o link antigo não deve mais baixar nada.
 ```

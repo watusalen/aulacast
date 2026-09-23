@@ -154,8 +154,16 @@ export class UIController {
 
   toggleSidebar() {
     const isOpen = this.sidebar.classList.toggle('open');
+    if (isOpen) this.menuToggleBtn.classList.remove('novidade');
     this.menuToggleBtn.setAttribute('aria-expanded', String(isOpen));
     this.atualizarFundoDaGaveta(isOpen);
+  }
+
+  /** Ponto no botão do menu enquanto há novidade que o aluno ainda não viu. */
+  marcarNovidade() {
+    if (!this.sidebar.classList.contains('open')) {
+      this.menuToggleBtn.classList.add('novidade');
+    }
   }
 
   closeSidebar() {

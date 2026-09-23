@@ -1684,6 +1684,99 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste de confirmação do quadro: \(error.localizedDescription)")
         }
 
+        // TESTE 23: Arquivos compartilhados pelo professor.
+        print("\n--- [23/23] Testes: compartilhamento de arquivos ---")
+
+        let pastaDeArquivos = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aulacast_arquivos_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: pastaDeArquivos, withIntermediateDirectories: true)
+        let apostila = pastaDeArquivos.appendingPathComponent("Apostila de Lógica – Aula 1.pdf")
+        let conteudoApostila = Data((0..<5_000).map { UInt8($0 % 251) })
+        try? conteudoApostila.write(to: apostila)
+        // Maior que vários pedaços de 256 KB, para exercitar o envio em partes.
+        let grande = pastaDeArquivos.appendingPathComponent("projeto.zip")
+        let conteudoGrande = Data((0..<(5 * 1024 * 1024)).map { UInt8(($0 * 7) % 256) })
+        try? conteudoGrande.write(to: grande)
+
+        let servidorArquivos = FakeServer()
+        let vmArquivos = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: servidorArquivos,
+            advertiserService: FakeAdvertiser(),
+            systemActivity: FakeSystemActivity()
+        )
+        vmArquivos.shareFiles([apostila, grande, pastaDeArquivos, apostila])
+        assertTest(vmArquivos.sharedFiles.count == 2, "Dois arquivos entram na lista; a pasta e a repetição ficam de fora")
+        assertTest(vmArquivos.sharedFilesNotice?.contains(pastaDeArquivos.lastPathComponent) == true,
+                   "O professor é avisado de que a pasta não foi compartilhada")
+        assertTest(servidorArquivos.arquivosCompartilhados.count == 2, "A lista chega ao servidor")
+        assertTest(vmArquivos.sharedFiles.first?.size == Int64(conteudoApostila.count), "O tamanho do arquivo é lido do disco")
+
+        let servidorDownload = NetworkListenerService(port: 8116, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorDownload.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            // Quem já está conectado recebe a lista nova; quem chega depois, no CONNECTED.
+            let socketArquivos = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8116/ws")!)
+            socketArquivos.resume()
+            _ = try? await socketArquivos.receive()
+            servidorDownload.updateSharedFiles(vmArquivos.sharedFiles)
+            var mensagemDeArquivos = ""
+            if case .string(let texto)? = try? await socketArquivos.receive() { mensagemDeArquivos = texto }
+            assertTest(mensagemDeArquivos.contains("\"FILES\"") && mensagemDeArquivos.contains("projeto.zip"),
+                       "Quem está conectado recebe a lista de arquivos na hora")
+            socketArquivos.cancel(with: .goingAway, reason: nil)
+
+            let socketTardio = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8116/ws")!)
+            socketTardio.resume()
+            var boasVindasComArquivos = ""
+            if case .string(let texto)? = try? await socketTardio.receive() { boasVindasComArquivos = texto }
+            assertTest(boasVindasComArquivos.contains("projeto.zip"), "Quem entra depois já recebe a lista nas boas-vindas")
+            socketTardio.cancel(with: .goingAway, reason: nil)
+
+            func baixar(_ caminho: String) async -> (Data, HTTPURLResponse?) {
+                guard let url = URL(string: "http://127.0.0.1:8116\(caminho)"),
+                      let (dados, resposta) = try? await URLSession.shared.data(from: url) else { return (Data(), nil) }
+                return (dados, resposta as? HTTPURLResponse)
+            }
+
+            let idApostila = vmArquivos.sharedFiles[0].id
+            let (dadosApostila, respostaApostila) = await baixar("/arquivos/\(idApostila)")
+            assertTest(respostaApostila?.statusCode == 200 && dadosApostila == conteudoApostila,
+                       "O aluno baixa o arquivo idêntico ao do professor")
+            let disposicao = respostaApostila?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
+            assertTest(disposicao.hasPrefix("attachment;"), "O navegador baixa o arquivo em vez de tentar abri-lo")
+            assertTest(disposicao.contains("filename*=UTF-8''Apostila%20de%20L%C3%B3gica%20%E2%80%93%20Aula%201.pdf"),
+                       "O nome com acento e travessão chega intacto ao aluno")
+            assertTest(disposicao.contains("filename=\"Apostila de Logica _ Aula 1.pdf\""),
+                       "Navegador antigo recebe um nome ASCII legível, sem os acentos")
+
+            let (dadosGrandes, respostaGrande) = await baixar("/arquivos/\(vmArquivos.sharedFiles[1].id)")
+            assertTest(respostaGrande?.statusCode == 200 && dadosGrandes == conteudoGrande,
+                       "Arquivo de 5 MB chega inteiro, enviado em pedaços")
+
+            let (_, respostaInexistente) = await baixar("/arquivos/\(UUID().uuidString)")
+            assertTest(respostaInexistente?.statusCode == 404, "Id desconhecido não entrega nada")
+            let (_, respostaTravessia) = await baixar("/arquivos/..%2F..%2Fetc%2Fpasswd")
+            assertTest(respostaTravessia?.statusCode == 404, "Caminho no lugar do id não sai da lista de arquivos")
+
+            vmArquivos.removeSharedFile(id: idApostila)
+            servidorDownload.updateSharedFiles(vmArquivos.sharedFiles)
+            let (_, respostaRemovido) = await baixar("/arquivos/\(idApostila)")
+            assertTest(respostaRemovido?.statusCode == 404, "Arquivo que o professor tirou da lista deixa de ser baixável")
+
+            try? FileManager.default.removeItem(at: grande)
+            let (_, respostaApagado) = await baixar("/arquivos/\(vmArquivos.sharedFiles[0].id)")
+            assertTest(respostaApagado?.statusCode == 404, "Arquivo apagado do disco responde 404, sem derrubar nada")
+
+            servidorDownload.stop()
+        } catch {
+            assertTest(false, "Falha no teste de arquivos: \(error.localizedDescription)")
+        }
+        try? FileManager.default.removeItem(at: pastaDeArquivos)
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

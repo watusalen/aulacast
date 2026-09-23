@@ -27,6 +27,9 @@ public final class WebSocketHandlerService {
     /// Sem isto, quem reconectava (ou entrava no meio da aula) com a transmissão pausada
     /// ou encerrada via o último quadro congelado como se a aula estivesse ao vivo.
     private var estadoDaTransmissao: [String: String] = ["stream": "live"]
+    /// Arquivos que a turma pode baixar, já no formato da mensagem. Vai também no
+    /// CONNECTED: quem entra depois do professor compartilhar precisa ver a lista.
+    private var arquivos: [[String: Any]] = []
     private let lock = NSLock()
 
     /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
@@ -129,6 +132,7 @@ public final class WebSocketHandlerService {
         lock.lock()
         var boasVindas: [String: Any] = estadoDaTransmissao
         boasVindas["chatEnabled"] = chatLiberado
+        boasVindas["files"] = arquivos
         lock.unlock()
         let welcomeDict: [String: Any] = [
             "type": "CONNECTED",
@@ -219,6 +223,24 @@ public final class WebSocketHandlerService {
         lock.lock()
         estadoDaTransmissao = novo
         lock.unlock()
+    }
+
+    /// Guarda a lista de arquivos e manda a lista nova a toda a turma.
+    public func anunciarArquivos(_ lista: [SharedFile]) {
+        let itens: [[String: Any]] = lista.map {
+            ["id": $0.id, "name": $0.name, "size": $0.size]
+        }
+        lock.lock()
+        arquivos = itens
+        let conexoes = Array(activeConnections.values)
+        lock.unlock()
+
+        let mensagem: [String: Any] = ["type": "FILES", "payload": ["files": itens]]
+        guard let dados = try? JSONSerialization.data(withJSONObject: mensagem),
+              let texto = String(data: dados, encoding: .utf8) else { return }
+        for conexao in conexoes {
+            sendTextFrame(connection: conexao, text: texto)
+        }
     }
 
     /// Volta ao estado de uma sessão nova (servidor parado e religado).

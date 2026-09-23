@@ -21,6 +21,12 @@ public final class MainViewModel: ObservableObject {
     /// porta seguia aberta até o app fechar.
     @Published public private(set) var isSessionOpen: Bool = false
 
+    /// Arquivos que a turma pode baixar agora, na ordem em que foram compartilhados.
+    @Published public private(set) var sharedFiles: [SharedFile] = []
+
+    /// Recado sobre o último compartilhamento (uma pasta escolhida, um arquivo ilegível).
+    @Published public var sharedFilesNotice: String?
+
     /// Um início em andamento (esperando a permissão, o sistema e o ScreenCaptureKit).
     /// O botão fica desabilitado nesse meio-tempo: um duplo clique criava dois streams.
     @Published public private(set) var isStarting: Bool = false
@@ -143,6 +149,42 @@ public final class MainViewModel: ObservableObject {
 
     deinit {
         monitorDeRede.cancel()
+    }
+
+    /// Disponibiliza arquivos para a turma baixar. Qualquer tipo serve; pastas ficam de fora
+    /// (o navegador baixa arquivos, não pastas — basta compactá-la antes).
+    public func shareFiles(_ urls: [URL]) {
+        var pulados: [String] = []
+        var novos = sharedFiles
+        for url in urls {
+            // O macOS guarda o nome com o acento separado da letra (NFD). Mandado assim, o
+            // "ó" aparece em alguns sistemas como "o" seguido de um acento solto.
+            let nome = url.lastPathComponent.precomposedStringWithCanonicalMapping
+            var ehPasta: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &ehPasta), !ehPasta.boolValue,
+                  FileManager.default.isReadableFile(atPath: url.path),
+                  let tamanho = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber
+            else {
+                pulados.append(nome)
+                continue
+            }
+            // O mesmo arquivo escolhido de novo não vira uma segunda linha na lista.
+            guard !novos.contains(where: { $0.url.standardizedFileURL == url.standardizedFileURL }) else { continue }
+            novos.append(SharedFile(name: nome, url: url, size: tamanho.int64Value))
+        }
+
+        sharedFilesNotice = pulados.isEmpty ? nil
+            : "Não foi possível compartilhar: \(pulados.joined(separator: ", ")). "
+              + "Pastas precisam ser compactadas antes."
+        guard novos != sharedFiles else { return }
+        sharedFiles = novos
+        serverService.updateSharedFiles(novos)
+    }
+
+    /// Tira o arquivo da lista: some da página dos alunos e o link para de funcionar.
+    public func removeSharedFile(id: String) {
+        sharedFiles.removeAll { $0.id == id }
+        serverService.updateSharedFiles(sharedFiles)
     }
 
     public func sendProfMessage(text: String) {
