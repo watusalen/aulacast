@@ -39,7 +39,7 @@ public final class MainViewModel: ObservableObject {
     ///
     /// Compartilhar não envia nada: o arquivo fica no Mac e cada aluno baixa direto dele
     /// quando toca no link. Por isso o que o professor precisa ver não é uma barra de
-    /// "enviando", e sim quem está baixando e quem já baixou.
+    /// "enviando", e sim quem já baixou (a tela mostra só os concluídos).
     @Published public private(set) var fileDownloadStats: [String: FileDownloadStats] = [:]
 
     /// Quantas mensagens de alunos chegaram desde que o app abriu.

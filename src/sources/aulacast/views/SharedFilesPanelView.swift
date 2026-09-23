@@ -126,11 +126,11 @@ public struct SharedFilesPanelView: View {
 
     /// O estado do arquivo numa frase curta, que cabe no painel de 360 pt:
     /// ninguém baixou ainda → para quantos está disponível; já baixaram → "3 de 4
-    /// baixaram"; e, durante um download, "· 1 baixando" com o indicador de atividade.
+    /// baixaram". Downloads em andamento não aparecem: o que interessa ao professor é
+    /// quem já tem o arquivo.
     private func situacao(_ estatisticas: FileDownloadStats?) -> some View {
         let alunos = viewModel.clientManager.identifiedClients.count
         let concluidos = estatisticas?.concluidos ?? 0
-        let baixando = estatisticas?.emAndamento ?? 0
         let frase: String
         if concluidos > 0 {
             frase = alunos > 0 ? "\(min(concluidos, max(alunos, concluidos))) de \(max(alunos, concluidos)) baixaram"
@@ -142,23 +142,11 @@ public struct SharedFilesPanelView: View {
             default: frase = "Disponível para \(alunos) alunos"
             }
         }
-        // O download em andamento vai numa linha própria: na mesma linha da frase, as duas
-        // coisas não cabiam no painel e a frase saía cortada.
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                M3Icone(nome: concluidos > 0 ? "download" : "check_circle", tamanho: 16, preenchido: concluidos == 0)
-                    .foregroundColor(concluidos > 0 ? M3.onSurfaceVariant : M3.tertiary)
-                Text(frase)
-                    .foregroundColor(M3.onSurfaceVariant)
-            }
-            if baixando > 0 {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small).scaleEffect(0.55).frame(width: 16, height: 16)
-                    Text(baixando == 1 ? "1 baixando agora" : "\(baixando) baixando agora")
-                }
-                .foregroundColor(M3.primary)
-                .transition(.opacity)
-            }
+        return HStack(spacing: 6) {
+            M3Icone(nome: concluidos > 0 ? "download" : "check_circle", tamanho: 16, preenchido: concluidos == 0)
+                .foregroundColor(concluidos > 0 ? M3.onSurfaceVariant : M3.tertiary)
+            Text(frase)
+                .foregroundColor(M3.onSurfaceVariant)
         }
         .m3(.labelMedium)
         .lineLimit(1)
