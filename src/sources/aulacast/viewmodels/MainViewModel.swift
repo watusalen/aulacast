@@ -11,16 +11,25 @@ public final class MainViewModel: ObservableObject {
     @Published public var isPaused: Bool = false
     @Published public var serverURLString: String = "http://127.0.0.1:8080"
 
-    /// O endereço como a turma digita: sem o "http://".
+    /// O endereço como a turma digita.
     ///
-    /// O navegador completa sozinho — com endereço de rede local ele nem avisa: o Chrome
-    /// tenta HTTPS, não consegue e cai para HTTP, e o aviso "Ask-before-HTTP" (padrão a
-    /// partir do Chrome 154) não aparece para IP local. Menos coisa para copiar da lousa.
-    /// O botão de copiar continua levando o link completo, que precisa do "http://" para
-    /// virar link clicável quando colado num grupo ou documento.
+    /// Enquanto a transmissão está no ar, mostra `aulacast.local` — o nome mDNS
+    /// registrado pelo `MDNSHostnameService` — sem porta, porque a porta 80 fica
+    /// redirecionada para a porta real do servidor pelo `PrivilegedPortRedirectService`.
+    /// Se esse redirecionamento não rolou (senha de admin recusada, `pfctl` indisponível
+    /// etc.), cai para `aulacast.local:<porta>`, que continua funcionando igual. Antes da
+    /// sessão abrir, mostra o IP numérico para o professor saber a qual rede está
+    /// conectado.
     public var displayAddress: String {
-        serverURLString.replacingOccurrences(of: "http://", with: "")
+        if isSessionOpen {
+            if isPortaOitentaRedirecionada {
+                return "aulacast.local"
+            }
+            return "aulacast.local:\(serverService.port)"
+        }
+        return serverURLString.replacingOccurrences(of: "http://", with: "")
     }
+
     @Published public var streamStartedAt: Date?
     @Published public var latestPreviewImage: NSImage?
 
@@ -110,6 +119,17 @@ public final class MainViewModel: ObservableObject {
     public let clientManager: ClientManagerService
 
     private var cancellables = Set<AnyCancellable>()
+
+    /// Registra `aulacast.local` na rede enquanto a transmissão está no ar.
+    private let mdnsService = MDNSHostnameService()
+
+    /// Redireciona a porta 80 para a porta real do servidor, para a turma digitar
+    /// `aulacast.local` sem porta. Pede a senha de admin uma vez por transmissão.
+    private let portRedirectService = PrivilegedPortRedirectService()
+
+    /// Reflete se o redirecionamento da porta 80 está no ar. Ver `displayAddress`.
+    @Published private var isPortaOitentaRedirecionada: Bool = false
+
 
     /// Avisa quando a rede muda (trocar de Wi-Fi, plugar cabo, o roteador renovar o IP).
     ///
@@ -303,6 +323,10 @@ public final class MainViewModel: ObservableObject {
             do {
                 try serverService.start()
                 advertiserService.startAdvertising()
+                mdnsService.start(ip: serverService.localIPAddress)
+                portRedirectService.start(targetPort: serverService.port) { [weak self] status in
+                    self?.isPortaOitentaRedirecionada = (status == .ativo)
+                }
                 self.systemActivity.beginTransmission(
                     reason: "Transmitindo a aula para os alunos na rede local"
                 )
@@ -343,6 +367,9 @@ public final class MainViewModel: ObservableObject {
             await captureService.stopCapture()
             serverService.stop()
             advertiserService.stopAdvertising()
+            mdnsService.stop()
+            portRedirectService.stop()
+            self.isPortaOitentaRedirecionada = false
             self.systemActivity.endTransmission()
             self.isStreaming = false
             self.isSessionOpen = false

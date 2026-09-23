@@ -19,7 +19,8 @@ let package = Package(
     targets: [
         .target(
             name: "AulaCastCore",
-            path: "sources/aulacast"
+            path: "sources/aulacast",
+            linkerSettings: [.linkedFramework("CoreServices")]
         ),
         .executableTarget(
             name: "AulaCast",
