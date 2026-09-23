@@ -152,8 +152,12 @@ export class AulaCastApp {
 
       case 'CHAT_MESSAGE':
         this.chatManager.appendMessage(data.payload.sender, data.payload.text, data.payload.isProf);
-        // Resposta do professor com o chat fechado: o contador no botão avisa.
-        if (data.payload.isProf) this.ui.marcarNovidade('chat');
+        // Resposta do professor, ou mensagem de colega (com o chat visível para a turma
+        // ligado), com o chat fechado: o contador no botão avisa. O eco da própria
+        // mensagem do aluno não conta — ele já sabe o que escreveu.
+        if (!this.chatManager.isOwnMessage(data.payload.sender, data.payload.isProf)) {
+          this.ui.marcarNovidade('chat');
+        }
         break;
 
       // O professor começou (ou recomeçou) a transmitir com a gente já conectado.

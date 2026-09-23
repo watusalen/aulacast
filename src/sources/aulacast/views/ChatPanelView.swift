@@ -39,10 +39,35 @@ public struct ChatPanelView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
 
+            // Segundo toggle, independente do de cima: só faz sentido com o chat ligado —
+            // desligado, não há mensagem de aluno nenhuma para circular entre colegas.
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Alunos veem as mensagens uns dos outros")
+                        .m3(.titleSmall)
+                        .foregroundColor(M3.onSurface)
+                    Text(viewModel.isStudentChatVisibleToClass
+                        ? "As mensagens dos alunos vão para toda a turma, além de você"
+                        : "As mensagens dos alunos chegam só para você, como hoje")
+                        .m3(.bodySmall)
+                        .foregroundColor(M3.onSurfaceVariant)
+                }
+                Spacer()
+                Toggle("", isOn: $viewModel.isStudentChatVisibleToClass)
+                    .toggleStyle(.switch)
+                    .tint(M3.primary)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 8)
+            .disabled(!viewModel.isChatEnabled)
+
             // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.
             HStack(alignment: .top, spacing: 10) {
                 M3Icone(nome: "info", tamanho: 18)
-                Text("Suas mensagens vão para toda a turma. As dos alunos chegam só para você.")
+                Text(viewModel.isStudentChatVisibleToClass
+                    ? "Suas mensagens vão para toda a turma. As dos alunos também."
+                    : "Suas mensagens vão para toda a turma. As dos alunos chegam só para você.")
                     .m3(.bodySmall)
                     .fixedSize(horizontal: false, vertical: true)
             }

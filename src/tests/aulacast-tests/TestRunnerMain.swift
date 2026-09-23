@@ -2222,6 +2222,143 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste E2E da mensagem fixada: \(error.localizedDescription)")
         }
 
+        // TESTE 30: Chat visível entre alunos — toggle independente, desligado por padrão.
+        // Desligado (comportamento atual): mensagem de aluno só chega ao próprio autor e ao
+        // professor. Ligado: chega a toda a turma, sem duplicar o eco de quem escreveu
+        // (broadcastChatMessage já inclui o remetente).
+        print("\n--- [30/30] Testes E2E: chat visível entre alunos ---")
+
+        let coletorChatTurma = ColetorDeChat()
+        let servidorChatTurma = NetworkListenerService(port: 8122, webAssetsPath: FileManager.default.temporaryDirectory)
+        servidorChatTurma.chatObserver = coletorChatTurma
+
+        do {
+            try servidorChatTurma.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            assertTest(servidorChatTurma.isStudentChatVisibleToClass == false,
+                       "Chat visível entre alunos começa desligado")
+
+            let alunoX = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            let alunoY = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            let alunoZ = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            alunoX.resume()
+            alunoY.resume()
+            alunoZ.resume()
+
+            _ = try? await alunoX.receive() // CONNECTED
+            _ = try? await alunoY.receive() // CONNECTED
+            _ = try? await alunoZ.receive() // CONNECTED
+
+            /// Guarda a primeira mensagem que chegar numa conexão (mesmo desenho do teste de
+            /// privacidade do chat, TESTE 11 — cada `receive` só pode ter uma chamada pendente).
+            final class CaixaDeEscuta: @unchecked Sendable {
+                private let trava = NSLock()
+                private var _texto: String?
+                var texto: String? { trava.lock(); defer { trava.unlock() }; return _texto }
+                func guardar(_ t: String) { trava.lock(); if _texto == nil { _texto = t }; trava.unlock() }
+            }
+
+            // --- Desligado (padrão): regressão explícita do comportamento já existente. ---
+            let escutaYDesligado = CaixaDeEscuta()
+            let escutaZDesligado = CaixaDeEscuta()
+            Task { if case .string(let t)? = try? await alunoY.receive() { escutaYDesligado.guardar(t) } }
+            Task { if case .string(let t)? = try? await alunoZ.receive() { escutaZDesligado.guardar(t) } }
+
+            try? await alunoX.send(.string(
+                "{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Xana\",\"text\":\"so o prof ve isso\"}}"
+            ))
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            assertTest(coletorChatTurma.recebidas.count == 1, "Toggle desligado: mensagem chega ao professor")
+
+            var ecoParaAutorDesligado = false
+            if case .string(let texto)? = try? await alunoX.receive(), texto.contains("so o prof ve isso") {
+                ecoParaAutorDesligado = true
+            }
+            assertTest(ecoParaAutorDesligado, "Toggle desligado: o autor recebe a própria mensagem de volta")
+
+            // Tempo de rede real antes de concluir que nada chegou aos colegas.
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            assertTest(
+                escutaYDesligado.texto == nil && escutaZDesligado.texto == nil,
+                "Toggle desligado: mensagem de aluno NÃO chega aos colegas (regressão)"
+            )
+
+            // Os `receive()` de Y e Z acima ficam pendentes para sempre: é a prova de que
+            // nada chegou a eles, e sem cancelar a conexão não há como desarmá-los. Reaproveitar
+            // esses mesmos sockets na fase seguinte empilharia um segundo `receive()` concorrente
+            // em cima do que já está pendente — foi exatamente isso que travou a suíte do TESTE
+            // 11 (ver comentário lá). A fase ligada usa conexões novas, sem escuta pendente.
+            alunoX.cancel(with: .goingAway, reason: nil)
+            alunoY.cancel(with: .goingAway, reason: nil)
+            alunoZ.cancel(with: .goingAway, reason: nil)
+
+            // --- Ligado: mensagem do aluno chega a toda a turma, sem duplicar o próprio eco. ---
+            servidorChatTurma.isStudentChatVisibleToClass = true
+
+            let autora = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            let colegaQ = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            let colegaR = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8122/ws")!)
+            autora.resume()
+            colegaQ.resume()
+            colegaR.resume()
+
+            _ = try? await autora.receive() // CONNECTED
+            _ = try? await colegaQ.receive() // CONNECTED
+            _ = try? await colegaR.receive() // CONNECTED
+
+            let escutaQ = CaixaDeEscuta()
+            let escutaR = CaixaDeEscuta()
+            Task { if case .string(let t)? = try? await colegaQ.receive() { escutaQ.guardar(t) } }
+            Task { if case .string(let t)? = try? await colegaR.receive() { escutaR.guardar(t) } }
+
+            try? await autora.send(.string(
+                "{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Yara\",\"text\":\"agora todo mundo ve\"}}"
+            ))
+            try? await Task.sleep(nanoseconds: 800_000_000)
+
+            assertTest(coletorChatTurma.recebidas.count == 2, "Toggle ligado: mensagem também chega ao professor")
+            assertTest(
+                escutaQ.texto?.contains("agora todo mundo ve") == true,
+                "Toggle ligado: chega a um colega conectado"
+            )
+            assertTest(
+                escutaR.texto?.contains("agora todo mundo ve") == true,
+                "Toggle ligado: chega a outro colega conectado"
+            )
+
+            // A própria autora recebe de volta pelo broadcast (que já inclui quem escreveu).
+            // Esta é a primeira (e única, até aqui) chamada de `receive()` no socket dela,
+            // então não corre o mesmo risco de escuta duplicada de Y e Z acima.
+            var ecoParaAutoraLigado = false
+            if case .string(let texto)? = try? await autora.receive(), texto.contains("agora todo mundo ve") {
+                ecoParaAutoraLigado = true
+            }
+            assertTest(ecoParaAutoraLigado, "Toggle ligado: a autora também recebe a própria mensagem")
+
+            // Só broadcastChatMessage foi chamado (não também sendChatMessage): a próxima
+            // coisa que a autora recebe é outra mensagem, não um segundo eco da mesma —
+            // prova de que a implementação não soma os dois caminhos e duplica o envio. Essa
+            // segunda chamada em `autora` é sequencial (a primeira já terminou), não concorrente.
+            try? await colegaR.send(.string(
+                "{\"type\":\"CHAT_SEND\",\"payload\":{\"sender\":\"Zeca\",\"text\":\"prova que nao duplicou\"}}"
+            ))
+            var proximaParaAutora: String?
+            if case .string(let texto)? = try? await autora.receive() { proximaParaAutora = texto }
+            assertTest(
+                proximaParaAutora?.contains("prova que nao duplicou") == true,
+                "Toggle ligado: sem duplicar — a autora não recebe um segundo eco da própria mensagem"
+            )
+
+            autora.cancel(with: .goingAway, reason: nil)
+            colegaQ.cancel(with: .goingAway, reason: nil)
+            colegaR.cancel(with: .goingAway, reason: nil)
+            servidorChatTurma.stop()
+        } catch {
+            assertTest(false, "Falha no teste E2E do chat visível entre alunos: \(error.localizedDescription)")
+        }
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

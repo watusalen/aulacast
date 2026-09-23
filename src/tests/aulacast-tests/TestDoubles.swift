@@ -71,6 +71,7 @@ final class FakeServer: NetworkServerProtocol {
     var port: UInt16 = 8080
     var localIPAddress: String = "192.168.1.10"
     var isChatEnabled: Bool = true
+    var isStudentChatVisibleToClass: Bool = false
 
     weak var chatObserver: ChatObserverProtocol?
     weak var clientObserver: ClientObserverProtocol?

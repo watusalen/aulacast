@@ -14,6 +14,15 @@ public final class WebSocketHandlerService {
     }
     private var chatLiberado = true
 
+    /// Desligado por padrão: mensagem de aluno continua privada com o professor
+    /// (`sendChatMessage`, só para quem escreveu). Ligado, o CHAT_SEND do aluno usa
+    /// `broadcastChatMessage` e chega para toda a turma.
+    public var isStudentChatVisibleToClass: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return chatVisivelParaTurma }
+        set { lock.lock(); chatVisivelParaTurma = newValue; lock.unlock() }
+    }
+    private var chatVisivelParaTurma = false
+
     private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
     /// Um decodificador por conexão, cada um com seu buffer de bytes incompletos.
     private var decoders: [ObjectIdentifier: WebSocketFrameDecoder] = [:]
@@ -504,11 +513,19 @@ public final class WebSocketHandlerService {
             if !trimmedText.isEmpty {
                 let chatMsg = ChatMessage(sender: sender, text: trimmedText, isProf: false)
 
-                // A mensagem do aluno é privada com o professor: vai para o app do professor
-                // e volta apenas para quem escreveu. Retransmiti-la à turma transformava o
-                // chat em conversa paralela durante a aula.
+                // A mensagem do aluno sempre alimenta a lista do professor. Por padrão ela é
+                // privada: vai só para o app do professor e volta apenas para quem escreveu
+                // (retransmiti-la à turma transformava o chat em conversa paralela durante a
+                // aula). Com `isStudentChatVisibleToClass` ligado, o professor decidiu que os
+                // alunos podem se ver: usa `broadcastChatMessage`, que já manda para todas as
+                // conexões (inclusive a de quem escreveu), então não soma com `sendChatMessage`
+                // — duplicaria a mensagem de quem enviou.
                 chatObserver?.didReceiveChatMessage(chatMsg)
-                sendChatMessage(chatMsg, to: connection)
+                if isStudentChatVisibleToClass {
+                    broadcastChatMessage(chatMsg)
+                } else {
+                    sendChatMessage(chatMsg, to: connection)
+                }
             }
 
         case "IDENTIFY":

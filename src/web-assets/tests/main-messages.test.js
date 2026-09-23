@@ -240,10 +240,29 @@ test('Arquivo novo aparece na lista e soma no contador de Arquivos', () => {
 
 test('Resposta do professor com o chat fechado soma no contador do Chat', () => {
   const { app } = novoApp();
+  app.identidade = { name: 'Ana Beatriz' };
   app.ui.zerarNaoLidas('chat');
   app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Professor', text: 'Oi', isProf: true } });
-  app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Ana', text: 'eco da minha', isProf: false } });
-  assert.strictEqual(elementos.chatBadge.textContent, '1', 'só a mensagem do professor conta');
+  // O eco da própria mensagem do aluno não é novidade: ele já sabe o que escreveu.
+  app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Ana Beatriz', text: 'eco da minha', isProf: false } });
+  assert.strictEqual(elementos.chatBadge.textContent, '1', 'só a mensagem do professor conta, o próprio eco não');
+});
+
+test('Mensagem de colega (chat visível para a turma) soma no contador do Chat, mas o próprio eco não', () => {
+  const { app } = novoApp();
+  app.identidade = { name: 'Ana Beatriz' };
+  app.ui.zerarNaoLidas('chat');
+
+  // Colega escreveu: com o painel fechado, o aviso de novidade tem que aparecer — antes
+  // só a resposta do professor fazia isso, e mensagem de colega não existia (chat era
+  // sempre privado com o professor).
+  app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Carlos Eduardo', text: 'Alguém entendeu o exercício 3?', isProf: false } });
+  assert.strictEqual(elementos.chatBadge.textContent, '1', 'mensagem de colega conta como novidade');
+
+  // O próprio eco (a mensagem que ela mesma mandou, devolvida ou espalhada pelo servidor)
+  // não soma de novo.
+  app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Ana Beatriz', text: 'Também travei', isProf: false } });
+  assert.strictEqual(elementos.chatBadge.textContent, '1', 'o próprio eco não conta como novidade');
 });
 
 // MARK: - Mensagem fixada

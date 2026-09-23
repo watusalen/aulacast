@@ -7,6 +7,9 @@ public protocol NetworkServerProtocol: AnyObject {
     var port: UInt16 { get }
     var localIPAddress: String { get }
     var isChatEnabled: Bool { get set }
+    /// Desligado por padrão: mensagem de aluno continua privada com o professor. Ligado,
+    /// `broadcastChatMessage` também manda a mensagem do aluno para toda a turma.
+    var isStudentChatVisibleToClass: Bool { get set }
 
     var chatObserver: ChatObserverProtocol? { get set }
     var presenceObserver: StudentPresenceObserverProtocol? { get set }
