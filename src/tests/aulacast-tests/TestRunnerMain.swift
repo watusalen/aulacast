@@ -1883,6 +1883,17 @@ struct AulaCastTestRunner {
                    "Download que termina depois de o arquivo sair da lista não o traz de volta")
         try? FileManager.default.removeItem(at: pastaContagem)
 
+        // TESTE 26: Endereço que o professor escreve na lousa.
+        print("\n--- [26/26] Testes de Domínio: endereço para a turma digitar ---")
+        let servidorDaLousa = FakeServer()
+        let vmEndereco = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: servidorDaLousa, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
+        )
+        assertTest(vmEndereco.displayAddress == "192.168.1.10:8080", "O painel mostra o endereço sem o http://")
+        assertTest(vmEndereco.serverURLString == "http://192.168.1.10:8080",
+                   "O link copiado continua completo, para ser clicável quando colado")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

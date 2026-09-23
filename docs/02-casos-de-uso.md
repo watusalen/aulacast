@@ -20,7 +20,7 @@
   4. O professor clica no botão **"Iniciar Transmissão"**.
   5. O sistema inicia a captura via `ScreenCaptureKit` e o servidor HTTP/WebSocket na porta 8080.
   6. O sistema ativa o anúncio de rede via Bonjour (`_aulacast._tcp`).
-  7. O sistema atualiza o status para *"Transmitindo"* e exibe a URL local de acesso (ex: `http://192.168.1.15:8080`).
+  7. O sistema atualiza o status para *"Transmitindo"* e exibe a URL local de acesso (ex: `192.168.1.15:8080`; o `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local).
 - **Fluxos Alternativos:**
   - *FA-01 (Mudar resolução/FPS):* O professor altera a resolução ou a taxa de quadros nas configurações, antes ou durante a transmissão; a mudança vale imediatamente, sem reiniciar a sessão.
   - *FA-02 (Trocar a fonte durante a aula):* O professor seleciona outro monitor ou janela na grade de fontes. O sistema troca o conteúdo transmitido sem encerrar a sessão nem desconectar os alunos.
@@ -38,7 +38,7 @@
 - **Pré-condição:** O computador do aluno está conectado à mesma rede local (Wi-Fi/Ethernet) que o Mac do professor, e o UC-01 foi executado.
 - **Fluxo Principal:**
   1. O aluno abre qualquer navegador web (Chrome, Firefox, Safari, Edge).
-  2. O aluno digita a URL da sala fornecida pelo professor (ex: `http://192.168.1.15:8080`).
+  2. O aluno digita a URL da sala fornecida pelo professor (ex: `192.168.1.15:8080`; o `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local).
   3. O navegador carrega a interface Web do AulaCast servida pelo app macOS.
   4. O sistema apresenta a tela de entrada e **só libera a aula após a identificação** (ver UC-06).
   5. O JavaScript do cliente estabelece uma conexão WebSocket com o servidor local.

@@ -10,6 +10,17 @@ public final class MainViewModel: ObservableObject {
     @Published public var isStreaming: Bool = false
     @Published public var isPaused: Bool = false
     @Published public var serverURLString: String = "http://127.0.0.1:8080"
+
+    /// O endereço como a turma digita: sem o "http://".
+    ///
+    /// O navegador completa sozinho — com endereço de rede local ele nem avisa: o Chrome
+    /// tenta HTTPS, não consegue e cai para HTTP, e o aviso "Ask-before-HTTP" (padrão a
+    /// partir do Chrome 154) não aparece para IP local. Menos coisa para copiar da lousa.
+    /// O botão de copiar continua levando o link completo, que precisa do "http://" para
+    /// virar link clicável quando colado num grupo ou documento.
+    public var displayAddress: String {
+        serverURLString.replacingOccurrences(of: "http://", with: "")
+    }
     @Published public var streamStartedAt: Date?
     @Published public var latestPreviewImage: NSImage?
 

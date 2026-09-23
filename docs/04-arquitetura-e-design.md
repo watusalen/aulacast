@@ -202,7 +202,7 @@ sequenceDiagram
     App->>Net: Sobe NWListener HTTP/WebSocket na porta 8080
     App->>Net: Ativa Anúncio Bonjour (_aulacast._tcp)
 
-    Aluno->>Net: Acessa http://192.168.1.15:8080 no navegador
+    Aluno->>Net: Digita 192.168.1.15:8080 no navegador
     Net-->>Aluno: Retorna index.html, styles.css e os módulos JS
     Aluno->>Aluno: Preenche o nome na tela de entrada
     Aluno->>Net: Conecta ao WebSocket /ws

@@ -15,7 +15,7 @@ Cenário: Iniciar transmissão com sucesso
   E as permissões de Gravação de Tela do macOS estão ativadas
   Quando eu selecionar a fonte "Monitor Principal" e clicar em "Iniciar Transmissão"
   Então o status do aplicativo deve mudar para "Transmitindo" em verde
-  E o endereço IP/URL da sala deve ser exibido com destaque na tela (ex: http://192.168.1.15:8080)
+  E o endereço IP/URL da sala deve ser exibido com destaque na tela (ex: 192.168.1.15:8080)
   E a captura de tela deve consumir menos de 15% de CPU.
 ```
 
@@ -32,7 +32,7 @@ Cenário: Acesso ao player web pelo aluno em rede com firewall restrito
   Dado que o professor iniciou a transmissão na rede local da sala
   E a rede de internet da instituição está instável ou com firewall bloqueando serviços de chamadas externas
   Quando eu abrir o navegador Chrome ou Firefox no Linux do laboratório
-  E acessar a URL local "http://192.168.1.15:8080"
+  E digitar o endereço local "192.168.1.15:8080"
   Então a página web do AulaCast deve carregar em menos de 2 segundos via tráfego exclusivamente local
   E a transmissão de tela do professor deve ser exibida no player central sem bloqueios.
 ```

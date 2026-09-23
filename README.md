@@ -29,7 +29,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 ```
 
 - **Professor:** app nativo macOS em Swift/SwiftUI.
-- **Alunos:** página web servida pelo próprio Mac do professor — basta abrir `http://<ip-do-professor>:8080`.
+- **Alunos:** página web servida pelo próprio Mac do professor — basta digitar `<ip-do-professor>:8080` no navegador (o `http://` é opcional).
 
 ## Funcionalidades
 

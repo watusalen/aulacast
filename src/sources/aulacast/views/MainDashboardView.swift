@@ -286,7 +286,7 @@ public struct MainDashboardView: View {
                 Text("Endereço dos alunos na rede local")
                     .font(.system(size: 12))
                     .foregroundColor(AC.textSecondary)
-                Text(viewModel.serverURLString)
+                Text(viewModel.displayAddress)
                     .font(.system(size: 23, weight: .semibold, design: .monospaced))
                     .foregroundColor(AC.textPrimary)
                     .textSelection(.enabled)
