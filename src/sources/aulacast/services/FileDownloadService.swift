@@ -1,6 +1,19 @@
 import Foundation
 import Network
 
+/// Quantos alunos estão baixando e quantos já baixaram um arquivo.
+public struct FileDownloadStats: Equatable {
+    public let fileId: String
+    public let emAndamento: Int
+    public let concluidos: Int
+
+    public init(fileId: String, emAndamento: Int, concluidos: Int) {
+        self.fileId = fileId
+        self.emAndamento = emAndamento
+        self.concluidos = concluidos
+    }
+}
+
 /// Entrega os arquivos compartilhados pelo professor (SRP).
 ///
 /// Qualquer tipo de arquivo: o navegador recebe `application/octet-stream` com
@@ -15,12 +28,49 @@ public final class FileDownloadService {
     private var arquivos: [String: SharedFile] = [:]
     private let trava = NSLock()
 
+    /// Downloads em andamento e alunos (pelo IP) que já baixaram cada arquivo até o fim.
+    private var emAndamento: [String: Int] = [:]
+    private var concluidos: [String: Set<String>] = [:]
+
+    /// Avisado a cada download que começa ou termina, para o professor acompanhar.
+    public var onEstatisticas: ((FileDownloadStats) -> Void)?
+
     public init() {}
+
+    private func estatisticas(_ id: String) -> FileDownloadStats {
+        FileDownloadStats(fileId: id, emAndamento: emAndamento[id] ?? 0, concluidos: concluidos[id]?.count ?? 0)
+    }
+
+    private func comecou(_ id: String) {
+        trava.lock()
+        emAndamento[id, default: 0] += 1
+        let agora = estatisticas(id)
+        trava.unlock()
+        onEstatisticas?(agora)
+    }
+
+    /// `ip` só quando o arquivo saiu inteiro: download cancelado não conta como baixado.
+    private func terminou(_ id: String, ip: String?) {
+        trava.lock()
+        emAndamento[id] = max(0, (emAndamento[id] ?? 1) - 1)
+        if let ip { concluidos[id, default: []].insert(ip) }
+        let agora = estatisticas(id)
+        trava.unlock()
+        onEstatisticas?(agora)
+    }
+
+    private static func ip(de connection: NWConnection) -> String {
+        if case .hostPort(let host, _) = connection.endpoint { return "\(host)" }
+        return "desconhecido"
+    }
 
     /// Troca a lista inteira do que pode ser baixado.
     public func atualizar(_ lista: [SharedFile]) {
         trava.lock()
         arquivos = Dictionary(uniqueKeysWithValues: lista.map { ($0.id, $0) })
+        // Contagens de arquivos que saíram da lista não servem mais a ninguém.
+        let ids = Set(arquivos.keys)
+        concluidos = concluidos.filter { ids.contains($0.key) }
         trava.unlock()
     }
 
@@ -52,42 +102,52 @@ public final class FileDownloadService {
             + "X-Content-Type-Options: nosniff\r\n"
             + "Connection: close\r\n\r\n"
 
+        comecou(arquivo.id)
+        let ip = Self.ip(de: connection)
+        // Chamado uma única vez por download, com sucesso ou não.
+        let terminar: (Bool) -> Void = { [weak self] inteiro in
+            try? leitor.close()
+            self?.terminou(arquivo.id, ip: inteiro ? ip : nil)
+        }
+
         connection.send(content: Data(cabecalho.utf8), completion: .contentProcessed({ [weak self] erro in
-            guard erro == nil else {
-                try? leitor.close()
+            guard erro == nil, let self else {
+                terminar(false)
                 connection.cancel()
                 return
             }
-            self?.enviarPedaco(de: leitor, por: connection)
+            self.enviarPedaco(de: leitor, por: connection, terminar: terminar)
         }))
     }
 
-    private func enviarPedaco(de leitor: FileHandle, por connection: NWConnection) {
+    private func enviarPedaco(de leitor: FileHandle, por connection: NWConnection, terminar: @escaping (Bool) -> Void) {
         let pedaco: Data
         do {
             pedaco = try leitor.read(upToCount: Self.tamanhoDoPedaco) ?? Data()
         } catch {
-            try? leitor.close()
+            terminar(false)
             connection.cancel()
             return
         }
 
         guard !pedaco.isEmpty else {
             // Fim do arquivo: fecha a escrita e deixa o navegador concluir o download.
-            try? leitor.close()
             connection.send(content: nil, contentContext: .finalMessage, isComplete: true,
-                            completion: .contentProcessed({ _ in connection.cancel() }))
+                            completion: .contentProcessed({ erro in
+                                terminar(erro == nil)
+                                connection.cancel()
+                            }))
             return
         }
 
         connection.send(content: pedaco, completion: .contentProcessed({ [weak self] erro in
-            guard erro == nil else {
+            guard erro == nil, let self else {
                 // O aluno cancelou o download ou saiu da rede.
-                try? leitor.close()
+                terminar(false)
                 connection.cancel()
                 return
             }
-            self?.enviarPedaco(de: leitor, por: connection)
+            self.enviarPedaco(de: leitor, por: connection, terminar: terminar)
         }))
     }
 

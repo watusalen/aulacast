@@ -96,6 +96,7 @@ final class FakeServer: NetworkServerProtocol {
     /// Última lista de arquivos entregue ao servidor.
     private(set) var arquivosCompartilhados: [SharedFile] = []
     func updateSharedFiles(_ files: [SharedFile]) { arquivosCompartilhados = files }
+    var onFileDownloadUpdate: ((FileDownloadStats) -> Void)?
     func broadcastChatMessage(_ message: ChatMessage) {}
     func broadcastControlMessage(type: String, payload: [String: String]?) {
         controlMessages.append((type: type, payload: payload))

@@ -24,6 +24,13 @@ public final class MainViewModel: ObservableObject {
     /// Arquivos que a turma pode baixar agora, na ordem em que foram compartilhados.
     @Published public private(set) var sharedFiles: [SharedFile] = []
 
+    /// Downloads em andamento e concluídos de cada arquivo, pelo id.
+    ///
+    /// Compartilhar não envia nada: o arquivo fica no Mac e cada aluno baixa direto dele
+    /// quando toca no link. Por isso o que o professor precisa ver não é uma barra de
+    /// "enviando", e sim quem está baixando e quem já baixou.
+    @Published public private(set) var fileDownloadStats: [String: FileDownloadStats] = [:]
+
     /// Recado sobre o último compartilhamento (uma pasta escolhida, um arquivo ilegível).
     @Published public var sharedFilesNotice: String?
 
@@ -139,6 +146,13 @@ public final class MainViewModel: ObservableObject {
         self.serverService.onFailure = { [weak self] mensagem in
             Task { @MainActor in self?.serverDidFail(mensagem) }
         }
+        self.serverService.onFileDownloadUpdate = { [weak self] estatisticas in
+            Task { @MainActor in
+                // Um download que termina depois de o arquivo sair da lista não o traz de volta.
+                guard let self, self.sharedFiles.contains(where: { $0.id == estatisticas.fileId }) else { return }
+                self.fileDownloadStats[estatisticas.fileId] = estatisticas
+            }
+        }
 
         self.updateServerURL()
 
@@ -185,6 +199,7 @@ public final class MainViewModel: ObservableObject {
     /// Tira o arquivo da lista: some da página dos alunos e o link para de funcionar.
     public func removeSharedFile(id: String) {
         sharedFiles.removeAll { $0.id == id }
+        fileDownloadStats.removeValue(forKey: id)
         serverService.updateSharedFiles(sharedFiles)
     }
 

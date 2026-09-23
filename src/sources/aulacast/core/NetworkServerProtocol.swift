@@ -23,6 +23,8 @@ public protocol NetworkServerProtocol: AnyObject {
     func broadcastControlMessage(type: String, payload: [String: String]?)
     /// Troca a lista de arquivos que a turma pode baixar e avisa quem está conectado.
     func updateSharedFiles(_ files: [SharedFile])
+    /// Avisado quando um download de arquivo compartilhado começa ou termina.
+    var onFileDownloadUpdate: ((FileDownloadStats) -> Void)? { get set }
 }
 
 /// Servidor capaz de anunciar a si mesmo via Bonjour, na própria porta.

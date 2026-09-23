@@ -1806,6 +1806,83 @@ struct AulaCastTestRunner {
         )
         assertTest(vmPadrao.serverService.port == 8114, "A porta da turma é a que foi fixada")
 
+        // TESTE 25: O professor acompanha os downloads de cada arquivo.
+        print("\n--- [25/25] Testes: acompanhamento dos downloads ---")
+
+        final class ColetorDeDownloads: @unchecked Sendable {
+            private let trava = NSLock(); private var _eventos: [FileDownloadStats] = []
+            var eventos: [FileDownloadStats] { trava.lock(); defer { trava.unlock() }; return _eventos }
+            func anotar(_ e: FileDownloadStats) { trava.lock(); _eventos.append(e); trava.unlock() }
+        }
+        let pastaDl = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_dl_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: pastaDl, withIntermediateDirectories: true)
+        let arquivoDl = pastaDl.appendingPathComponent("material.zip")
+        try? Data(repeating: 0x5A, count: 3 * 1024 * 1024).write(to: arquivoDl)
+        let compartilhado = SharedFile(name: "material.zip", url: arquivoDl, size: 3 * 1024 * 1024)
+
+        let servidorDl = NetworkListenerService(port: 8117, webAssetsPath: FileManager.default.temporaryDirectory)
+        let coletorDl = ColetorDeDownloads()
+        servidorDl.onFileDownloadUpdate = { coletorDl.anotar($0) }
+        servidorDl.updateSharedFiles([compartilhado])
+        do {
+            try servidorDl.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let urlDl = URL(string: "http://127.0.0.1:8117/arquivos/\(compartilhado.id)")!
+
+            _ = try? await URLSession.shared.data(from: urlDl)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            assertTest(coletorDl.eventos.first?.emAndamento == 1, "O professor vê o download começar")
+            assertTest(coletorDl.eventos.last == FileDownloadStats(fileId: compartilhado.id, emAndamento: 0, concluidos: 1),
+                       "Download completo: nada em andamento e 1 aluno com o arquivo")
+
+            _ = try? await URLSession.shared.data(from: urlDl)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            assertTest(coletorDl.eventos.last?.concluidos == 1, "O mesmo aluno baixando de novo não conta duas vezes")
+
+            // Download interrompido no meio: não conta como baixado.
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(UInt16(8117).bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            _ = "GET /arquivos/\(compartilhado.id) HTTP/1.1\r\nHost: x\r\n\r\n".withCString { send(fd, $0, strlen($0), 0) }
+            var pedaco = [UInt8](repeating: 0, count: 4096)
+            _ = recv(fd, &pedaco, pedaco.count, 0)
+            var linger_ = linger(l_onoff: 1, l_linger: 0)
+            setsockopt(fd, SOL_SOCKET, SO_LINGER, &linger_, socklen_t(MemoryLayout<linger>.size))
+            close(fd)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            assertTest(coletorDl.eventos.last?.emAndamento == 0, "Download interrompido sai de 'baixando'")
+            assertTest(coletorDl.eventos.last?.concluidos == 1, "Download interrompido não conta como baixado")
+            servidorDl.stop()
+        } catch {
+            assertTest(false, "Falha no teste de acompanhamento: \(error.localizedDescription)")
+        }
+        try? FileManager.default.removeItem(at: pastaDl)
+
+        // O painel só guarda contagem de arquivo que ainda está na lista.
+        let servidorContagem = FakeServer()
+        let vmContagem = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: servidorContagem, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
+        )
+        let pastaContagem = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast_ct_\(UUID().uuidString).txt")
+        try? Data("oi".utf8).write(to: pastaContagem)
+        vmContagem.shareFiles([pastaContagem])
+        let idContagem = vmContagem.sharedFiles.first?.id ?? ""
+        servidorContagem.onFileDownloadUpdate?(FileDownloadStats(fileId: idContagem, emAndamento: 1, concluidos: 2))
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        assertTest(vmContagem.fileDownloadStats[idContagem]?.concluidos == 2, "A contagem chega ao painel do professor")
+        vmContagem.removeSharedFile(id: idContagem)
+        servidorContagem.onFileDownloadUpdate?(FileDownloadStats(fileId: idContagem, emAndamento: 0, concluidos: 3))
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        assertTest(vmContagem.fileDownloadStats[idContagem] == nil,
+                   "Download que termina depois de o arquivo sair da lista não o traz de volta")
+        try? FileManager.default.removeItem(at: pastaContagem)
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

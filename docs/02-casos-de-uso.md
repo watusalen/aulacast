@@ -129,6 +129,7 @@
   2. O sistema registra cada arquivo com um identificador sorteado e envia a lista nova a todos os alunos conectados (`FILES`).
   3. A página do aluno mostra "Arquivos do professor" com nome e tamanho; no celular, o botão do menu ganha um ponto e o chat avisa "O professor compartilhou: …".
   4. O aluno toca no arquivo e o navegador o baixa (`GET /arquivos/<id>`), com o nome original.
+  5. No painel do professor, cada arquivo mostra "Disponível para N alunos" (a lista já chegou à página deles), e, conforme a turma baixa, "baixando (n)" e "baixado por n alunos". Compartilhar não envia nada — o arquivo fica no Mac e cada aluno baixa direto dele —, então o que o professor acompanha são os downloads, não um envio.
 - **Fluxos Alternativos:**
   - *FA-01 (Parar de compartilhar):* O professor remove o arquivo da lista; ele some da página dos alunos e o link passa a responder 404.
   - *FA-02 (Aluno chega depois):* A lista vai nas boas-vindas (`CONNECTED`).

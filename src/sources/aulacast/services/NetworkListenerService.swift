@@ -36,6 +36,10 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
 
     public var onFailure: ((String) -> Void)?
 
+    public var onFileDownloadUpdate: ((FileDownloadStats) -> Void)? {
+        didSet { downloads.onEstatisticas = onFileDownloadUpdate }
+    }
+
     private var listener: NWListener?
     /// Anúncio Bonjour pedido para este servidor, aplicado também quando ele (re)sobe.
     private var anuncio: NWListener.Service?
