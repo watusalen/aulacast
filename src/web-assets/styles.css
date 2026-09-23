@@ -1377,6 +1377,16 @@ input {
   font-size: 20px;
 }
 
+/* Alvo de toque de 48 px sem aumentar o botão visualmente: 40 px fica abaixo do mínimo
+   do Material (48 dp) e é o controle mais fácil de errar no rodapé do chat, colado ao
+   campo de texto. Mesma técnica de `.fixada-mais::after`: `::before` já é a camada de
+   estado (hover/toque) de `.botao-icone` e não pode virar a área de toque também. */
+.btn-send::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
 /* Com texto no campo, o enviar fica preenchido, como no professor. */
 .pilula:has(.input-msg:not(:placeholder-shown):enabled) .btn-send {
   background: var(--primary);
@@ -1682,10 +1692,17 @@ input {
     padding: max(8px, env(safe-area-inset-top)) env(safe-area-inset-right) max(8px, env(safe-area-inset-bottom)) 0;
   }
 
-  .barra-estado,
-  .barra-paineis {
+  .barra-estado {
     flex-direction: column;
     gap: 4px;
+  }
+
+  /* 8 px e não 4: aqui, diferente de .barra-estado (só o chip, que não é botão), os dois
+     ícones empilhados (Chat, Arquivos) são alvo de toque de verdade, e o Material pede
+     uns 8 dp entre alvos vizinhos para não errar o botão de baixo tentando o de cima. */
+  .barra-paineis {
+    flex-direction: column;
+    gap: 8px;
   }
 
   /* Só o ponto colorido: o palco já diz em texto se está pausado ou reconectando. */
