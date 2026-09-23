@@ -84,7 +84,9 @@ function montar({ estreita = false, armazenado = {}, telaCheia = true, modoApp =
     filesBadge: criarElemento(),
     chatArea: criarElemento(),
     filesArea: criarElemento(),
-    studentBadge: criarElemento()
+    studentBadge: criarElemento(),
+    stage: criarElemento('stage'),
+    videoControls: criarElemento('controles-video')
   };
   el.reconnectOverlay.hidden = true;
   el.disconnectedState.hidden = true;
@@ -92,7 +94,9 @@ function montar({ estreita = false, armazenado = {}, telaCheia = true, modoApp =
   el.filesArea.hidden = true;
 
   const telaCheiaPedida = [];
-  const documentElement = telaCheia ? { requestFullscreen() { telaCheiaPedida.push('entrar'); } } : {};
+  // Quem vai para a tela cheia é o palco (só a imagem, como no YouTube), não a página.
+  if (telaCheia) el.stage.requestFullscreen = () => telaCheiaPedida.push('entrar');
+  const documentElement = { requestFullscreen() { telaCheiaPedida.push('página inteira'); } };
   const ouvintesDoDocumento = {};
   globalThis.document = {
     getElementById: (id) => el[id] ?? null,
@@ -392,9 +396,33 @@ test('ehCampoDeTexto separa campos de texto de botões e caixas de marcar', () =
   assert.strictEqual(ehCampoDeTexto(null), false);
 });
 
+test('Duplo clique na imagem entra e sai da tela cheia; no botão, não conta duas vezes', () => {
+  const { el, telaCheiaPedida } = novoController();
+  el.stage.dispatch('dblclick', { target: { closest: () => null } });
+  assert.deepStrictEqual(telaCheiaPedida, ['entrar'], 'vai o palco, não a página inteira');
+
+  el.stage.dispatch('dblclick', { target: { closest: (s) => (s === 'button' ? {} : null) } });
+  assert.deepStrictEqual(telaCheiaPedida, ['entrar']);
+});
+
+test('Os controles da imagem somem com o mouse parado ou fora dela, e voltam ao mexer', async () => {
+  const { el } = novoController();
+  el.stage.dispatch('pointerleave');
+  assert.strictEqual(el.stage.classList.contains('ocioso'), true, 'mouse saiu: some na hora');
+
+  el.stage.dispatch('pointermove');
+  assert.strictEqual(el.stage.classList.contains('ocioso'), false, 'mexeu: aparece');
+
+  // Na tela cheia, sair da imagem não esconde (a imagem é a tela toda).
+  globalThis.document.fullscreenElement = el.stage;
+  el.stage.dispatch('pointerleave');
+  assert.strictEqual(el.stage.classList.contains('ocioso'), false);
+});
+
 test('Sem a API de tela cheia (iPhone), o botão some e a tecla F não faz nada', () => {
   const { el, tecla, telaCheiaPedida } = novoController({ telaCheia: false });
   assert.strictEqual(el.fullscreenBtn.hidden, true);
+  assert.strictEqual(el.videoControls.hidden, true, 'sem botão, sem o degradê por cima da imagem');
   assert.doesNotThrow(() => tecla({ key: 'f', target: { tagName: 'BODY' } }));
   assert.deepStrictEqual(telaCheiaPedida, []);
 });

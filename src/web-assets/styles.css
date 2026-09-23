@@ -674,6 +674,87 @@ input {
   display: block;
 }
 
+/* Tela cheia como a do YouTube: só o palco vai para a tela cheia, sem cantos e em preto.
+   As duas regras ficam separadas de propósito: juntar `:fullscreen` e o prefixo do
+   Safari num mesmo seletor faz o navegador que não conhece um deles descartar a regra. */
+.stage:fullscreen {
+  border-radius: 0;
+  background: #000;
+}
+
+.stage:-webkit-full-screen {
+  border-radius: 0;
+  background: #000;
+}
+
+/* Controles do player no canto de baixo à direita, como no YouTube, sobre um degradê
+   para aparecer em cima de slide claro. Somem quando o mouse para ou sai da imagem. */
+.controles-video {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 7;
+  display: flex;
+  justify-content: flex-end;
+  padding: 40px 16px 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, .5), transparent);
+  pointer-events: none;
+  transition: opacity var(--t-padrao) var(--efeito);
+}
+
+.controles-video[hidden] {
+  display: none;
+}
+
+.controles-video .botao-palco {
+  pointer-events: auto;
+}
+
+.stage:fullscreen .controles-video {
+  padding: 64px max(32px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) 32px;
+}
+
+.stage:-webkit-full-screen .controles-video {
+  padding: 64px max(32px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) 32px;
+}
+
+.botao-palco {
+  color: #FFFFFF;
+  background: rgba(40, 42, 44, .72);
+}
+
+.stage.ocioso .controles-video {
+  opacity: 0;
+}
+
+.stage.ocioso .controles-video .botao-palco {
+  pointer-events: none;
+}
+
+/* Na tela cheia, o cursor some junto com os controles. */
+.stage.ocioso:fullscreen {
+  cursor: none;
+}
+
+.stage.ocioso:-webkit-full-screen {
+  cursor: none;
+}
+
+/* Sem mouse (celular, tablet) não há "passar por cima": o botão fica sempre à vista, sem
+   o degradê, para não escurecer a imagem o tempo todo. */
+@media (hover: none) {
+  .controles-video {
+    background: none;
+  }
+
+  .stage.ocioso .controles-video {
+    opacity: 1;
+  }
+
+  .stage.ocioso .controles-video .botao-palco {
+    pointer-events: auto;
+  }
+}
+
 /* Estados vazios do palco: aguardando a transmissão e transmissão encerrada. */
 .placeholder {
   position: absolute;
@@ -843,11 +924,11 @@ input {
    Barra de controles (embaixo), no estilo do Meet
    ------------------------------------------------------------------ */
 
-/* Três seções: as laterais com largura igual e flexível, o centro no meio de verdade. */
+/* Duas seções: o estado à esquerda, os painéis à direita. */
 .control-bar {
   flex: none;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   height: calc(80px + env(safe-area-inset-bottom));
@@ -859,12 +940,6 @@ input {
   align-items: center;
   gap: 12px;
   min-width: 0;
-}
-
-.barra-centro {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .barra-paineis {
@@ -1525,7 +1600,7 @@ input {
   }
 
   .control-bar {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     height: calc(72px + env(safe-area-inset-bottom));
     padding: 0 max(12px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(12px, env(safe-area-inset-left));
@@ -1608,7 +1683,6 @@ input {
   }
 
   .barra-estado,
-  .barra-centro,
   .barra-paineis {
     flex-direction: column;
     gap: 4px;

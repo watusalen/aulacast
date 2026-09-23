@@ -328,14 +328,18 @@ formas, fontes), servidos pelo próprio app, sem internet. O que mudou, e por qu
 turma, triado de forma enxuta em `docs/feedback-tela-do-aluno.md`):
 
 - **Palco + barra + painel, como no Meet:** a imagem num palco escuro; embaixo, o estado ("Ao
-  vivo", "Pausada", "Reconectando…") e o nome com que o aluno entrou, a tela cheia no centro e
-  os botões **Chat** e **Arquivos** à direita, cada um com seu contador. Uma área por vez no
+  vivo", "Pausada", "Reconectando…") e o nome com que o aluno entrou à esquerda, e os botões
+  **Chat** e **Arquivos** à direita, cada um com seu contador. Uma área por vez no
   painel lateral, que o aluno fecha para ganhar tela.
 - **Celular:** em pé, o painel sobe como folha por cima da imagem (tocar fora ou Esc fecha);
   deitado, a barra vira um trilho vertical à direita e a imagem ganha a altura inteira. Alvos
   de toque de 48 px e margens do entalhe do iPhone (`safe-area-inset`).
-- **Tela cheia:** a tecla **F** entra e sai (ignorada enquanto se digita), e a tela cheia é a
-  página inteira, com a barra e o chat à mão. O Safari do iPhone não põe imagem em tela cheia;
+- **Tela cheia como a do YouTube:** vai para a tela cheia só a imagem (e os avisos de pausa e
+  reconexão), sem barra nem painel. O botão fica na própria imagem, no canto de baixo à
+  direita, como nos players: aparece quando o mouse passa por cima e some parado (na tela
+  cheia, o cursor some junto); no celular fica sempre à vista. A tecla **F** e o duplo clique
+  na imagem entram e saem. (Na primeira versão a tela cheia levava a página inteira, como no
+  Meet, e a turma achou que a tela "nunca ficava cheia".) O Safari do iPhone não põe imagem em tela cheia;
   lá o caminho é "Adicionar à Tela de Início": o `manifest.webmanifest` (`display:
   fullscreen`) e as metas `apple-mobile-web-app-*` abrem a aula como app, sem a barra do
   navegador.

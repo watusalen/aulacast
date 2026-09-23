@@ -8,6 +8,8 @@ import { StreamWatchdog } from './stream-watchdog.js';
 export const LARGURA_DA_GAVETA = '(max-width: 860px), (max-height: 500px)';
 const CHAVE_PAINEL_FECHADO = 'aulacast.painelFechado';
 const CHAVE_AREA = 'aulacast.areaDoPainel';
+/** Os controles da imagem (e, na tela cheia, o cursor) somem depois deste tempo parado. */
+const OCIOSIDADE_DOS_CONTROLES_MS = 2500;
 
 /** As áreas do painel: uma de cada vez, como no professor. */
 const TITULOS = { chat: 'Chat', arquivos: 'Arquivos' };
@@ -78,6 +80,8 @@ export class UIController {
     this.disconnectedState = document.getElementById('disconnectedState');
     this.pausedOverlay = document.getElementById('pausedOverlay');
     this.fullscreenBtn = document.getElementById('fullscreenBtn');
+    this.stage = document.getElementById('stage');
+    this.controlesDoVideo = document.getElementById('videoControls');
     this.sidebar = document.getElementById('sidebar');
     this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
     this.sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
@@ -497,21 +501,42 @@ export class UIController {
   }
 
   /**
-   * A página inteira vai para a tela cheia (como no Meet), e não só a imagem: a barra e
-   * o chat continuam à mão, e o botão de sair também.
+   * Tela cheia como a do YouTube: vai para a tela cheia só o palco (a imagem e os avisos
+   * de pausa e reconexão), e a barra e o painel somem. Antes ia a página inteira, como no
+   * Meet, e a turma reclamou que a tela "nunca ficava cheia de verdade".
+   *
+   * O botão fica no canto de baixo à direita da imagem, como nos players, e não na barra:
+   * aparece ao mexer o mouse sobre a imagem e some sozinho (na tela cheia, com o cursor).
+   * Duplo clique na imagem também entra e sai.
    *
    * O botão some onde não há como: o Safari do iPhone só põe <video> em tela cheia (lá o
    * caminho é "Adicionar à Tela de Início"), e a aula aberta como app em tela cheia já
    * está sem a barra do navegador.
    */
   configurarTelaCheia() {
-    this.alvoDaTelaCheia = document.documentElement || null;
+    this.alvoDaTelaCheia = this.stage || null;
     const alvo = this.alvoDaTelaCheia;
     this.podeTelaCheia = Boolean(alvo && (alvo.requestFullscreen || alvo.webkitRequestFullscreen));
     const jaSemBarra = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       && window.matchMedia('(display-mode: fullscreen)').matches;
     this.fullscreenBtn.hidden = !this.podeTelaCheia || jaSemBarra;
+    if (this.controlesDoVideo) this.controlesDoVideo.hidden = this.fullscreenBtn.hidden;
     this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    if (alvo && this.podeTelaCheia) {
+      alvo.addEventListener('dblclick', (e) => {
+        // O duplo clique no próprio botão já é tratado pelo clique.
+        if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('button')) return;
+        this.toggleFullscreen();
+      });
+      // Mexer o mouse (ou tocar) mostra os controles por um instante.
+      for (const evento of ['pointermove', 'pointerdown']) {
+        alvo.addEventListener(evento, () => this.mostrarControlesDoVideo());
+      }
+      // Fora da tela cheia, o mouse saindo da imagem esconde na hora, como no YouTube.
+      alvo.addEventListener('pointerleave', () => {
+        if (!this.emTelaCheia()) this.esconderControlesDoVideo();
+      });
+    }
     this.atualizarBotaoDeTelaCheia();
   }
 
@@ -525,6 +550,35 @@ export class UIController {
     this.fullscreenBtn.setAttribute('aria-pressed', String(cheia));
     this.fullscreenBtn.setAttribute('aria-label', rotulo);
     this.fullscreenBtn.title = rotulo;
+    // Ao entrar e ao sair, os controles aparecem por um instante: o aluno vê onde sair.
+    this.mostrarControlesDoVideo();
+  }
+
+  /** Mostra os controles e, sem movimento por 2,5 s, esconde (na tela cheia, o cursor também). */
+  mostrarControlesDoVideo() {
+    if (!this.stage) return;
+    this.stage.classList.remove('ocioso');
+    this.limparOciosidade();
+    this.timerDeOciosidade = setTimeout(() => {
+      this.timerDeOciosidade = null;
+      this.esconderControlesDoVideo();
+    }, OCIOSIDADE_DOS_CONTROLES_MS);
+    // O timer não pode segurar o processo aberto nos testes (Node).
+    if (this.timerDeOciosidade && typeof this.timerDeOciosidade.unref === 'function') {
+      this.timerDeOciosidade.unref();
+    }
+  }
+
+  esconderControlesDoVideo() {
+    this.limparOciosidade();
+    if (this.stage) this.stage.classList.add('ocioso');
+  }
+
+  limparOciosidade() {
+    if (this.timerDeOciosidade) {
+      clearTimeout(this.timerDeOciosidade);
+      this.timerDeOciosidade = null;
+    }
   }
 
   toggleFullscreen() {
