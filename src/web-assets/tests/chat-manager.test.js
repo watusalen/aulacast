@@ -6,53 +6,70 @@ import assert from 'node:assert';
  * Antes, este arquivo declarava uma função de formatação dentro do próprio teste e
  * verificava um formato que o aplicativo nunca produziu — não cobria nada.
  */
-function montarDomFalso() {
-  const criarElemento = () => {
-    const el = {
-      className: '',
-      textContent: '',
-      value: '',
-      filhos: [],
-      scrollTop: 0,
-      scrollHeight: 100,
-      hidden: false,
-      disabled: false,
-      attrs: {},
-      href: '',
-      setAttribute(nome, valor) { this.attrs[nome] = valor; },
-      appendChild(filho) { this.filhos.push(filho); },
-      addEventListener() {},
-      blur() {}
-    };
-    return el;
+function criarElemento(tag = 'div') {
+  const el = {
+    tagName: tag.toUpperCase(),
+    className: '',
+    textContent: '',
+    value: '',
+    filhos: [],
+    scrollTop: 0,
+    scrollHeight: 100,
+    clientHeight: 0,
+    hidden: false,
+    disabled: false,
+    attrs: {},
+    href: '',
+    listeners: {},
+    classes: new Set(),
+    classList: {
+      add: (c) => el.classes.add(c),
+      remove: (c) => el.classes.delete(c),
+      contains: (c) => el.classes.has(c)
+    },
+    get firstChild() { return el.filhos[0] || null; },
+    setAttribute(nome, valor) { el.attrs[nome] = valor; },
+    appendChild(filho) { el.filhos.push(filho); },
+    removeChild(filho) { el.filhos.splice(el.filhos.indexOf(filho), 1); },
+    addEventListener(evt, fn) { (el.listeners[evt] ||= []).push(fn); },
+    dispatch(evt) { (el.listeners[evt] || []).forEach((fn) => fn()); },
+    blur() {}
   };
-
-  const elementos = {
-    chatForm: criarElemento(),
-    chatMessageInput: criarElemento(),
-    chatMessages: criarElemento(),
-    chatSendBtn: criarElemento()
-  };
-
-  globalThis.document = {
-    getElementById: (id) => elementos[id] ?? null,
-    createElement: () => criarElemento()
-  };
-
-  return elementos;
+  return el;
 }
 
-const elementos = montarDomFalso();
+const elementos = {
+  chatForm: criarElemento('form'),
+  chatMessageInput: criarElemento('input'),
+  chatMessages: criarElemento(),
+  chatSendBtn: criarElemento('button'),
+  chatPinned: criarElemento(),
+  chatPinnedText: criarElemento('p'),
+  chatPinnedMore: criarElemento('button')
+};
+elementos.chatPinned.hidden = true;
+
+globalThis.document = {
+  getElementById: (id) => elementos[id] ?? null,
+  createElement: (tag) => criarElemento(tag),
+  createTextNode: (texto) => ({ tagName: '#text', textContent: texto })
+};
+
 const { ChatManager } = await import('../js/chat-manager.js');
 
-/** Texto do autor da última mensagem inserida no histórico. */
-function autorDaUltimaMensagem(chatMessages) {
-  const bolha = chatMessages.filhos[chatMessages.filhos.length - 1];
-  return bolha.filhos[0].textContent;
+function ultima() {
+  return elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
 }
 
-function classeDaUltimaMensagem(chatMessages) {
-  return chatMessages.filhos[chatMessages.filhos.length - 1].className;
+/** Nome e hora da última mensagem ("Professor", "10:42"). */
+function cabecaDaUltima() {
+  const [autor, hora] = ultima().filhos[0].filhos;
+  return { autor: autor.textContent, hora: hora.textContent };
+}
+
+/** O elemento com o texto da última mensagem. */
+function textoDaUltima() {
+  return ultima().filhos[1];
 }
 
 test('Mensagem do professor mostra o remetente do servidor sem "Prof. Professor"', () => {
@@ -60,33 +77,35 @@ test('Mensagem do professor mostra o remetente do servidor sem "Prof. Professor"
   // É isto que o servidor manda de verdade (ChatManagerService).
   chat.appendMessage('Professor', 'Aumentei a fonte do terminal.', true);
 
-  const autor = autorDaUltimaMensagem(elementos.chatMessages);
-  assert.match(autor, /^Professor · \d{2}:\d{2}$/);
-  assert.match(classeDaUltimaMensagem(elementos.chatMessages), /prof/);
+  const { autor, hora } = cabecaDaUltima();
+  assert.strictEqual(autor, 'Professor');
+  assert.match(hora, /^\d{2}:\d{2}$/);
+  assert.match(ultima().className, /msg-prof/);
 });
 
 test('Mensagem de aluno não recebe prefixo de professor', () => {
   const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
   chat.appendMessage('Carlos Eduardo', 'Dá pra aumentar a fonte?', false);
 
-  const autor = autorDaUltimaMensagem(elementos.chatMessages);
-  assert.match(autor, /^Carlos Eduardo · \d{2}:\d{2}$/);
-  assert.ok(!autor.includes('Prof.'));
+  assert.strictEqual(cabecaDaUltima().autor, 'Carlos Eduardo');
+  assert.ok(!ultima().className.includes('msg-prof'));
 });
 
-test('A própria mensagem do aluno é marcada como "own"', () => {
+test('A própria mensagem do aluno aparece como "Você"', () => {
   const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
   chat.appendMessage('Ana Beatriz', 'Deu certo aqui!', false);
 
-  assert.match(classeDaUltimaMensagem(elementos.chatMessages), /own/);
+  assert.strictEqual(cabecaDaUltima().autor, 'Você');
+  assert.match(ultima().className, /msg-own/);
 });
 
-test('Mensagem do professor nunca é marcada como "own"', () => {
+test('Mensagem do professor nunca é marcada como do aluno', () => {
   const chat = new ChatManager(() => {}, () => 'Ana Beatriz');
   // Mesmo que o nome coincida com o do aluno, ser do professor tem precedência.
   chat.appendMessage('Ana Beatriz', 'Resposta do professor.', true);
 
-  assert.ok(!classeDaUltimaMensagem(elementos.chatMessages).includes('own'));
+  assert.ok(!ultima().className.includes('msg-own'));
+  assert.strictEqual(cabecaDaUltima().autor, 'Ana Beatriz');
 });
 
 test('O texto da mensagem é preservado', () => {
@@ -94,8 +113,29 @@ test('O texto da mensagem é preservado', () => {
   const texto = 'Qual a diferença entre let e var?';
   chat.appendMessage('Carlos Eduardo', texto, false);
 
-  const bolha = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
-  assert.strictEqual(bolha.filhos[1].textContent, texto);
+  assert.strictEqual(textoDaUltima().textContent, texto);
+});
+
+test('Links do professor viram clicáveis, abrindo em outra aba', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana');
+  chat.appendMessage('Professor', 'Material em https://portal.edu.br/aula3. Boa leitura!', true);
+
+  const [antes, link, depois] = textoDaUltima().filhos;
+  assert.strictEqual(antes.textContent, 'Material em ');
+  assert.strictEqual(link.tagName, 'A');
+  assert.strictEqual(link.href, 'https://portal.edu.br/aula3');
+  assert.strictEqual(link.textContent, 'https://portal.edu.br/aula3', 'sem o ponto final da frase');
+  assert.strictEqual(link.target, '_blank');
+  assert.strictEqual(link.rel, 'noopener noreferrer');
+  assert.strictEqual(depois.textContent, '. Boa leitura!');
+});
+
+test('Nas mensagens do próprio aluno os links ficam como texto', () => {
+  const chat = new ChatManager(() => {}, () => 'Ana');
+  chat.appendMessage('Ana', 'olha https://x.com', false);
+
+  assert.strictEqual(textoDaUltima().filhos.length, 0, 'nenhum <a> criado');
+  assert.strictEqual(textoDaUltima().textContent, 'olha https://x.com');
 });
 
 test('Enviar mensagem manda só o texto: o remetente é o nome que o servidor validou', () => {
@@ -121,7 +161,7 @@ test('Sem conexão a mensagem fica no campo e o aluno é avisado', () => {
 
   assert.strictEqual(elementos.chatMessageInput.value, 'Pergunta importante', 'o texto não some');
   assert.strictEqual(elementos.chatMessages.filhos.length, antes + 1, 'aparece um aviso');
-  assert.match(classeDaUltimaMensagem(elementos.chatMessages), /system/);
+  assert.strictEqual(ultima().className, 'chat-aviso');
 });
 
 test('Mensagem vazia ou só com espaços não é enviada', () => {
@@ -214,6 +254,7 @@ test('Arquivo novo vira uma linha de sistema, sem nada para clicar', () => {
   assert.strictEqual(linha.className, 'chat-event');
   assert.strictEqual(linha.attrs.role, 'status');
   assert.strictEqual(linha.filhos[0].textContent, 'Novo arquivo: Lista 3.pdf');
+  assert.strictEqual(linha.filhos[0].attrs.title, 'Lista 3.pdf', 'o nome inteiro fica na dica');
   assert.match(linha.filhos[1].textContent, /^\d{2}:\d{2}$/);
   const temLink = (el) => el.href || (el.filhos || []).some(temLink);
   assert.ok(!temLink(linha), 'o download fica só na lista de Arquivos');
@@ -226,15 +267,13 @@ test('Vários arquivos: a linha diz quantos, sem listar nomes', () => {
     { id: 'b', name: '<b>c</b>.txt', size: 5 },
     { id: 'c', name: 'c.pdf', size: 5 }
   ]);
-  const linha = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
-  assert.strictEqual(linha.filhos[0].textContent, '3 arquivos novos');
+  assert.strictEqual(ultima().filhos[0].textContent, '3 arquivos novos');
 });
 
 test('Nome com HTML aparece como texto na linha de sistema', () => {
   const chat = new ChatManager(() => true, () => 'Ana');
   chat.mostrarArquivosNovos([{ id: 'h', name: '<img src=x onerror=alert(1)>', size: 1 }]);
-  const linha = elementos.chatMessages.filhos[elementos.chatMessages.filhos.length - 1];
-  assert.strictEqual(linha.filhos[0].textContent, 'Novo arquivo: <img src=x onerror=alert(1)>');
+  assert.strictEqual(ultima().filhos[0].textContent, 'Novo arquivo: <img src=x onerror=alert(1)>');
 });
 
 test('Lista vazia não cria aviso', () => {
@@ -242,4 +281,67 @@ test('Lista vazia não cria aviso', () => {
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([]);
   assert.strictEqual(elementos.chatMessages.filhos.length, antes);
+});
+
+test('Mão abaixada pelo professor vira uma linha de sistema com o ícone da mão', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  chat.mostrarMaoAbaixada();
+  assert.strictEqual(ultima().className, 'chat-event mao');
+  assert.strictEqual(ultima().filhos[0].textContent, 'O professor abaixou sua mão');
+});
+
+// MARK: - Mensagem fixada
+
+test('Fixar mostra o cartão no topo, com os links clicáveis', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  const novidade = chat.fixar('Portal do aluno: www.portal.edu.br');
+
+  assert.strictEqual(novidade, true);
+  assert.strictEqual(elementos.chatPinned.hidden, false);
+  const [texto, link] = elementos.chatPinnedText.filhos;
+  assert.strictEqual(texto.textContent, 'Portal do aluno: ');
+  assert.strictEqual(link.href, 'http://www.portal.edu.br');
+});
+
+test('Trocar a fixada substitui o texto; a mesma de novo não é novidade', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  chat.fixar('primeira');
+  assert.strictEqual(chat.fixar('segunda'), true);
+  assert.strictEqual(elementos.chatPinnedText.filhos.length, 1);
+  assert.strictEqual(elementos.chatPinnedText.filhos[0].textContent, 'segunda');
+  assert.strictEqual(chat.fixar('segunda'), false, 'repetida (ex.: reconexão) não conta');
+});
+
+test('Fixada nula ou vazia desafixa', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+  chat.fixar('algo');
+  assert.strictEqual(chat.fixar(null), false);
+  assert.strictEqual(elementos.chatPinned.hidden, true);
+
+  chat.fixar('algo');
+  chat.fixar('   ');
+  assert.strictEqual(elementos.chatPinned.hidden, true);
+});
+
+test('"Ver mais" aparece só quando o texto passa de 3 linhas, e abre e fecha', () => {
+  // Os ChatManagers dos testes anteriores também ouvem este botão: só o deste teste conta.
+  elementos.chatPinnedMore.listeners = {};
+  const chat = new ChatManager(() => true, () => 'Ana');
+  elementos.chatPinnedText.clientHeight = 60;
+  elementos.chatPinnedText.scrollHeight = 60;
+  chat.fixar('curta');
+  assert.strictEqual(elementos.chatPinnedMore.hidden, true, 'cabe em 3 linhas');
+
+  elementos.chatPinnedText.scrollHeight = 140;
+  chat.fixar('comprida '.repeat(40));
+  assert.strictEqual(elementos.chatPinnedMore.hidden, false);
+  assert.strictEqual(elementos.chatPinnedMore.textContent, 'Ver mais');
+
+  elementos.chatPinnedMore.dispatch('click');
+  assert.ok(elementos.chatPinned.classList.contains('expandida'));
+  assert.strictEqual(elementos.chatPinnedMore.textContent, 'Ver menos');
+  assert.strictEqual(elementos.chatPinnedMore.attrs['aria-expanded'], 'true');
+
+  elementos.chatPinnedMore.dispatch('click');
+  assert.ok(!elementos.chatPinned.classList.contains('expandida'));
 });

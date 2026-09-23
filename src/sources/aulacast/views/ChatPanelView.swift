@@ -1,12 +1,15 @@
 import SwiftUI
 
 /// Painel de chat do professor (SRP), no desenho do chat do Meet: o controle de quem pode
-/// escrever no topo, um aviso de privacidade, mensagens sem balões (nome, hora e texto) e
-/// o campo de mensagem em pílula embaixo.
+/// escrever no topo, um aviso de privacidade, a mensagem fixada para a turma, mensagens sem
+/// balões (nome, hora e texto) e o campo de mensagem em pílula embaixo.
 public struct ChatPanelView: View {
     @ObservedObject var viewModel: MainViewModel
     @ObservedObject private var chatManager: ChatManagerService
     @State private var messageText: String = ""
+    /// Mensagem sob o ponteiro: só ela mostra o botão de fixar, como as ações do Meet que
+    /// aparecem ao passar o mouse, para não encher o chat de botões.
+    @State private var mensagemSobOMouse: String?
 
     public init(viewModel: MainViewModel) {
         self.viewModel = viewModel
@@ -50,6 +53,11 @@ public struct ChatPanelView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
 
+            if let fixada = chatManager.pinnedMessage {
+                cartaoDaFixada(fixada)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             if chatManager.messages.isEmpty {
                 VStack(spacing: 10) {
                     M3Icone(nome: "forum", tamanho: 40)
@@ -89,6 +97,32 @@ public struct ChatPanelView: View {
 
             campoDeMensagem
         }
+        .animation(M3.Mola.padrao, value: chatManager.pinnedMessage?.id)
+    }
+
+    /// A fixada, como a turma a vê no topo do chat dela: um cartão tonal pequeno, com o
+    /// texto em até duas linhas (o texto inteiro fica na dica) e o botão de desafixar.
+    private func cartaoDaFixada(_ fixada: ChatMessage) -> some View {
+        HStack(spacing: 10) {
+            M3Icone(nome: "push_pin", tamanho: 18, preenchido: true)
+            Text(fixada.text)
+                .m3(.bodyMedium)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(fixada.text)
+                .accessibilityLabel("Fixada para a turma: \(fixada.text)")
+            M3BotaoDeIcone(icone: "keep_off", variante: .padrao, tamanho: 32, ajuda: "Desafixar") {
+                viewModel.unpinMessage()
+            }
+        }
+        .foregroundColor(M3.onSecondaryContainer)
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
+        .m3Superficie(M3.secondaryContainer, canto: M3.Canto.medio)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
     }
 
     private func mensagem(_ msg: ChatMessage) -> some View {
@@ -100,6 +134,11 @@ public struct ChatPanelView: View {
                 Text(msg.timestamp, style: .time)
                     .m3(.labelMedium)
                     .foregroundColor(M3.onSurfaceVariant)
+                if estaFixada(msg) {
+                    M3Icone(nome: "push_pin", tamanho: 14, preenchido: true)
+                        .foregroundColor(M3.onSurfaceVariant)
+                        .help("Fixada para a turma")
+                }
             }
             Text(msg.text)
                 .m3(.bodyMedium)
@@ -108,6 +147,38 @@ public struct ChatPanelView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Por cima do cabeçalho (nome e hora, sempre curto), para o botão aparecer e sumir
+        // sem empurrar o texto. Só nas mensagens do professor: as dos alunos são privadas e
+        // não podem ir para a tela da turma.
+        .overlay(alignment: .topTrailing) {
+            if msg.isProf, mensagemSobOMouse == msg.id {
+                let fixada = estaFixada(msg)
+                M3BotaoDeIcone(
+                    icone: fixada ? "keep_off" : "keep",
+                    variante: .padrao,
+                    tamanho: 32,
+                    ajuda: fixada ? "Desafixar" : "Fixar para a turma"
+                ) {
+                    if fixada { viewModel.unpinMessage() } else { viewModel.pinMessage(msg) }
+                }
+                .offset(y: -6)
+                .transition(.opacity)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { dentro in
+            guard msg.isProf else { return }
+            if dentro {
+                mensagemSobOMouse = msg.id
+            } else if mensagemSobOMouse == msg.id {
+                mensagemSobOMouse = nil
+            }
+        }
+        .animation(M3.Mola.efeito, value: mensagemSobOMouse == msg.id)
+    }
+
+    private func estaFixada(_ msg: ChatMessage) -> Bool {
+        chatManager.pinnedMessage?.id == msg.id
     }
 
     private var campoDeMensagem: some View {

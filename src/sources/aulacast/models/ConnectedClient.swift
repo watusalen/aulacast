@@ -14,13 +14,23 @@ public struct ConnectedClient: Identifiable, Codable, Hashable {
     /// O aluno já disse o nome, ou ainda está com o rótulo automático da conexão?
     public var hasIdentified: Bool
 
+    /// Quando o aluno levantou a mão, ou `nil` com a mão abaixada.
+    ///
+    /// Guardar o instante, e não só um sim/não, é o que permite pôr a lista na ordem de quem
+    /// pediu primeiro, como no Meet. A mão vale só para esta conexão: se o aluno reconecta,
+    /// a página dele manda de novo depois de se identificar.
+    public var handRaisedAt: Date?
+
+    public var isHandRaised: Bool { handRaisedAt != nil }
+
     public init(
         id: String = UUID().uuidString,
         name: String,
         ipAddress: String,
         connectedAt: Date = Date(),
         hasIdentified: Bool = false,
-        isWatching: Bool = true
+        isWatching: Bool = true,
+        handRaisedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -28,5 +38,6 @@ public struct ConnectedClient: Identifiable, Codable, Hashable {
         self.connectedAt = connectedAt
         self.hasIdentified = hasIdentified
         self.isWatching = isWatching
+        self.handRaisedAt = handRaisedAt
     }
 }

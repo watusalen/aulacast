@@ -23,7 +23,9 @@ export class EntryGate {
   tentarEntrarComIdentidadeSalva() {
     const salva = carregarIdentidade();
     if (!salva) return false;
-    this.concluir(salva);
+    // Entrou sozinho, sem toque: quem chama sabe que não há gesto do usuário agora (o
+    // que importa para manter a tela acesa, que o navegador só libera num gesto).
+    this.concluir(salva, { porGesto: false });
     return true;
   }
 
@@ -38,15 +40,16 @@ export class EntryGate {
       return;
     }
 
-    this.concluir({ name: nome });
+    // Dentro do envio do formulário: é um gesto do usuário.
+    this.concluir({ name: nome }, { porGesto: true });
   }
 
-  concluir(identidade) {
+  concluir(identidade, { porGesto = false } = {}) {
     salvarIdentidade(identidade);
     this.submitBtn.disabled = true;
     this.submitBtn.textContent = 'Entrando…';
     this.gate.hidden = true;
-    this.onIdentified(identidade);
+    this.onIdentified(identidade, { porGesto });
   }
 
   /** O servidor recusou (cliente adulterado ou nome vazio): traz a portaria de volta. */

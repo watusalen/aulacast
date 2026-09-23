@@ -7,6 +7,7 @@ public final class WebSocketHandlerService {
     public weak var chatObserver: ChatObserverProtocol?
     public weak var clientObserver: ClientObserverProtocol?
     public weak var presenceObserver: StudentPresenceObserverProtocol?
+    public weak var handRaiseObserver: HandRaiseObserverProtocol?
     public var isChatEnabled: Bool {
         get { lock.lock(); defer { lock.unlock() }; return chatLiberado }
         set { lock.lock(); chatLiberado = newValue; lock.unlock() }
@@ -30,6 +31,9 @@ public final class WebSocketHandlerService {
     /// Arquivos que a turma pode baixar, já no formato da mensagem. Vai também no
     /// CONNECTED: quem entra depois do professor compartilhar precisa ver a lista.
     private var arquivos: [[String: Any]] = []
+    /// Mensagem fixada no topo do chat da turma, repetida no CONNECTED pelo mesmo motivo
+    /// dos arquivos: quem entra no meio da aula precisa ver o link que o professor fixou.
+    private var mensagemFixada: String?
     private let lock = NSLock()
 
     /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
@@ -44,7 +48,7 @@ public final class WebSocketHandlerService {
     /// O navegador manda PING a cada 10 s; três batidas perdidas são conexão morta.
     public static let tempoMaximoOcioso: TimeInterval = 30
 
-    /// Teto de payload por frame. O cliente só envia JSON curto (chat, identificação);
+    /// Teto de payload por frame. O cliente só envia JSON curto (chat, identificação, mão);
     /// qualquer coisa maior é erro ou abuso e não deve virar alocação gigante.
     private static let maxPayloadBytes = 1 << 20 // 1 MB
 
@@ -133,13 +137,16 @@ public final class WebSocketHandlerService {
         var boasVindas: [String: Any] = estadoDaTransmissao
         boasVindas["chatEnabled"] = chatLiberado
         boasVindas["files"] = arquivos
+        // Sem fixada, o campo não vai: o cliente trata ausência como "nada fixado".
+        if let mensagemFixada {
+            boasVindas["pinned"] = mensagemFixada
+        }
         lock.unlock()
         let welcomeDict: [String: Any] = [
             "type": "CONNECTED",
             "payload": boasVindas
         ]
-        if let data = try? JSONSerialization.data(withJSONObject: welcomeDict),
-           let welcomeJSON = String(data: data, encoding: .utf8) {
+        if let welcomeJSON = Self.serializar(welcomeDict) {
             sendTextFrame(connection: connection, text: welcomeJSON)
         }
 
@@ -243,11 +250,59 @@ public final class WebSocketHandlerService {
         }
     }
 
+    /// Fixa (ou, com `nil`, desafixa) a mensagem do topo do chat e avisa toda a turma.
+    ///
+    /// O texto vai pelo `JSONSerialization`, e não montado à mão como as mensagens curtas
+    /// daqui: o professor fixa um link ou um recado com aspas e quebras de linha, e uma
+    /// aspa sem escape quebrava o JSON e a página do aluno descartava a mensagem.
+    public func fixarMensagem(_ texto: String?) {
+        lock.lock()
+        mensagemFixada = texto
+        let conexoes = Array(activeConnections.values)
+        lock.unlock()
+
+        let mensagem: [String: Any] = [
+            "type": "CHAT_PINNED",
+            "payload": ["text": texto ?? NSNull()] as [String: Any]
+        ]
+        guard let json = Self.serializar(mensagem) else { return }
+        for conexao in conexoes {
+            sendTextFrame(connection: conexao, text: json)
+        }
+    }
+
+    /// O professor abaixou a mão do aluno: avisa só a conexão dele, para o ícone da mão
+    /// sumir da tela do aluno. Se ele já saiu, não há a quem avisar.
+    public func abaixarMao(clientId: String) {
+        lock.lock()
+        let conexao = alunoDaConexao.first { $0.value == clientId }.flatMap { activeConnections[$0.key] }
+        lock.unlock()
+
+        guard let conexao else { return }
+        sendTextFrame(connection: conexao, text: "{\"type\":\"HAND_LOWERED\"}")
+    }
+
+    /// Serializa uma mensagem para o navegador. Sem escapar a barra: o link fixado chega
+    /// como "https://…", e não "https:\/\/…" (válido, mas ilegível em quem inspeciona).
+    static func serializar(_ mensagem: [String: Any]) -> String? {
+        guard let dados = try? JSONSerialization.data(withJSONObject: mensagem, options: [.withoutEscapingSlashes]) else {
+            return nil
+        }
+        return String(data: dados, encoding: .utf8)
+    }
+
     /// Volta ao estado de uma sessão nova (servidor parado e religado).
     public func reset() {
         lock.lock()
         estadoDaTransmissao = ["stream": "live"]
         lock.unlock()
+    }
+
+    /// O nome aceito no IDENTIFY, ou `nil` se a conexão ainda não se identificou.
+    private func nomeValidado(_ clientId: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return nomes[clientId]
     }
 
     private func nomeIdentificado(_ clientId: String, senão fallbackName: String) -> String {
@@ -422,6 +477,22 @@ public final class WebSocketHandlerService {
         let payloadDict = json["payload"] as? [String: Any]
 
         switch type {
+        case "RAISE_HAND":
+            // Só vale para quem já passou pelo IDENTIFY: a mão aparece na lista do professor
+            // com o nome do aluno, e antes disso não há nome validado para mostrar. Vinda de
+            // outra conexão, a mensagem é ignorada sem derrubar ninguém.
+            guard let nome = nomeValidado(clientId) else { return }
+            guard let ativa = payloadDict?["active"] as? Bool else { return }
+
+            // O nome vem do IDENTIFY já validado, não de um campo da mensagem: aceitá-lo
+            // pulava a validação e deixava levantar a mão em nome de um colega.
+            handRaiseObserver?.didToggleHandRaise(clientId: clientId, displayName: nome, isRaised: ativa)
+
+            let ack: [String: Any] = ["type": "RAISE_HAND_ACK", "payload": ["active": ativa]]
+            if let json = Self.serializar(ack) {
+                sendTextFrame(connection: connection, text: json)
+            }
+
         case "CHAT_SEND":
             guard isChatEnabled else { return }
             let text = (payloadDict?["text"] as? String) ?? ""

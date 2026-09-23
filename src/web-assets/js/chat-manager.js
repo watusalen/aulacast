@@ -1,3 +1,9 @@
+import { escreverComLinks } from './links.js';
+
+function horaAgora() {
+  return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 export class ChatManager {
   /** O nome vem da identificação feita na entrada, não de um campo separado no chat. */
   constructor(onSendMessage, getStudentName) {
@@ -10,7 +16,20 @@ export class ChatManager {
     this.chatSendBtn = document.getElementById('chatSendBtn');
     this.chatEnabled = true;
 
+    this.fixada = document.getElementById('chatPinned');
+    this.fixadaTexto = document.getElementById('chatPinnedText');
+    this.fixadaMais = document.getElementById('chatPinnedMore');
+    this.textoFixado = null;
+
     this.chatForm.addEventListener('submit', (e) => this.handleSubmit(e));
+    if (this.fixadaMais) {
+      this.fixadaMais.addEventListener('click', () => this.alternarFixadaInteira());
+    }
+    // O "Ver mais" depende da largura do painel: girar o celular ou abrir a folha muda
+    // quantas linhas o texto ocupa.
+    if (this.fixadaTexto && typeof ResizeObserver === 'function') {
+      new ResizeObserver(() => this.atualizarVerMais()).observe(this.fixadaTexto);
+    }
   }
 
   /**
@@ -19,7 +38,7 @@ export class ChatManager {
    * O servidor já descartava a mensagem com o chat desligado, mas sem nada mudar no
    * navegador: o aluno escrevia, enviava e o texto simplesmente evaporava. Aqui o campo e
    * o botão ficam inativos, então dá para ver que não adianta tentar — sem anunciar à turma
-   * que o professor desligou o chat.
+   * que o professor desligou o chat. A mão ao lado continua valendo: não é escrever.
    */
   setEnabled(enabled) {
     this.chatEnabled = enabled;
@@ -72,55 +91,141 @@ export class ChatManager {
     const lista = Array.isArray(arquivos) ? arquivos : [];
     if (lista.length === 0) return;
 
+    if (lista.length === 1) {
+      // O nome inteiro fica na dica: a linha corta nomes compridos com reticências.
+      this.mostrarEvento(`Novo arquivo: ${lista[0].name}`, '', lista[0].name);
+    } else {
+      this.mostrarEvento(`${lista.length} arquivos novos`);
+    }
+  }
+
+  /** O professor abaixou a mão do aluno: uma linha curta, no mesmo tom das de sistema. */
+  mostrarMaoAbaixada() {
+    this.mostrarEvento('O professor abaixou sua mão', 'mao');
+  }
+
+  /** Linha de sistema: texto e hora, centralizados, sem nada para clicar. */
+  mostrarEvento(textoDoEvento, variante = '', dica = '') {
     const linha = document.createElement('div');
-    linha.className = 'chat-event';
+    linha.className = variante ? `chat-event ${variante}` : 'chat-event';
     linha.setAttribute('role', 'status');
 
     const texto = document.createElement('span');
     texto.className = 'chat-event-text';
-    texto.textContent = lista.length === 1
-      ? `Novo arquivo: ${lista[0].name}`
-      : `${lista.length} arquivos novos`;
-    if (lista.length === 1) texto.setAttribute('title', lista[0].name);
+    texto.textContent = textoDoEvento;
+    if (dica) texto.setAttribute('title', dica);
 
     const hora = document.createElement('span');
     hora.className = 'chat-event-time';
-    hora.textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    hora.textContent = horaAgora();
 
     linha.appendChild(texto);
     linha.appendChild(hora);
     this.chatMessages.appendChild(linha);
-    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    this.rolarParaOFim();
   }
 
   mostrarAviso(texto) {
     const aviso = document.createElement('div');
-    aviso.className = 'chat-bubble system';
+    aviso.className = 'chat-aviso';
+    aviso.setAttribute('role', 'alert');
     aviso.textContent = texto;
     this.chatMessages.appendChild(aviso);
-    this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    this.rolarParaOFim();
   }
 
+  /**
+   * Mensagem no desenho do chat do Meet: sem balão, com nome (ou "Você"), hora e texto.
+   * Só nas mensagens do professor os links viram clicáveis: o eco do que o próprio aluno
+   * escreveu fica como ele digitou.
+   */
   appendMessage(author, text, isProf = false) {
     const isOwn = !isProf && (author === this.getStudentName());
-    const bubble = document.createElement('div');
-    bubble.className = `chat-bubble ${isProf ? 'prof' : ''} ${isOwn ? 'own' : ''}`.trim();
+    const mensagem = document.createElement('div');
+    mensagem.className = `msg${isProf ? ' msg-prof' : ''}${isOwn ? ' msg-own' : ''}`;
 
-    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const cabeca = document.createElement('div');
+    cabeca.className = 'msg-cabeca';
 
-    const authorElem = document.createElement('div');
-    authorElem.className = 'chat-author';
+    const autor = document.createElement('span');
+    autor.className = 'msg-autor';
     // O servidor já manda "Professor" como remetente; prefixar "Prof." dava "Prof. Professor".
-    authorElem.textContent = `${author} · ${time}`;
+    autor.textContent = isOwn ? 'Você' : author;
 
-    const textElem = document.createElement('div');
-    textElem.className = 'chat-text';
-    textElem.textContent = text;
+    const hora = document.createElement('span');
+    hora.className = 'msg-hora';
+    hora.textContent = horaAgora();
 
-    bubble.appendChild(authorElem);
-    bubble.appendChild(textElem);
-    this.chatMessages.appendChild(bubble);
+    cabeca.appendChild(autor);
+    cabeca.appendChild(hora);
 
+    const texto = document.createElement('div');
+    texto.className = 'msg-texto';
+    if (isProf) {
+      escreverComLinks(texto, text);
+    } else {
+      texto.textContent = text;
+    }
+
+    mensagem.appendChild(cabeca);
+    mensagem.appendChild(texto);
+    this.chatMessages.appendChild(mensagem);
+    this.rolarParaOFim();
+  }
+
+  /**
+   * Mensagem fixada pelo professor no topo do chat (link do portal, recado da aula).
+   * `null` ou texto vazio desafixa. Devolve se passou a haver uma fixada diferente da
+   * anterior, para quem chama decidir se é novidade.
+   */
+  fixar(textoRecebido) {
+    const texto = typeof textoRecebido === 'string' && textoRecebido.trim() ? textoRecebido : null;
+    const novidade = texto !== null && texto !== this.textoFixado;
+    this.textoFixado = texto;
+    if (!this.fixada || !this.fixadaTexto) return novidade;
+
+    if (texto === null) {
+      this.fixada.hidden = true;
+      return false;
+    }
+
+    escreverComLinks(this.fixadaTexto, texto);
+    this.fixada.hidden = false;
+    this.definirFixadaInteira(false);
+    return novidade;
+  }
+
+  alternarFixadaInteira() {
+    this.definirFixadaInteira(!this.fixada.classList.contains('expandida'));
+  }
+
+  definirFixadaInteira(inteira) {
+    if (!this.fixada) return;
+    if (inteira) {
+      this.fixada.classList.add('expandida');
+    } else {
+      this.fixada.classList.remove('expandida');
+    }
+    if (this.fixadaMais) {
+      this.fixadaMais.textContent = inteira ? 'Ver menos' : 'Ver mais';
+      this.fixadaMais.setAttribute('aria-expanded', String(inteira));
+    }
+    this.atualizarVerMais();
+  }
+
+  /** "Ver mais" só aparece quando o texto passa de 3 linhas (ou está aberto por inteiro). */
+  atualizarVerMais() {
+    if (!this.fixada || !this.fixadaTexto || !this.fixadaMais) return;
+    if (this.fixada.hidden) return;
+    const inteira = this.fixada.classList.contains('expandida');
+    // Com o painel fechado o texto não tem altura e não dá para medir; a medida volta
+    // pelo ResizeObserver quando o painel abrir.
+    if (!inteira && !this.fixadaTexto.clientHeight) return;
+    const cortado = this.fixadaTexto.scrollHeight > this.fixadaTexto.clientHeight + 1;
+    this.fixadaMais.hidden = !(inteira || cortado);
+  }
+
+  rolarParaOFim() {
     this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
   }
 }

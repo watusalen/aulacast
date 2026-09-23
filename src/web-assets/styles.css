@@ -1,4 +1,124 @@
-/* AulaCast - UI limpa, profissional, 100% offline */
+/* AulaCast: tela do aluno em Material 3 Expressive, no desenho do Google Meet.
+   Os tokens (cores, cantos, movimento) são os mesmos da tela do professor, em
+   src/sources/aulacast/views/Material/M3.swift: quem mexer num lado mexe no outro.
+   Tudo é servido pelo próprio app, sem internet: fontes, ícones e estilos. */
+
+/* ------------------------------------------------------------------
+   Fontes
+   ------------------------------------------------------------------ */
+
+@font-face {
+  font-family: "Google Sans Flex";
+  src: url("fonts/GoogleSansFlex-AulaCast.ttf") format("truetype");
+  font-weight: 1 1000;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* `block` e não `swap` nos ícones: enquanto a fonte carrega, o navegador mostraria o
+   código do caractere como um quadradinho. É um arquivo pequeno e local, pré-carregado
+   no <head>, então a espera é imperceptível. */
+@font-face {
+  font-family: "Material Symbols Rounded";
+  src: url("fonts/MaterialSymbolsRounded-AulaCast.ttf") format("truetype");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: block;
+}
+
+/* ------------------------------------------------------------------
+   Tokens (esquema do Google em Material 3, claro e escuro)
+   ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light dark;
+
+  --primary: #0B57D0;
+  --on-primary: #FFFFFF;
+  --primary-container: #D3E3FD;
+  --on-primary-container: #041E49;
+  --secondary-container: #C2E7FF;
+  --on-secondary-container: #001D35;
+  --tertiary: #146C2E;
+  --tertiary-container: #C4EED0;
+  --on-tertiary-container: #072711;
+  --error: #B3261E;
+  --error-container: #F9DEDC;
+  --on-error-container: #410E0B;
+  /* Vermelho de "pede atenção" (contador de mensagens), igual nos dois modos. */
+  --danger: #DC362E;
+  --on-danger: #FFFFFF;
+  --warning-container: #FFDF99;
+  --on-warning-container: #261A00;
+
+  --surface: #FFFFFF;
+  --surface-container-low: #F8FAFD;
+  --surface-container: #F0F4F9;
+  --surface-container-high: #E9EEF6;
+  --surface-container-highest: #DDE3EA;
+  --on-surface: #1F1F1F;
+  --on-surface-variant: #444746;
+  --outline: #747775;
+  --outline-variant: #C4C7C5;
+
+  /* Palco: quase preto nos dois temas, como o do professor. */
+  --palco: #0E0E0E;
+  --scrim: rgba(0, 0, 0, .32);
+  --barra-de-rolagem: rgba(0, 0, 0, .22);
+
+  /* Cantos do Material 3. */
+  --canto-xp: 4px;
+  --canto-p: 8px;
+  --canto-m: 12px;
+  --canto-g: 16px;
+  --canto-xg: 28px;
+
+  /* Movimento do M3 Expressive. "Espacial" (posição, forma) passa um pouco do alvo e
+     volta, como as molas do professor; "efeito" (cor, opacidade) não ultrapassa. */
+  --espacial-rapido: cubic-bezier(.42, 1.67, .21, .9);
+  --espacial: cubic-bezier(.38, 1.21, .22, 1);
+  --efeito: cubic-bezier(.31, .94, .34, 1);
+  --t-rapido: 200ms;
+  --t-padrao: 350ms;
+  --t-efeito: 150ms;
+
+  --fundo: var(--surface-container-low);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #A8C7FA;
+    --on-primary: #062E6F;
+    --primary-container: #0842A0;
+    --on-primary-container: #D3E3FD;
+    --secondary-container: #004A77;
+    --on-secondary-container: #C2E7FF;
+    --tertiary: #6DD58C;
+    --tertiary-container: #0F5223;
+    --on-tertiary-container: #C4EED0;
+    --error: #F2B8B5;
+    --error-container: #8C1D18;
+    --on-error-container: #F9DEDC;
+    --warning-container: #5C4300;
+    --on-warning-container: #FFDF99;
+
+    --surface: #131314;
+    --surface-container-low: #1B1B1B;
+    --surface-container: #1E1F20;
+    --surface-container-high: #282A2C;
+    --surface-container-highest: #333537;
+    --on-surface: #E3E3E3;
+    --on-surface-variant: #C4C7C5;
+    --outline: #8E918F;
+    --outline-variant: #444746;
+
+    --barra-de-rolagem: rgba(255, 255, 255, .2);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -6,14 +126,13 @@
   padding: 0;
 }
 
-/* Barras de rolagem da página inteira (lista de arquivos, conversa, gaveta no celular).
-   A barra padrão do navegador é cinza-clara e grossa, e brigava com o tema escuro.
-   Aqui: fina, arredondada, translúcida, e sem trilho — some no fundo e só aparece quando
-   há o que rolar. Chrome (121+) e Firefox usam as propriedades padrão; o Safari usa
+/* Barras de rolagem (conversa, arquivos, folha no celular). A barra padrão do navegador
+   é cinza e grossa e brigava com o tema escuro. Aqui: fina, arredondada, translúcida e
+   sem trilho. Chrome (121+) e Firefox usam as propriedades padrão; o Safari usa
    ::-webkit-scrollbar. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, .2) transparent;
+  scrollbar-color: var(--barra-de-rolagem) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -27,22 +146,25 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, .16);
+  background-color: var(--barra-de-rolagem);
   border-radius: 999px;
-  /* Borda transparente com background-clip: a barra fica com 4 px de largura visível,
-     afastada da borda do painel. */
+  /* Borda transparente com background-clip: a barra fica com 4 px visíveis, afastada
+     da borda do painel. */
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, .32);
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
-  background: #111;
-  color: #e8e8e8;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--fundo);
+  color: var(--on-surface);
+  font-family: "Google Sans Flex", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
   /* 100vh no celular inclui a barra do navegador: o rodapé do layout (onde ficam o campo
      de mensagem e os controles) ficava escondido embaixo dela. `dvh` acompanha a barra
      aparecendo e sumindo; o `vh` fica de reserva para navegador antigo. */
@@ -50,34 +172,258 @@ body {
   height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0,0,0,0);
-  border: 0;
+button,
+input {
+  font: inherit;
+  color: inherit;
 }
 
 :focus-visible {
-  outline: 2px solid #5a9cf5;
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
 /* O atributo [hidden] do HTML perde para qualquer `display` declarado aqui.
-   Sem esta regra, os overlays (reconectando, desconectado, pausado, avisos)
-   ficam todos visíveis sobre o vídeo ao mesmo tempo. */
+   Sem esta regra, os avisos do palco ficam todos visíveis ao mesmo tempo. */
 [hidden] {
   display: none !important;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
+/* Ícones do Material Symbols. A fonte recortada não tem ligaduras: cada ícone é
+   escrito pelo código do caractere, e só tem significado visual (aria-hidden). */
+.icone {
+  font-family: "Material Symbols Rounded";
+  font-weight: 400;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  direction: ltr;
+  user-select: none;
+  -webkit-user-select: none;
+  font-variation-settings: "FILL" 0, "wght" 400;
+  transition: font-variation-settings var(--t-rapido) var(--efeito);
+}
 
-/* Portaria de entrada */
+/* Preenchido marca estado ativo, como os ícones do Meet. */
+.icone-cheio {
+  font-variation-settings: "FILL" 1, "wght" 400;
+}
+
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* Indicador de progresso circular do Material: o arco cresce e encolhe enquanto gira. */
+@keyframes arco {
+  0% { stroke-dasharray: 1 200; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90 200; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90 200; stroke-dashoffset: -124; }
+}
+
+.progresso {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  animation: girar 1.4s linear infinite;
+}
+
+.progresso circle {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 4;
+  stroke-linecap: round;
+  animation: arco 1.4s ease-in-out infinite;
+}
+
+.progresso-pequeno {
+  width: 20px;
+  height: 20px;
+}
+
+.progresso-pequeno circle {
+  stroke-width: 5;
+}
+
+/* ------------------------------------------------------------------
+   Botões
+   ------------------------------------------------------------------ */
+
+/* Camada de estado do Material: véu da cor do conteúdo, 8% no hover e 10% no toque.
+   Fica num pseudo-elemento para não brigar com a cor de fundo de cada variante. */
+.botao::before,
+.botao-icone::before,
+.file-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-efeito) var(--efeito);
+}
+
+@media (hover: hover) {
+  .botao:hover:not(:disabled)::before,
+  .botao-icone:hover:not(:disabled)::before,
+  .file-link:hover::before {
+    opacity: .08;
+  }
+}
+
+.botao:active:not(:disabled)::before,
+.botao-icone:active:not(:disabled)::before,
+.file-link:active::before {
+  opacity: .10;
+}
+
+/* Botão comum: pílula. */
+.botao {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: .1px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--t-rapido) var(--espacial-rapido), opacity var(--t-efeito) var(--efeito);
+}
+
+.botao .icone {
+  font-size: 18px;
+  margin-left: -4px;
+  font-variation-settings: "FILL" 1, "wght" 400;
+}
+
+.botao:active:not(:disabled) {
+  transform: scale(.97);
+}
+
+.botao:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+.botao-preenchido {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.botao-grande {
+  height: 48px;
+  font-size: 16px;
+}
+
+/* Botão de ícone do M3 Expressive: redondo; quando selecionado, fica preenchido e ganha
+   cantos menores (o "shape morph" dos botões de alternância), com a mola que passa um
+   pouco do alvo. O tamanho vem de --tam para o raio acompanhar. */
+.botao-icone {
+  --tam: 48px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--tam);
+  height: var(--tam);
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--tam) / 2);
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition:
+    border-radius var(--t-padrao) var(--espacial-rapido),
+    background-color var(--t-efeito) var(--efeito),
+    color var(--t-efeito) var(--efeito),
+    transform var(--t-rapido) var(--espacial-rapido),
+    opacity var(--t-efeito) var(--efeito);
+}
+
+.botao-icone .icone {
+  font-size: 22px;
+}
+
+.botao-icone:active:not(:disabled) {
+  transform: scale(.94);
+}
+
+.botao-icone:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+.botao-tonal {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
+}
+
+.botao-icone.selecionado {
+  border-radius: calc(var(--tam) * .3);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.botao-icone.selecionado .icone {
+  font-variation-settings: "FILL" 1, "wght" 400;
+}
+
+/* Contador (badge) no canto do botão. Vermelho para o que pede atenção (mensagem do
+   professor); neutro para quantidades (arquivos novos), como na tela do professor. */
+@keyframes aparecer {
+  from { transform: scale(0); }
+}
+
+.contador {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: var(--on-danger);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* Contorno da cor do fundo, sem mexer no tamanho: separa o número do ícone. */
+  box-shadow: 0 0 0 2px var(--fundo);
+  pointer-events: none;
+  animation: aparecer var(--t-padrao) var(--espacial-rapido);
+}
+
+.contador-neutro {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+/* ------------------------------------------------------------------
+   Portaria ("Entrar na aula")
+   ------------------------------------------------------------------ */
+
 .entry-gate {
   position: fixed;
   inset: 0;
@@ -85,93 +431,173 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background: radial-gradient(circle at 50% 0%, #16181d 0%, #0b0b0c 70%);
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+           max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: var(--fundo);
+  overflow-y: auto;
 }
 
 .entry-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
+  margin: auto;
   display: flex;
   flex-direction: column;
-  padding: 32px;
-  border-radius: 14px;
-  background: #161618;
-  border: 1px solid #2a2a2e;
-  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  padding: 36px 32px 32px;
+  border-radius: var(--canto-xg);
+  background: var(--surface);
 }
 
 .entry-brand {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: #5a9cf5;
-  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--on-surface-variant);
+}
+
+.marca {
+  width: 32px;
+  height: 32px;
+  flex: none;
 }
 
 .entry-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #f2f2f4;
-  margin-bottom: 6px;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 40px;
+  color: var(--on-surface);
+  margin-bottom: 8px;
 }
 
 .entry-sub {
-  font-size: 14px;
-  line-height: 1.5;
-  color: #8b8b91;
-  margin-bottom: 22px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--on-surface-variant);
+  margin-bottom: 28px;
 }
 
-.entry-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #c8c8cc;
-  margin-bottom: 6px;
+/* Campo de texto contornado do M3. O rótulo fica dentro do campo e sobe para a borda
+   quando há foco ou texto; o exemplo ("Ex.: …") só aparece com o rótulo lá em cima,
+   para os dois não se sobreporem. */
+.campo {
+  position: relative;
 }
 
-.entry-input {
-  height: 42px;
-  font-size: 15px;
-  margin-bottom: 16px;
+.campo-input {
+  display: block;
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  border: 1px solid var(--outline);
+  border-radius: var(--canto-xp);
+  background: transparent;
+  color: var(--on-surface);
+  /* 16 px: abaixo disso o iPhone dá zoom sozinho ao focar, e a página fica torta até o
+     aluno pinçar de volta. */
+  font-size: 16px;
+  line-height: 24px;
+  outline: none;
+  transition: border-color var(--t-efeito) var(--efeito), box-shadow var(--t-efeito) var(--efeito);
+}
+
+@media (hover: hover) {
+  .campo-input:hover {
+    border-color: var(--on-surface);
+  }
+}
+
+/* Borda de 2 px no foco feita com sombra: mudar a borda empurraria o texto 1 px. */
+.campo-input:focus {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.campo-input::placeholder {
+  color: transparent;
+  transition: color var(--t-efeito) var(--efeito);
+}
+
+.campo-input:focus::placeholder {
+  color: var(--on-surface-variant);
+}
+
+.campo-rotulo {
+  position: absolute;
+  left: 12px;
+  top: 28px;
+  transform: translateY(-50%);
+  padding: 0 4px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Fundo da cor do cartão: é ele que "corta" a borda quando o rótulo sobe. */
+  background: var(--surface);
+  color: var(--on-surface-variant);
+  font-size: 16px;
+  line-height: 24px;
+  pointer-events: none;
+  transition: top var(--t-efeito) var(--efeito), font-size var(--t-efeito) var(--efeito),
+              line-height var(--t-efeito) var(--efeito), color var(--t-efeito) var(--efeito);
+}
+
+.campo-input:focus + .campo-rotulo,
+.campo-input:not(:placeholder-shown) + .campo-rotulo {
+  top: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.campo-input:focus + .campo-rotulo {
+  color: var(--primary);
+}
+
+.campo-input.invalid {
+  border-color: var(--error);
+  box-shadow: inset 0 0 0 1px var(--error);
+}
+
+.campo-input.invalid + .campo-rotulo {
+  color: var(--error);
 }
 
 .entry-error {
-  font-size: 13px;
-  color: #ff8080;
-  background: rgba(200,50,50,.1);
-  border: 1px solid rgba(204,68,68,.4);
-  border-radius: 6px;
-  padding: 9px 11px;
-  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 16px 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--error);
 }
 
-.entry-input.invalid {
-  border-color: #c44;
+.entry-error::before {
+  content: "\f8b6";
+  font-family: "Material Symbols Rounded";
+  font-size: 16px;
+  line-height: 16px;
+  font-variation-settings: "FILL" 1, "wght" 400;
 }
 
-/* Seletor com o pai para vencer a regra genérica `.btn`, definida mais abaixo. */
-.entry-card .btn-entry {
-  height: 46px;
-  justify-content: center;
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
-  font-size: 15px;
+.entry-card .botao {
+  margin-top: 28px;
+  width: 100%;
 }
 
-.entry-card .btn-entry:hover {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-}
-
-.entry-card .btn-entry[disabled] {
-  opacity: .55;
+/* "Entrando…": o botão continua legível, só deixa de responder. */
+.entry-card .botao:disabled {
+  opacity: .7;
   cursor: progress;
 }
 
-/* Layout */
+/* ------------------------------------------------------------------
+   Aula: palco + painel em cima, barra de controles embaixo
+   ------------------------------------------------------------------ */
+
 .app {
   display: flex;
   flex-direction: column;
@@ -179,231 +605,625 @@ body {
   height: 100dvh;
 }
 
-/* Header */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
-  background: #1a1a1a;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  /* Quem cede espaço numa tela estreita é o nome (com reticências), nunca o status
-     nem o botão do painel. */
+.content {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  /* A linha da grade tem a altura da tela, e não a do conteúdo: é isso que deixa o
+     painel rolar por dentro em vez de crescer para baixo da tela. */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  /* Altura do botão do painel mesmo quando ele some: sem isto o cabeçalho encolhia
-     ao abrir o painel e o vídeo pulava alguns pixels. */
-  min-height: 34px;
+/* Painel fechado no computador: o palco fica com a largura toda. (Na folha do celular
+   esta classe não é usada.) */
+.app.painel-fechado .content {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.logo {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-}
-
-/* Nome com que o aluno entrou, com o ícone de pessoa. */
-.student-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 11px 4px 9px;
-  border-radius: 999px;
-  background: #1e2c44;
-  border: 1px solid #2d3d58;
-  font-size: 13px;
-  color: #a8c6f5;
-  max-width: 260px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.student-badge[hidden] {
+.app.painel-fechado .sidebar {
   display: none;
 }
 
-.student-badge::before {
-  content: "";
-  flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21a8 8 0 0 1 16 0z'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21a8 8 0 0 1 16 0z'/%3E%3C/svg%3E") center / contain no-repeat;
-}
+/* ------------------------------------------------------------------
+   Palco
+   ------------------------------------------------------------------ */
 
-/* Botão que reabre o painel (conversa e arquivos): só o ícone de balão, e só com o
-   painel fechado — aberto, o X dentro dele fecha. O balão, e não um ☰, diz o que ele
-   abre; o contador em cima diz se chegou algo novo. */
-.panel-toggle {
+.stage {
+  /* O palco é escuro nos dois temas: o que fica por cima dele (botão, cartão de aviso)
+     usa as cores do tema escuro sempre. */
+  --primary: #A8C7FA;
+  --on-primary: #062E6F;
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 34px;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid #2e2e30;
-  background: #1f1f21;
-  color: #d6d6da;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--canto-xg);
+  background: var(--palco);
+  color: #E3E3E3;
+  overflow: hidden;
+  /* Sem isto o Safari deixa a imagem vazar pelos cantos arredondados. */
+  isolation: isolate;
 }
 
-.panel-toggle:hover {
-  background: #26262a;
-  border-color: #3a3a3e;
-}
-
-.panel-toggle.ativo {
-  background: #1e2c44;
-  border-color: #3a4a63;
-  color: #a8c6f5;
-}
-
-.panel-toggle:focus-visible,
-.sidebar-close:focus-visible {
-  outline: 2px solid #4c8dff;
-  outline-offset: 2px;
-}
-
-/* Quantas mensagens do professor e arquivos chegaram com o painel fechado. */
-.panel-badge {
+.video-wrap {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  /* Centralizado por flex, e não por line-height: com border-box, a borda de 2 px
-     comia a altura e o número ficava abaixo do centro do círculo. */
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 5px;
-  border-radius: 10px;
-  background: #ff453a;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  border: 2px solid #1a1a1a;
+  inset: 0;
 }
 
-/* Badge de status */
-.badge {
+/* A imagem e o quadro congelado (canvas que o vigia do vídeo põe logo depois dela) têm
+   exatamente a mesma caixa: trocar um pelo outro não mexe um pixel. */
+.stream,
+.stream-congelado {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 1;
+}
+
+.stream {
+  display: none;
+  /* Sem `src` o Chrome desenha o texto alternativo no lugar da imagem. */
+  color: transparent;
+}
+
+.stream.active {
+  display: block;
+}
+
+/* Estados vazios do palco: aguardando a transmissão e transmissão encerrada. */
+.placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 24px;
+  text-align: center;
+  background: var(--palco);
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  color: #BFBFBF;
+  margin-bottom: 6px;
+}
+
+.placeholder-title {
+  font-size: 22px;
+  line-height: 28px;
+  color: #FFFFFF;
+}
+
+.placeholder-sub {
+  max-width: 380px;
+  font-size: 14px;
+  line-height: 20px;
+  color: #C4C7C5;
+}
+
+.placeholder .progresso {
+  margin-top: 16px;
+}
+
+/* Pausada: o último quadro continua à vista, escurecido, como no professor. */
+.paused-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(0, 0, 0, .55);
+  color: #FFFFFF;
+  animation: surgir var(--t-padrao) var(--efeito);
+}
+
+.paused-icon {
+  font-size: 48px;
+  margin-bottom: 4px;
+}
+
+.paused-title {
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.paused-sub {
+  font-size: 14px;
+  line-height: 20px;
+  opacity: .8;
+}
+
+@keyframes surgir {
+  from { opacity: 0; }
+}
+
+@keyframes descer {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+}
+
+/* Reconectando: um chip pequeno no alto do palco, por cima do quadro congelado. */
+.reconnect-overlay {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 600;
-  background: #222;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  height: 40px;
+  padding: 0 16px 0 12px;
+  border-radius: 999px;
+  background: rgba(40, 42, 44, .94);
+  color: #E3E3E3;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3), 0 1px 2px rgba(0, 0, 0, .4);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: descer var(--t-padrao) var(--espacial);
 }
 
-.badge .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
-.badge.connected { background: rgba(40,167,69,.12); color: #5cb85c; border: 1px solid rgba(92,184,92,.45); }
-.badge.connected .dot { background: #5cb85c; }
-.badge.connecting { background: rgba(220,160,0,.1); color: #c9a500; border: 1px solid rgba(201,165,0,.4); }
-.badge.connecting .dot { background: #c9a500; }
-.badge.reconnecting { background: rgba(220,160,0,.1); color: #c9a500; border: 1px solid rgba(201,165,0,.4); }
-.badge.reconnecting .dot { background: #c9a500; animation: pulseDot 1.4s ease-in-out infinite; }
-.badge.disconnected { background: rgba(200,50,50,.1); color: #e06a6a; border: 1px solid rgba(204,68,68,.5); }
-.badge.disconnected .dot { background: #c44; }
-
-/* Conteudo principal */
-.content {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  /* A linha da grade tem a altura da tela, e não a do conteúdo: é isso que deixa o
-     painel lateral rolar por dentro em vez de crescer para baixo da tela. */
-  grid-template-rows: minmax(0, 1fr);
-  flex: 1;
-  min-height: 0;
+.reconnect-attempt {
   overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 400;
+  color: #C4C7C5;
+}
+
+.reconnect-attempt:empty {
+  display: none;
+}
+
+/* Sem conexão: um cartão pequeno por cima do último quadro, com a saída ("Tentar de
+   novo"), em vez de uma tela preta. */
+.disconnected-state {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, .45);
+  animation: surgir var(--t-padrao) var(--efeito);
+}
+
+.aviso-cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 340px;
+  padding: 24px;
+  border-radius: var(--canto-xg);
+  background: #282A2C;
+  color: #E3E3E3;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+}
+
+.disconnected-icon {
+  font-size: 32px;
+  color: #F2B8B5;
+  margin-bottom: 4px;
+}
+
+.disconnected-title {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.disconnected-sub {
+  font-size: 14px;
+  line-height: 20px;
+  color: #C4C7C5;
+}
+
+.aviso-cartao .botao {
+  margin-top: 12px;
 }
 
 /* ------------------------------------------------------------------
-   Responsivo
-   ------------------------------------------------------------------
-   O aluno entra de onde estiver: notebook do laboratório, tablet, celular
-   na mão, e às vezes celular deitado. A régua abaixo vai do mais largo
-   para o mais estreito, e o último bloco trata de toque em vez de tamanho.
+   Barra de controles (embaixo), no estilo do Meet
    ------------------------------------------------------------------ */
 
-/* Tela média: a conversa encolhe, mas continua ao lado do vídeo. */
-/* Fora do modo gaveta o fundo não existe. Estilizado só dentro da media query, ele
+/* Três seções: as laterais com largura igual e flexível, o centro no meio de verdade. */
+.control-bar {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  height: calc(80px + env(safe-area-inset-bottom));
+  padding: 0 max(20px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(20px, env(safe-area-inset-left));
+}
+
+.barra-estado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.barra-centro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.barra-paineis {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Chip de estado: "Ao vivo", "Pausada", "Reconectando…", "Sem conexão". */
+.chip-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--surface-container-highest);
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--t-padrao) var(--efeito), color var(--t-padrao) var(--efeito);
+}
+
+.chip-estado .status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-estado .dot {
+  position: relative;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .7;
+}
+
+.chip-estado.ao-vivo {
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+}
+
+.chip-estado.ao-vivo .dot {
+  background: var(--tertiary);
+  opacity: 1;
+}
+
+/* Ponto pulsando: a aula está no ar. */
+@keyframes anel {
+  from { transform: scale(1); opacity: .6; }
+  to { transform: scale(2.6); opacity: 0; }
+}
+
+.chip-estado.ao-vivo .dot::after,
+.chip-estado.reconectando .dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: anel 1.6s var(--efeito) infinite;
+}
+
+.chip-estado.pausada,
+.chip-estado.reconectando {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
+}
+
+.chip-estado.sem-conexao {
+  background: var(--error-container);
+  color: var(--on-error-container);
+}
+
+/* Nome com que o aluno entrou: discreto, depois de um separador, como o endereço na
+   barra do professor. */
+.student-badge {
+  min-width: 0;
+  /* Faltando espaço, quem cede é o nome (com reticências), muito antes do chip. */
+  flex: 0 1000 auto;
+  padding-left: 12px;
+  border-left: 1px solid var(--outline-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--on-surface-variant);
+}
+
+.fs-icon-exit {
+  display: none;
+}
+
+#fullscreenBtn[aria-pressed="true"] .fs-icon-enter {
+  display: none;
+}
+
+#fullscreenBtn[aria-pressed="true"] .fs-icon-exit {
+  display: inline-flex;
+}
+
+/* ------------------------------------------------------------------
+   Painel lateral (Chat OU Arquivos)
+   ------------------------------------------------------------------ */
+
+/* O painel é uma coluna: título, a área aberta (rolando por dentro) e, no chat, o campo
+   de envio sempre visível embaixo.
+
+   Cada parte precisa de `min-height: 0`. Sem isso o Chrome não encolhe um item flex
+   abaixo da altura do conteúdo: com muitas mensagens a conversa crescia, e o campo de
+   envio ia para baixo da tela (reproduzido num notebook 1366x620). O WebKit é mais
+   tolerante, por isso no Safari não aparecia. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-radius: var(--canto-xg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sidebar-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px 8px 0 24px;
+}
+
+.sidebar-title {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 28px;
+  color: var(--on-surface);
+}
+
+.area {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Fora da folha do celular o véu não existe. Estilizado só dentro da media query, ele
    virava um terceiro item da grade ao girar o tablet com a conversa aberta, roubando
    metade da altura do vídeo sem botão para fechá-lo. */
 .sidebar-backdrop {
   display: none;
 }
 
-/* Aviso do próprio app no chat (mensagem que não saiu por falta de conexão). */
-.chat-bubble.system {
-  align-self: stretch;
-  max-width: none;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: #2a1d1d;
-  border: 1px solid #4a2c2c;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #f0b4b0;
+/* ------------------------------------------------------------------
+   Chat (no desenho do chat do Meet)
+   ------------------------------------------------------------------ */
+
+/* Mensagem fixada: cartão tonal no topo, até 3 linhas, com "Ver mais". */
+.fixada {
+  flex: none;
+  margin: 4px 16px 8px;
+  padding: 12px 16px;
+  border-radius: var(--canto-g);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+  animation: surgir var(--t-padrao) var(--efeito);
 }
 
-/* Mensagem de sistema (chegou arquivo): uma linha centralizada, neutra, sem nada
-   para clicar — diferente das mensagens de verdade, como nos chats em geral. */
+.fixada-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.fixada-cabeca .icone {
+  font-size: 18px;
+}
+
+.fixada-texto {
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.fixada.expandida .fixada-texto {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: none;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.fixada-mais {
+  position: relative;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+/* Área de toque de 48 px sem aumentar o cartão. */
+.fixada-mais::after {
+  content: "";
+  position: absolute;
+  inset: -14px -12px;
+}
+
+.messages {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 24px 12px;
+}
+
+/* Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet. */
+.sys-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  margin: 0 -8px;
+  border-radius: var(--canto-m);
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.sys-msg .icone {
+  font-size: 18px;
+}
+
+/* Mensagens sem balões: nome (ou "Você"), hora e texto. */
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.msg-cabeca {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.msg-autor {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--on-surface);
+}
+
+.msg-prof .msg-autor {
+  color: var(--primary);
+}
+
+.msg-hora {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--on-surface-variant);
+}
+
+.msg-texto {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--on-surface);
+  white-space: pre-wrap;
+  /* Link comprido quebra em qualquer ponto em vez de abrir rolagem para o lado. */
+  overflow-wrap: anywhere;
+}
+
+.msg-texto a,
+.fixada-texto a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.fixada-texto a {
+  color: inherit;
+  font-weight: 500;
+}
+
+/* Aviso do próprio app (mensagem que não saiu por falta de conexão). */
+.chat-aviso {
+  padding: 8px 12px;
+  border-radius: var(--canto-m);
+  background: var(--error-container);
+  color: var(--on-error-container);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Linha de sistema (chegou arquivo, o professor abaixou a mão): uma linha centralizada,
+   neutra, sem nada para clicar, diferente das mensagens de verdade. */
 .chat-event {
   align-self: center;
   max-width: 100%;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 12px;
+  gap: 6px;
+  padding: 6px 12px;
   border-radius: 999px;
-  background: #222225;
-  color: #9a9aa2;
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
   font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
   cursor: default;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .chat-event::before {
-  content: "";
-  flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9'/%3E%3C/svg%3E") center / contain no-repeat;
+  content: "\e226";
+  flex: none;
+  font-family: "Material Symbols Rounded";
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.chat-event.mao::before {
+  content: "\e764";
 }
 
 .chat-event-text {
@@ -414,66 +1234,256 @@ body {
 }
 
 .chat-event-time {
-  flex-shrink: 0;
-  color: #6f6f76;
+  flex: none;
+  font-weight: 400;
+  opacity: .8;
 }
 
-/* Etiqueta "Novo" no arquivo que chegou durante a aula, até o aluno baixá-lo.
-   Tom esmaecido (fundo a ~18%): é informação, não alarme. */
-.file-new {
-  flex-shrink: 0;
-  margin-left: auto;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(76, 141, 255, .18);
-  color: #a8c6f5;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+/* Campo de mensagem em pílula, com a mão ao lado. */
+.chat-form {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px 16px 12px;
 }
+
+.pilula {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding-right: 4px;
+  border-radius: 999px;
+  background: var(--surface-container-high);
+  transition: box-shadow var(--t-efeito) var(--efeito);
+}
+
+.pilula:focus-within {
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.input-msg {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px 0 20px;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface);
+  /* 16 px para o iPhone não dar zoom ao focar. */
+  font-size: 16px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  outline: none;
+}
+
+.input-msg::placeholder {
+  color: var(--on-surface-variant);
+  opacity: 1;
+}
+
+/* Chat desligado pelo professor: campo e botão continuam na tela, apenas inativos. O
+   apagamento e o cursor barrado dizem que não adianta tentar, sem precisar de recado. */
+.input-msg:disabled {
+  cursor: not-allowed;
+}
+
+.pilula:has(.input-msg:disabled) {
+  opacity: .38;
+}
+
+.btn-send {
+  --tam: 40px;
+}
+
+.btn-send .icone {
+  font-size: 20px;
+}
+
+/* Com texto no campo, o enviar fica preenchido, como no professor. */
+.pilula:has(.input-msg:not(:placeholder-shown):enabled) .btn-send {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.pilula:has(.input-msg:disabled) .btn-send:disabled {
+  opacity: 1;
+}
+
+/* Mão levantada: preenchida, tonal e com cantos menores (shape morph). */
+.botao-mao[aria-pressed="true"] {
+  border-radius: calc(var(--tam) * .3);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.botao-mao[aria-pressed="true"] .icone {
+  font-variation-settings: "FILL" 1, "wght" 400;
+}
+
+/* ------------------------------------------------------------------
+   Arquivos
+   ------------------------------------------------------------------ */
+
+.files-list {
+  flex: 1 1 0;
+  min-height: 0;
+  list-style: none;
+  padding: 4px 8px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Item de lista do Material: ícone num quadrado tonal, nome e tamanho. O item inteiro
+   é o link: um único jeito de baixar. */
+.file-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 8px 12px;
+  border-radius: var(--canto-g);
+  color: var(--on-surface);
+  text-decoration: none;
+}
+
+.file-icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--canto-m);
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.file-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.file-size {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--on-surface-variant);
+}
+
+/* Etiqueta "Novo" no arquivo que chegou durante a aula, até o aluno baixá-lo. */
+.file-new {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: .5px;
+}
+
+.file-baixar {
+  color: var(--on-surface-variant);
+}
+
+/* Estado vazio: situação e o que vai acontecer. */
+.vazio {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 32px 48px;
+  text-align: center;
+}
+
+.vazio .icone {
+  font-size: 40px;
+  color: var(--on-surface-variant);
+  margin-bottom: 2px;
+}
+
+.vazio-titulo {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--on-surface);
+}
+
+.vazio-sub {
+  max-width: 260px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--on-surface-variant);
+}
+
+/* ------------------------------------------------------------------
+   Responsivo
+   ------------------------------------------------------------------
+   O aluno entra de onde estiver: notebook do laboratório, tablet, celular em pé e
+   celular deitado. A régua vai do mais largo para o mais estreito.
+   ------------------------------------------------------------------ */
 
 @media (max-width: 1100px) {
   .content {
-    grid-template-columns: 1fr 280px;
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
 
-/* A conversa vira gaveta: abaixo disto ela roubaria largura demais do vídeo,
-   que é o que o aluno veio ver. */
-@media (max-width: 860px) {
+/* Folha lateral: abaixo disto a coluna roubaria largura demais do vídeo, que é o que o
+   aluno veio ver. Vale também para o celular deitado (pouca altura), onde a folha vem
+   da direita. O mesmo corte está em ui-controller.js (LARGURA_DA_GAVETA). */
+@media (max-width: 860px), (max-height: 500px) {
   .content {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
     position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(340px, 88vw);
-    z-index: 20;
-    transform: translateX(100%);
-    transition: transform .2s ease;
-    box-shadow: -20px 0 40px rgba(0,0,0,.4);
-    padding-right: env(safe-area-inset-right);
+    z-index: 30;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(360px, calc(100vw - 16px));
+    box-shadow: 0 8px 12px 6px rgba(0, 0, 0, .15), 0 4px 4px rgba(0, 0, 0, .3);
+    transform: translateX(calc(100% + 24px));
+    /* Fechada, a folha sai também da ordem do Tab e do leitor de tela. */
+    visibility: hidden;
+    transition: transform var(--t-padrao) var(--espacial), visibility 0s linear var(--t-padrao);
   }
 
   .sidebar.open {
-    transform: translateX(0);
+    transform: none;
+    visibility: visible;
+    transition: transform var(--t-padrao) var(--espacial), visibility 0s;
   }
 
-  /* Fundo escuro atrás da gaveta: sem ele, o aluno abre a conversa e não
-     descobre como fechar — tocar fora é o gesto que todo mundo tenta. */
+  /* Véu atrás da folha: sem ele, o aluno abre a conversa e não descobre como fechar;
+     tocar fora é o gesto que todo mundo tenta. */
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    z-index: 19;
-    background: rgba(0,0,0,.5);
+    z-index: 29;
+    background: var(--scrim);
     opacity: 0;
     pointer-events: none;
-    transition: opacity .2s ease;
+    transition: opacity var(--t-padrao) var(--efeito);
   }
 
   .sidebar-backdrop.visible {
@@ -482,700 +1492,201 @@ body {
   }
 }
 
-/* Celular em pé. */
-@media (max-width: 600px) {
-  .header {
-    padding: 8px 12px;
-    padding-left: max(12px, env(safe-area-inset-left));
-    padding-right: max(12px, env(safe-area-inset-right));
+/* Celular em pé: o painel vira folha que sobe de baixo, por cima do vídeo. */
+@media (max-width: 600px) and (min-height: 501px) {
+  .content {
+    gap: 8px;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
   }
 
-
-  .logo {
-    font-size: 15px;
+  .stage {
+    border-radius: var(--canto-g);
   }
 
-  .student-badge {
-    max-width: 100%;
+  .sidebar {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 88vh;
+    height: min(88dvh, calc(100dvh - 48px));
+    border-radius: var(--canto-xg) var(--canto-xg) 0 0;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transform: translateY(100%);
   }
 
-  .badge {
-    padding: 5px 9px;
-    font-size: 11px;
-  }
-
-  /* Campo com menos de 16px faz o iPhone dar zoom sozinho ao focar, e a página
-     fica torta até o aluno pinçar de volta. */
-  .input {
-    font-size: 16px;
-    height: 44px;
-  }
-
-  .entry-card {
-    padding: 24px 20px;
-  }
-
-  .entry-title {
-    font-size: 21px;
-  }
-
-  .entry-input {
-    height: 46px;
-    font-size: 16px;
+  .sidebar-top {
+    padding-left: 20px;
   }
 
   .messages {
-    padding: 12px;
+    padding: 8px 20px 12px;
   }
 
-  .chat-bubble {
-    max-width: 92%;
+  .control-bar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+    height: calc(72px + env(safe-area-inset-bottom));
+    padding: 0 max(12px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(12px, env(safe-area-inset-left));
   }
 
-  .chat-form {
-    padding: 12px;
-    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  .barra-estado {
+    gap: 10px;
   }
 
-  .sidebar-head {
-    padding: 14px;
+  .chip-estado {
+    height: 32px;
+    padding: 0 12px;
   }
 
-  /* Dedo não é ponteiro: alvo pequeno demais vira erro de toque. */
-  .btn {
-    min-height: 44px;
+  .student-badge {
+    padding-left: 10px;
   }
 
-  .fs-btn {
-    right: 12px;
-    bottom: max(14px, env(safe-area-inset-bottom));
-    width: 44px;
-    height: 44px;
-  }
-
-  .reconnect-title,
-  .disconnected-title,
+  .placeholder-title,
   .paused-title {
-    font-size: 17px;
+    font-size: 18px;
+    line-height: 24px;
   }
 
-  .reconnect-overlay,
-  .disconnected-state,
-  .paused-overlay {
-    padding: 20px;
-  }
-}
-
-/* Celular deitado: sobra pouquíssima altura, e o vídeo é a prioridade.
-   Aqui o cabeçalho encolhe ao mínimo para não comer a imagem. */
-@media (max-height: 460px) and (orientation: landscape) {
-  .header {
-    padding: 4px 12px;
-  }
-
-  .logo {
-    font-size: 14px;
-  }
-
-  .entry-gate {
-    padding: 12px;
-    align-items: flex-start;
-    overflow-y: auto;
+  .placeholder-icon,
+  .paused-icon {
+    font-size: 40px;
   }
 
   .entry-card {
-    padding: 18px 20px;
+    padding: 28px 20px 24px;
+  }
+
+  .entry-title {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}
+
+/* Celular estreito com problema de conexão: o estado vale mais que o nome, que já
+   aparece de novo quando a aula volta. */
+@media (max-width: 480px) {
+  .chip-estado:not(.ao-vivo) + .student-badge {
+    display: none;
+  }
+}
+
+/* Abaixo disto sobram poucas letras do nome ("An…"), que só poluem a barra. */
+@media (max-width: 359px) {
+  .student-badge {
+    display: none;
+  }
+}
+
+/* Celular deitado: sobra pouquíssima altura, e a imagem é a prioridade. A barra vira um
+   trilho vertical à direita (o "navigation rail" do Material), porque a imagem 16:9 é
+   limitada pela altura e sobra largura: o palco ganha a altura toda. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .app {
+    flex-direction: row;
+  }
+
+  .content {
+    padding: max(8px, env(safe-area-inset-top)) 0 max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+
+  .stage {
+    border-radius: var(--canto-g);
+  }
+
+  .control-bar {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    width: calc(64px + env(safe-area-inset-right));
+    height: auto;
+    padding: max(8px, env(safe-area-inset-top)) env(safe-area-inset-right) max(8px, env(safe-area-inset-bottom)) 0;
+  }
+
+  .barra-estado,
+  .barra-centro,
+  .barra-paineis {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Só o ponto colorido: o palco já diz em texto se está pausado ou reconectando. */
+  .chip-estado {
+    justify-content: center;
+    width: 48px;
+    height: 32px;
+    padding: 0;
+  }
+
+  .chip-estado .status-text,
+  .student-badge {
+    display: none;
+  }
+
+  .entry-gate {
+    align-items: flex-start;
+  }
+
+  .entry-card {
+    padding: 20px 24px;
+  }
+
+  .entry-brand {
+    margin-bottom: 12px;
+  }
+
+  .entry-title {
+    font-size: 24px;
+    line-height: 32px;
   }
 
   .entry-sub {
-    margin-bottom: 14px;
+    margin-bottom: 16px;
   }
 
-  .spinner {
-    width: 26px;
-    height: 26px;
-    margin-bottom: 10px;
+  .entry-card .botao {
+    margin-top: 16px;
   }
 
-  .fs-btn {
-    bottom: 10px;
+  .placeholder {
+    gap: 4px;
+    padding: 16px;
+  }
+
+  .placeholder .progresso {
+    margin-top: 8px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .reconnect-overlay {
+    top: 8px;
+  }
+
+  /* Na folha baixa, a fixada fica em 2 linhas para sobrar lugar para a conversa. */
+  .fixada-texto {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 }
 
-/* Toque em vez de mouse.
-   O botão de tela cheia fica apagado e só acende no `:hover` — gesto que não
-   existe em tela de toque. Sem isto, no celular ele vive meio invisível. */
-@media (hover: none) {
-  .fs-btn {
-    opacity: 1;
+/* Quem pede menos movimento no sistema recebe as trocas sem mola. Os indicadores de
+   progresso continuam girando: é o que diz que algo está acontecendo. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 1ms !important;
+  }
+
+  .paused-overlay,
+  .reconnect-overlay,
+  .disconnected-state,
+  .fixada,
+  .contador,
+  .chip-estado .dot::after {
+    animation: none !important;
   }
 }
-
-/* Area de video */
-.video-area {
-  display: flex;
-  background: #000;
-  position: relative;
-}
-
-.video-wrap {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Preto sólido atrás do vídeo: a textura diagonal poluía as bordas do stream.
-     Ela fica só nos estados vazios, onde ajuda a indicar "sem imagem ainda". */
-  background: #0a0a0b;
-}
-
-.video-wrap:has(.placeholder:not([hidden])),
-.video-wrap:has(.reconnect-overlay:not([hidden])) {
-  background: repeating-linear-gradient(135deg, #141416 0 10px, #191a1c 10px 20px);
-}
-
-.stream {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: none;
-  position: relative;
-  z-index: 1;
-  background: #000;
-}
-
-.stream.active {
-  display: block;
-}
-
-.placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 40px 20px;
-  color: #666;
-}
-
-.placeholder-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: #888;
-}
-
-.placeholder-sub {
-  font-size: 13px;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #222;
-  border-top-color: #5a9cf5;
-  border-radius: 50%;
-  animation: spin .8s linear infinite;
-  margin-bottom: 16px;
-}
-
-.spinner-amber {
-  border-top-color: #c9a500;
-}
-
-/* Overlay de reconexao */
-.reconnect-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  background: rgba(10,10,10,.82);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 8px;
-  padding: 32px;
-}
-
-.reconnect-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #e8e8e8;
-}
-
-.reconnect-sub {
-  font-size: 13px;
-  line-height: 1.5;
-  color: #999;
-  max-width: 380px;
-}
-
-.reconnect-attempt {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: #c9a500;
-  margin-top: 4px;
-}
-
-/* Estado firme de desconexao */
-.disconnected-state {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  background: #0d0d0d;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 12px;
-  padding: 28px;
-}
-
-.disconnected-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 3px solid #c44;
-  display: grid;
-  place-items: center;
-  font-size: 17px;
-  font-weight: 700;
-  color: #e06a6a;
-}
-
-.disconnected-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #e8e8e8;
-}
-
-.disconnected-sub {
-  font-size: 13px;
-  line-height: 1.5;
-  color: #999;
-  max-width: 340px;
-}
-
-.btn-retry {
-  background: #1e2c44;
-  border-color: #3a4a63;
-  color: #a8c6f5;
-  font-weight: 600;
-}
-
-.btn-retry:hover {
-  background: #24344f;
-}
-
-/* Overlay pausado */
-.paused-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  background: rgba(10,10,10,.72);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  text-align: center;
-  padding: 28px;
-}
-
-.paused-icon {
-  display: flex;
-  gap: 6px;
-}
-
-.paused-icon span {
-  width: 8px;
-  height: 28px;
-  background: #e8e8e8;
-  border-radius: 2px;
-}
-
-.paused-title {
-  font-size: 19px;
-  font-weight: 600;
-  color: #e8e8e8;
-}
-
-.paused-sub {
-  font-size: 13px;
-  color: #999;
-}
-
-
-/* Botoes */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid #3a3a3a;
-  background: #202022;
-  color: #e2e2e4;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s, border-color .15s, transform .1s;
-}
-
-.btn:hover {
-  background: #2a2a2d;
-  border-color: #4a4a4a;
-}
-
-.btn:active {
-  transform: scale(.97);
-}
-
-.btn-send {
-  background: #1e2c44;
-  border-color: #3a4a63;
-  color: #a8c6f5;
-  font-weight: 600;
-}
-
-.btn-send:hover {
-  background: #24344f;
-}
-
-/* Botão de tela cheia no canto inferior direito do vídeo (padrão YouTube). */
-.fs-btn {
-  position: absolute;
-  right: 14px;
-  bottom: 18px;
-  z-index: 6;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.1);
-  background: rgba(18,18,20,.82);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 8px 28px rgba(0,0,0,.5);
-  color: #e2e2e4;
-  cursor: pointer;
-  opacity: .55;
-  transition: opacity .18s ease, background .15s, transform .1s;
-}
-
-.video-wrap:hover .fs-btn,
-.fs-btn:focus-visible {
-  opacity: 1;
-}
-
-.fs-btn:hover {
-  background: rgba(38,38,42,.9);
-}
-
-.fs-btn:active {
-  transform: scale(.94);
-}
-
-/* Alterna entre os ícones de entrar e sair de tela cheia. */
-.fs-icon-exit { display: none; }
-.video-wrap:fullscreen .fs-icon-enter { display: none; }
-.video-wrap:fullscreen .fs-icon-exit { display: inline; }
-
-/* Em tela cheia o vídeo ocupa tudo e os controles continuam por cima. */
-.video-wrap:fullscreen {
-  width: 100vw;
-  height: 100vh;
-  background: #000;
-}
-
-/* Sidebar */
-/* O painel é uma coluna de três partes: arquivos (até 40% da altura, rolando por
-   dentro), conversa (o resto, rolando por dentro) e o campo de envio, sempre visível
-   embaixo.
-
-   Cada parte precisa de `min-height: 0`. Sem isso o Chrome não encolhe um item flex
-   abaixo da altura do conteúdo: com muitos arquivos e mensagens a conversa crescia, e
-   o campo de envio e o botão Enviar iam para baixo da tela (reproduzido num notebook
-   1366x620). O WebKit é mais tolerante, por isso no Safari não aparecia. */
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  background: #1a1a1a;
-  border-left: 1px solid #2a2a2a;
-  overflow: hidden;
-}
-
-/* Barra do topo do painel, com o botão de fechar. */
-.sidebar-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 10px 10px 16px;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.sidebar-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #e8e8e8;
-}
-
-.sidebar-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #a0a0a6;
-  cursor: pointer;
-}
-
-.sidebar-close:hover {
-  background: #26262a;
-  color: #e8e8e8;
-}
-
-/* Subtítulos das seções do painel. */
-.sidebar-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 14px 16px 6px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: #8a8a90;
-}
-
-.sidebar-head::before {
-  content: "";
-  width: 14px;
-  height: 14px;
-  background: currentColor;
-}
-
-.sidebar-head-files::before {
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M14 3H6v18h12V7z'/%3E%3Cpath d='M14 3v4h4'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M14 3H6v18h12V7z'/%3E%3Cpath d='M14 3v4h4'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-.sidebar-head-chat::before {
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-/* Painel fechado no computador: o vídeo fica com a largura toda. (No celular o
-   painel é uma gaveta por cima do vídeo e esta classe não é usada.) */
-.app.painel-fechado .content {
-  grid-template-columns: 1fr;
-}
-
-.app.painel-fechado .sidebar {
-  display: none;
-}
-
-
-/* Arquivos compartilhados pelo professor: ficam no topo do painel, acima da conversa,
-   com altura limitada para não empurrar o chat para fora da tela. */
-.files {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 40%;
-  display: flex;
-  flex-direction: column;
-}
-
-.files-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  list-style: none;
-  margin: 0;
-  padding: 6px 8px;
-  overflow-y: auto;
-  border-bottom: 1px solid #2a2a2a;
-}
-
-.file-link {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 8px;
-  border-radius: 6px;
-  color: #a8c6f5;
-  text-decoration: none;
-  font-size: 14px;
-}
-
-.file-link:hover,
-.file-link:focus-visible {
-  background: #22262e;
-}
-
-.file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-size {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #888;
-}
-
-.file-size::after {
-  content: "";
-  width: 14px;
-  height: 14px;
-  background: #a8c6f5;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11'/%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3Cpath d='M5 20h14'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4v11'/%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3Cpath d='M5 20h14'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-/* Paineis */
-.panel {
-  display: none;
-  flex: 1 1 0;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel.active {
-  display: flex;
-}
-
-/* Mensagens */
-.messages {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.chat-bubble {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-width: 88%;
-  word-break: break-word;
-}
-
-.chat-bubble.own {
-  align-self: flex-end;
-  padding-left: 0;
-  border-left: none;
-  border-right: 2px solid #5a9cf5;
-  padding-right: 10px;
-  align-items: flex-end;
-}
-
-.chat-bubble.prof {
-  padding-left: 10px;
-  border-left: 2px solid #5a9cf5;
-}
-
-.chat-author {
-  font-size: 12px;
-  font-weight: 600;
-  color: #777;
-}
-
-.chat-bubble.prof .chat-author {
-  color: #8fb6ef;
-}
-
-.chat-text {
-  font-size: 15px;
-  line-height: 1.45;
-  color: #e8e8e8;
-}
-
-.sys-msg {
-  text-align: center;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #888;
-  padding: 10px 12px;
-  background: #151515;
-  border: 1px solid #2a2a2a;
-  border-radius: 6px;
-}
-
-/* Formulario de chat */
-.chat-form {
-  flex-shrink: 0;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-top: 1px solid #2a2a2a;
-}
-
-.input {
-  width: 100%;
-  padding: 0 12px;
-  height: 38px;
-  border-radius: 6px;
-  border: 1px solid #2a2a2a;
-  background: #111;
-  color: #e8e8e8;
-  font-size: 15px;
-}
-
-.input:focus {
-  border-color: #5a9cf5;
-  outline: none;
-}
-
-.input::placeholder {
-  color: #666;
-}
-
-.send-row {
-  display: flex;
-  gap: 8px;
-}
-
-.input-msg {
-  flex: 1;
-}
-
-/* Chat desligado pelo professor: campo e botão continuam na tela, apenas inativos.
-   O apagamento e o cursor barrado dizem que não adianta tentar, sem precisar de recado. */
-.input:disabled,
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.input:disabled {
-  background: #0d0d0d;
-}
-
-.btn-send:disabled:hover {
-  background: #1e2c44;
-}
-
-

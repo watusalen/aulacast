@@ -10,6 +10,7 @@ public protocol NetworkServerProtocol: AnyObject {
 
     var chatObserver: ChatObserverProtocol? { get set }
     var presenceObserver: StudentPresenceObserverProtocol? { get set }
+    var handRaiseObserver: HandRaiseObserverProtocol? { get set }
     var clientObserver: ClientObserverProtocol? { get set }
 
     /// Chamado quando o servidor cai depois de `start()` ter voltado sem erro (a porta já
@@ -23,6 +24,11 @@ public protocol NetworkServerProtocol: AnyObject {
     func broadcastControlMessage(type: String, payload: [String: String]?)
     /// Troca a lista de arquivos que a turma pode baixar e avisa quem está conectado.
     func updateSharedFiles(_ files: [SharedFile])
+    /// O professor abaixou a mão de um aluno: avisa só aquele aluno (`HAND_LOWERED`).
+    func lowerHand(clientId: String)
+    /// Fixa (ou, com `nil`, desafixa) a mensagem do topo do chat da turma e avisa quem está
+    /// conectado (`CHAT_PINNED`). Quem entrar depois a recebe no `CONNECTED`.
+    func updatePinnedMessage(_ text: String?)
     /// Avisado quando um download de arquivo compartilhado começa ou termina.
     var onFileDownloadUpdate: ((FileDownloadStats) -> Void)? { get set }
 }

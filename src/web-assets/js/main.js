@@ -4,11 +4,16 @@ import { ChatManager } from './chat-manager.js';
 import { EntryGate } from './entry-gate.js';
 import { PresenceReporter } from './presence-reporter.js';
 import { FilesList } from './files-list.js';
+import { MaoLevantada } from './raise-hand.js';
+import { ManterTelaAcesa } from './manter-tela-acesa.js';
 
 /** Exportada para que o despachante de mensagens possa ser exercitado pelos testes. */
 export class AulaCastApp {
-  constructor() {
-    this.ui = new UIController();
+  /**
+   * @param {{ criarVigia?: Function, telaAcesa?: object }} opcoes dublês para os testes
+   */
+  constructor({ criarVigia, telaAcesa } = {}) {
+    this.ui = new UIController({ criarVigia });
     this.identidade = null;
 
     this.retryConnectionBtn = document.getElementById('retryConnectionBtn');
@@ -17,6 +22,10 @@ export class AulaCastApp {
       (data) => this.socket.send(data),
       () => (this.identidade ? this.identidade.name : 'Aluno')
     );
+    // O chat escondido não rola: ao aparecer, vai para a mensagem mais recente.
+    this.ui.aoMostrarArea = (area) => {
+      if (area === 'chat') this.chatManager.rolarParaOFim();
+    };
 
     this.socket = new SocketClient(
       (state, attempts) => this.handleStateChange(state, attempts),
@@ -25,10 +34,19 @@ export class AulaCastApp {
 
     this.presence = new PresenceReporter((mensagem) => this.socket.send(mensagem));
 
+    this.mao = new MaoLevantada(
+      document.getElementById('raiseHandBtn'),
+      (mensagem) => this.socket.send(mensagem)
+    );
+
     this.files = new FilesList({ onNovidade: (novos) => this.avisarArquivosNovos(novos) });
 
+    // A turma relatou a tela "apagando" durante a aula: o monitor ou o celular dormem
+    // porque ninguém mexe neles. Quem mantém a tela acesa é este módulo.
+    this.telaAcesa = telaAcesa || new ManterTelaAcesa();
+
     this.entryGate = new EntryGate({
-      onIdentified: (identidade) => this.entrarNaAula(identidade)
+      onIdentified: (identidade, detalhes) => this.entrarNaAula(identidade, detalhes)
     });
 
     this.bindEvents();
@@ -37,9 +55,17 @@ export class AulaCastApp {
     this.entryGate.tentarEntrarComIdentidadeSalva();
   }
 
-  entrarNaAula(identidade) {
+  entrarNaAula(identidade, { porGesto = false } = {}) {
     this.identidade = identidade;
     this.ui.setStudentName(identidade.name);
+
+    // O navegador só deixa manter a tela acesa a partir de um gesto do usuário. No envio
+    // do formulário há um; quem entra sozinho (identidade salva) ativa no primeiro toque.
+    if (porGesto) {
+      this.telaAcesa.ativar();
+    } else {
+      this.telaAcesa.instalarNoPrimeiroGesto();
+    }
 
     if (this.socket.isConnected()) {
       this.enviarIdentificacao();
@@ -57,8 +83,11 @@ export class AulaCastApp {
       type: 'IDENTIFY',
       payload: { name: this.identidade.name }
     });
-    // Reconectar cria uma conexão nova no servidor: é preciso reenviar a presença.
+    // Reconectar cria uma conexão nova no servidor: é preciso reenviar a presença e, se
+    // estava levantada, a mão. Depois do IDENTIFY, porque o servidor só aceita a mão de
+    // quem já tem nome validado.
     this.presence.sincronizar();
+    this.mao.reenviarSeLevantada();
   }
 
   bindEvents() {
@@ -89,6 +118,8 @@ export class AulaCastApp {
         if (data.payload && Array.isArray(data.payload.files)) {
           this.files.render(data.payload.files);
         }
+        // A fixada que já estava lá não é novidade: não conta no botão do chat.
+        this.chatManager.fixar(data.payload ? data.payload.pinned : null);
         break;
 
       // O professor compartilhou (ou tirou) um arquivo.
@@ -100,14 +131,29 @@ export class AulaCastApp {
         this.chatManager.setEnabled(data.payload.enabled === 'true');
         break;
 
+      // O professor fixou (ou trocou, ou tirou) a mensagem do topo do chat.
+      case 'CHAT_PINNED':
+        if (this.chatManager.fixar(data.payload ? data.payload.text : null)) {
+          this.ui.marcarNovidade('chat');
+        }
+        break;
+
+      case 'RAISE_HAND_ACK':
+        this.mao.confirmar(data.payload && data.payload.active);
+        break;
+
+      case 'HAND_LOWERED':
+        if (this.mao.abaixadaPeloProfessor()) this.chatManager.mostrarMaoAbaixada();
+        break;
+
       case 'IDENTIFY_REJECTED':
         this.entryGate.reabrirComErro(data.payload && data.payload.reason);
         break;
 
       case 'CHAT_MESSAGE':
         this.chatManager.appendMessage(data.payload.sender, data.payload.text, data.payload.isProf);
-        // Resposta do professor com o painel fechado: o contador no botão avisa.
-        if (data.payload.isProf) this.ui.marcarNovidade();
+        // Resposta do professor com o chat fechado: o contador no botão avisa.
+        if (data.payload.isProf) this.ui.marcarNovidade('chat');
         break;
 
       // O professor começou (ou recomeçou) a transmitir com a gente já conectado.
@@ -133,6 +179,12 @@ export class AulaCastApp {
     }
   }
 
+  /** Com Arquivos fechado, o contador no botão avisa que chegou arquivo. */
+  avisarArquivosNovos(novos) {
+    this.ui.marcarNovidade('arquivos', novos.length);
+    this.chatManager.mostrarArquivosNovos(novos);
+  }
+
   /**
    * Quem entra (ou reconecta) precisa ver a aula no estado em que ela está.
    *
@@ -140,12 +192,6 @@ export class AulaCastApp {
    * reconectava via o último quadro congelado como se fosse ao vivo, e o aviso de pausa
    * de antes da queda podia ficar preso na tela depois de o professor já ter retomado.
    */
-  /** Com o painel fechado, o contador no botão avisa que chegou arquivo. */
-  avisarArquivosNovos(novos) {
-    this.ui.marcarNovidade(novos.length);
-    this.chatManager.mostrarArquivosNovos(novos);
-  }
-
   aplicarEstadoDaTransmissao(payload) {
     if (!payload || !payload.stream) return;
     switch (payload.stream) {

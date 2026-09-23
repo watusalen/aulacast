@@ -159,6 +159,7 @@ public final class MainViewModel: ObservableObject {
         self.serverService.chatObserver = self
         self.serverService.presenceObserver = self
         self.serverService.clientObserver = self
+        self.serverService.handRaiseObserver = self
         self.serverService.isChatEnabled = self.isChatEnabled
         self.serverService.onFailure = { [weak self] mensagem in
             Task { @MainActor in self?.serverDidFail(mensagem) }
@@ -225,6 +226,25 @@ public final class MainViewModel: ObservableObject {
         if let lastMsg = chatManager.messages.last, lastMsg.isProf {
             serverService.broadcastChatMessage(lastMsg)
         }
+    }
+
+    /// Fixa uma mensagem do professor no topo do chat da turma. Fixar outra substitui.
+    public func pinMessage(_ message: ChatMessage) {
+        guard chatManager.pin(message) else { return }
+        serverService.updatePinnedMessage(message.text)
+    }
+
+    public func unpinMessage() {
+        guard chatManager.unpin() else { return }
+        serverService.updatePinnedMessage(nil)
+    }
+
+    /// O professor atendeu o aluno e abaixa a mão dele, como o "Abaixar a mão" do Meet.
+    /// A lista muda na hora; o aviso vai só para aquele aluno, para a mão sumir da tela dele.
+    public func lowerHand(clientId: String) {
+        guard clientManager.clients.first(where: { $0.id == clientId })?.isHandRaised == true else { return }
+        clientManager.setHandRaised(clientId: clientId, isRaised: false)
+        serverService.lowerHand(clientId: clientId)
     }
 
     public func startStream() {
@@ -480,6 +500,17 @@ extension MainViewModel: ChatObserverProtocol {
     }
 }
 
+// MARK: - HandRaiseObserverProtocol
+extension MainViewModel: HandRaiseObserverProtocol {
+    public nonisolated func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool) {
+        Task { @MainActor in
+            // O nome já chegou pelo IDENTIFY (é dele que o servidor tira o `displayName`);
+            // aqui só muda a mão.
+            self.clientManager.setHandRaised(clientId: clientId, isRaised: isRaised)
+        }
+    }
+}
+
 // MARK: - StudentPresenceObserverProtocol
 extension MainViewModel: StudentPresenceObserverProtocol {
     public nonisolated func didIdentifyStudent(clientId: String, name: String) {
@@ -499,7 +530,8 @@ extension MainViewModel: StudentPresenceObserverProtocol {
 extension MainViewModel: ClientObserverProtocol {
     public nonisolated func didClientConnect(_ client: ConnectedClient) {
         Task { @MainActor in
-            // Preserva o id vindo do handshake: é a chave usada para levantar a mão depois.
+            // Preserva o id vindo do handshake: é a chave usada para identificar o aluno e
+            // levantar a mão depois.
             self.clientManager.addOrUpdateClient(client)
         }
     }

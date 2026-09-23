@@ -407,8 +407,8 @@ struct AulaCastTestRunner {
             }
             assertTest(handshakeOk, "Handshake WebSocket completa e envia CONNECTED")
 
-            // Uma página aberta com a versão antiga ainda pode mandar RAISE_HAND: o
-            // servidor ignora a mensagem sem derrubar o aluno.
+            // Mão levantada antes do IDENTIFY: não há nome validado para mostrar, então o
+            // servidor ignora a mensagem, mas sem derrubar o aluno.
             try? await socket.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"active\":true}}"))
             try? await Task.sleep(nanoseconds: 400_000_000)
 
@@ -416,7 +416,6 @@ struct AulaCastTestRunner {
 
             // O servidor pode ter mensagens já na fila, então é preciso ler até achar a
             // esperada em vez de assumir que vem primeiro.
-            // então é preciso ler até achar a esperada em vez de assumir que vem primeiro.
             func aguardarMensagem(contendo trecho: String, tentativas: Int = 6) async -> Bool {
                 for _ in 0..<tentativas {
                     guard case .string(let texto)? = try? await socket.receive() else { return false }
@@ -433,7 +432,7 @@ struct AulaCastTestRunner {
             assertTest(identificacaoAceita, "Servidor aceita a identificação do aluno pelo nome")
             assertTest(
                 coletor.identificacoes.first?.id == coletor.conectados.first?.id,
-                "Mensagem antiga de mão levantada não derrubou a conexão: a identificação chega pelo mesmo aluno"
+                "Mão levantada antes de se identificar não derrubou a conexão: a identificação chega pelo mesmo aluno"
             )
             assertTest(coletor.identificacoes.count == 1, "Identificação chega ao app do professor")
             assertTest(coletor.identificacoes.first?.nome == "Ana Beatriz", "O nome informado chega ao professor")
@@ -1919,6 +1918,306 @@ struct AulaCastTestRunner {
         assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 760) == 3, "Com o painel aberto: 3 colunas")
         assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 1120) == 5, "Painel fechado: as fontes ganham colunas")
         assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 3000) == 6, "Nunca passa de 6 colunas")
+
+        // TESTE 28: Mão levantada.
+        // A turma pediu de volta. A mão é estado da conexão, o nome sai do IDENTIFY e a lista
+        // do professor põe quem pediu primeiro no topo, como no Meet.
+        print("\n--- [28/29] Testes: mão levantada ---")
+
+        let salaDasMaos = ClientManagerService()
+        let bia = ConnectedClient(name: "Aluno-0.31", ipAddress: "192.168.0.31")
+        let caio = ConnectedClient(name: "Aluno-0.32", ipAddress: "192.168.0.32")
+        let davi = ConnectedClient(name: "Aluno-0.33", ipAddress: "192.168.0.33")
+        let semNome = ConnectedClient(name: "Aluno-0.34", ipAddress: "192.168.0.34")
+        for c in [bia, caio, davi, semNome] { salaDasMaos.addOrUpdateClient(c) }
+        salaDasMaos.identify(clientId: bia.id, name: "Bia")
+        salaDasMaos.identify(clientId: caio.id, name: "Caio")
+        salaDasMaos.identify(clientId: davi.id, name: "Davi")
+
+        assertTest(salaDasMaos.handRaisedCount == 0, "Contador de mãos levantadas começa em zero")
+        let t0 = Date()
+        salaDasMaos.setHandRaised(clientId: davi.id, isRaised: true, at: t0)
+        salaDasMaos.setHandRaised(clientId: bia.id, isRaised: true, at: t0.addingTimeInterval(5))
+        assertTest(salaDasMaos.handRaisedCount == 2, "Duas mãos levantadas contam 2")
+        assertTest(
+            salaDasMaos.identifiedClientsInListOrder.map(\.name) == ["Davi", "Bia", "Caio"],
+            "Quem levantou a mão vem primeiro, na ordem de quem levantou antes"
+        )
+
+        // A página repete a mensagem (ou o aluno clica duas vezes): não perde o lugar na fila.
+        salaDasMaos.setHandRaised(clientId: davi.id, isRaised: true, at: t0.addingTimeInterval(10))
+        assertTest(
+            salaDasMaos.identifiedClientsInListOrder.first?.name == "Davi",
+            "Levantar de novo com a mão já no alto mantém o lugar na fila"
+        )
+
+        salaDasMaos.setHandRaised(clientId: davi.id, isRaised: false)
+        assertTest(salaDasMaos.handRaisedCount == 1, "Abaixar a mão desconta do contador")
+        assertTest(
+            salaDasMaos.identifiedClientsInListOrder.map(\.name) == ["Bia", "Caio", "Davi"],
+            "Quem abaixa a mão volta ao lugar de chegada, depois das mãos levantadas"
+        )
+
+        // Levantar de novo depois de abaixar vai para o fim da fila, como no Meet.
+        salaDasMaos.setHandRaised(clientId: davi.id, isRaised: true, at: t0.addingTimeInterval(20))
+        assertTest(
+            salaDasMaos.identifiedClientsInListOrder.map(\.name) == ["Bia", "Davi", "Caio"],
+            "Quem levanta a mão de novo entra no fim da fila"
+        )
+
+        let totalAntesDaMaoFantasma = salaDasMaos.clients.count
+        salaDasMaos.setHandRaised(clientId: "id-inexistente", isRaised: true)
+        assertTest(salaDasMaos.clients.count == totalAntesDaMaoFantasma, "Mão levantada de conexão desconhecida é ignorada")
+        salaDasMaos.setHandRaised(clientId: semNome.id, isRaised: true)
+        assertTest(salaDasMaos.handRaisedCount == 2, "Conexão sem nome não entra na contagem de mãos")
+
+        salaDasMaos.removeClient(id: bia.id)
+        assertTest(salaDasMaos.handRaisedCount == 1, "A mão de quem saiu da aula não fica pendurada no contador")
+
+        // Caminho completo no app do professor: servidor -> MainViewModel -> gerenciador,
+        // e o "Abaixar a mão" do professor de volta ao servidor.
+        let servidorDasMaos = FakeServer()
+        let vmMaos = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: servidorDasMaos, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
+        )
+        assertTest(servidorDasMaos.handRaiseObserver === vmMaos, "O app do professor se registra para receber as mãos levantadas")
+        let alunaDaMao = ConnectedClient(name: "Aluno-0.40", ipAddress: "192.168.0.40")
+        vmMaos.didClientConnect(alunaDaMao)
+        vmMaos.didIdentifyStudent(clientId: alunaDaMao.id, name: "Elisa")
+        vmMaos.didToggleHandRaise(clientId: alunaDaMao.id, displayName: "Elisa", isRaised: true)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmMaos.clientManager.handRaisedCount == 1, "Mão levantada chega ao app do professor pelo caminho completo")
+        assertTest(vmMaos.clientManager.clients.first?.isHandRaised == true, "A linha da aluna fica marcada com a mão levantada")
+
+        vmMaos.lowerHand(clientId: alunaDaMao.id)
+        assertTest(vmMaos.clientManager.handRaisedCount == 0, "Professor abaixa a mão e o contador zera na hora")
+        assertTest(servidorDasMaos.maosAbaixadas == [alunaDaMao.id], "Abaixar a mão avisa o servidor só daquela aluna")
+        vmMaos.lowerHand(clientId: alunaDaMao.id)
+        assertTest(servidorDasMaos.maosAbaixadas.count == 1, "Abaixar a mão já abaixada não manda aviso repetido")
+
+        vmMaos.didToggleHandRaise(clientId: alunaDaMao.id, displayName: "Elisa", isRaised: true)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        vmMaos.didToggleHandRaise(clientId: alunaDaMao.id, displayName: "Elisa", isRaised: false)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        assertTest(vmMaos.clientManager.handRaisedCount == 0, "A própria aluna abaixa a mão pelo caminho completo")
+        assertTest(servidorDasMaos.maosAbaixadas.count == 1, "Quando a aluna abaixa sozinha, o servidor não recebe HAND_LOWERED")
+
+        // Ponta a ponta pelo WebSocket real.
+        final class ColetorDeMaos: HandRaiseObserverProtocol, ClientObserverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _conectados: [ConnectedClient] = []
+            private var _maos: [(id: String, nome: String, levantada: Bool)] = []
+            var conectados: [ConnectedClient] { trava.lock(); defer { trava.unlock() }; return _conectados }
+            var maos: [(id: String, nome: String, levantada: Bool)] { trava.lock(); defer { trava.unlock() }; return _maos }
+            func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool) {
+                trava.lock(); _maos.append((clientId, displayName, isRaised)); trava.unlock()
+            }
+            func didClientConnect(_ client: ConnectedClient) {
+                trava.lock(); _conectados.append(client); trava.unlock()
+            }
+            func didClientDisconnect(clientId: String) {}
+        }
+
+        /// Lê até achar a mensagem do tipo pedido e a devolve já decodificada, junto com os
+        /// tipos que vieram antes dela (para provar que algo *não* foi enviado).
+        func receberMensagem(
+            _ socket: URLSessionWebSocketTask, tipo: String, tentativas: Int = 8
+        ) async -> (mensagem: [String: Any]?, antes: [String]) {
+            var antes: [String] = []
+            for _ in 0..<tentativas {
+                guard case .string(let texto)? = try? await socket.receive(),
+                      let dados = texto.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: dados) as? [String: Any],
+                      let recebido = json["type"] as? String else { return (nil, antes) }
+                if recebido == tipo { return (json, antes) }
+                antes.append(recebido)
+            }
+            return (nil, antes)
+        }
+
+        let coletorDeMaos = ColetorDeMaos()
+        let servidorMaoReal = NetworkListenerService(port: 8120, webAssetsPath: FileManager.default.temporaryDirectory)
+        servidorMaoReal.handRaiseObserver = coletorDeMaos
+        servidorMaoReal.clientObserver = coletorDeMaos
+        do {
+            try servidorMaoReal.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let socketMao = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8120/ws")!)
+            socketMao.resume()
+            _ = await receberMensagem(socketMao, tipo: "CONNECTED")
+
+            // Antes do IDENTIFY: ignorada, sem ACK e sem derrubar.
+            try? await socketMao.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"active\":true}}"))
+            try? await socketMao.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Fábio Lima\"}}"))
+            let aceito = await receberMensagem(socketMao, tipo: "IDENTIFY_ACCEPTED")
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            assertTest(aceito.mensagem != nil, "Mão levantada antes do IDENTIFY não derruba a conexão")
+            assertTest(!aceito.antes.contains("RAISE_HAND_ACK"), "Mão levantada antes do IDENTIFY não recebe confirmação")
+            assertTest(coletorDeMaos.maos.isEmpty, "Mão levantada antes do IDENTIFY não chega ao professor")
+
+            // Identificado: o nome vem do IDENTIFY, não de um campo que o navegador inventar.
+            try? await socketMao.send(.string(
+                "{\"type\":\"RAISE_HAND\",\"payload\":{\"active\":true,\"name\":\"Outra Pessoa\",\"studentName\":\"Professor\"}}"
+            ))
+            let ackLevantada = await receberMensagem(socketMao, tipo: "RAISE_HAND_ACK")
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            assertTest(
+                (ackLevantada.mensagem?["payload"] as? [String: Any])?["active"] as? Bool == true,
+                "Servidor confirma a mão levantada com RAISE_HAND_ACK active=true"
+            )
+            assertTest(coletorDeMaos.maos.count == 1 && coletorDeMaos.maos.first?.levantada == true,
+                       "Mão levantada trafega pelo WebSocket real")
+            assertTest(coletorDeMaos.maos.first?.nome == "Fábio Lima",
+                       "A mão leva o nome aceito no IDENTIFY, não o que vem na mensagem")
+            assertTest(coletorDeMaos.maos.first?.id == coletorDeMaos.conectados.first?.id,
+                       "A mão é da mesma conexão (não um registro novo)")
+
+            try? await socketMao.send(.string("{\"type\":\"RAISE_HAND\",\"payload\":{\"active\":false}}"))
+            let ackAbaixada = await receberMensagem(socketMao, tipo: "RAISE_HAND_ACK")
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            assertTest(
+                (ackAbaixada.mensagem?["payload"] as? [String: Any])?["active"] as? Bool == false,
+                "O aluno abaixa a própria mão e recebe RAISE_HAND_ACK active=false"
+            )
+            assertTest(coletorDeMaos.maos.last?.levantada == false, "A mão abaixada pelo aluno chega ao professor")
+
+            // Sem o campo `active` não há o que fazer: ignora sem derrubar.
+            try? await socketMao.send(.string("{\"type\":\"RAISE_HAND\"}"))
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            assertTest(coletorDeMaos.maos.count == 2, "RAISE_HAND sem o campo active é ignorado")
+
+            // O professor abaixa a mão: só aquele aluno recebe HAND_LOWERED.
+            if let idDoAluno = coletorDeMaos.conectados.first?.id {
+                servidorMaoReal.lowerHand(clientId: idDoAluno)
+                let abaixada = await receberMensagem(socketMao, tipo: "HAND_LOWERED")
+                assertTest(abaixada.mensagem != nil, "Professor abaixa a mão e o aluno recebe HAND_LOWERED")
+                assertTest(abaixada.antes.isEmpty, "HAND_LOWERED chega sozinho, sem mensagens a mais")
+            } else {
+                assertTest(false, "Professor abaixa a mão e o aluno recebe HAND_LOWERED")
+            }
+            servidorMaoReal.lowerHand(clientId: "id-inexistente")
+            try? await socketMao.send(.string("{\"type\":\"PING\"}"))
+            let pong = await receberMensagem(socketMao, tipo: "PONG")
+            assertTest(pong.mensagem != nil && pong.antes.isEmpty,
+                       "Abaixar a mão de conexão desconhecida não manda nada a ninguém")
+
+            socketMao.cancel(with: .goingAway, reason: nil)
+            servidorMaoReal.stop()
+        } catch {
+            assertTest(false, "Falha no teste E2E da mão levantada: \(error.localizedDescription)")
+        }
+
+        // TESTE 29: Mensagem fixada no topo do chat da turma.
+        print("\n--- [29/29] Testes: mensagem fixada ---")
+
+        let chatDaFixada = ChatManagerService()
+        chatDaFixada.sendProfMessage(text: "Portal do Aluno: https://portal.exemplo.edu.br")
+        chatDaFixada.addMessage(ChatMessage(sender: "Gabi", text: "posso fixar?", isProf: false))
+        let doProfessor = chatDaFixada.messages[0]
+        let daAluna = chatDaFixada.messages[1]
+        assertTest(!chatDaFixada.pin(daAluna) && chatDaFixada.pinnedMessage == nil,
+                   "Mensagem de aluno não pode ser fixada (é privada com o professor)")
+        assertTest(chatDaFixada.pin(doProfessor) && chatDaFixada.pinnedMessage?.id == doProfessor.id,
+                   "Mensagem do professor é fixada")
+        assertTest(!chatDaFixada.pin(doProfessor), "Fixar de novo a mesma mensagem não conta como mudança")
+
+        // A fixada sobrevive ao histórico descartar as mensagens antigas.
+        for i in 0..<(ChatManagerService.maxMessages + 1) {
+            chatDaFixada.addMessage(ChatMessage(sender: "Gabi", text: "m\(i)", isProf: false))
+        }
+        assertTest(chatDaFixada.pinnedMessage?.id == doProfessor.id,
+                   "A fixada continua de pé quando o histórico descarta as mensagens antigas")
+
+        let servidorDaFixada = FakeServer()
+        let vmFixada = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: servidorDaFixada, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
+        )
+        vmFixada.sendProfMessage(text: "Leiam o capítulo 3")
+        vmFixada.sendProfMessage(text: "Portal do Aluno: https://portal.exemplo.edu.br")
+        let primeira = vmFixada.chatManager.messages[0]
+        let segunda = vmFixada.chatManager.messages[1]
+
+        vmFixada.pinMessage(primeira)
+        assertTest(vmFixada.chatManager.pinnedMessage?.id == primeira.id, "Professor fixa uma mensagem dele")
+        assertTest(servidorDaFixada.fixacoes == ["Leiam o capítulo 3"], "Fixar manda o texto para a turma")
+
+        vmFixada.pinMessage(segunda)
+        assertTest(vmFixada.chatManager.pinnedMessage?.id == segunda.id, "Fixar outra substitui a fixada (uma por vez)")
+        assertTest(servidorDaFixada.fixacoes.last == "Portal do Aluno: https://portal.exemplo.edu.br",
+                   "A substituta vai para a turma")
+        vmFixada.pinMessage(segunda)
+        assertTest(servidorDaFixada.fixacoes.count == 2, "Fixar a que já está fixada não reenvia")
+
+        vmFixada.didReceiveChatMessage(ChatMessage(sender: "Hugo", text: "fixa a minha", isProf: false))
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        if let doAluno = vmFixada.chatManager.messages.last, !doAluno.isProf {
+            vmFixada.pinMessage(doAluno)
+        }
+        assertTest(vmFixada.chatManager.pinnedMessage?.id == segunda.id && servidorDaFixada.fixacoes.count == 2,
+                   "Mensagem de aluno não chega a ser fixada nem enviada à turma")
+
+        vmFixada.unpinMessage()
+        assertTest(vmFixada.chatManager.pinnedMessage == nil, "Professor desafixa")
+        assertTest(servidorDaFixada.fixacoes.count == 3 && servidorDaFixada.fixacoes.last! == nil,
+                   "Desafixar avisa a turma com texto nulo")
+        vmFixada.unpinMessage()
+        assertTest(servidorDaFixada.fixacoes.count == 3, "Desafixar sem nada fixado não manda aviso")
+
+        // Ponta a ponta: formato exato das mensagens, com aspas e quebra de linha no texto.
+        func boasVindasEm(_ porta: Int) async -> [String: Any]? {
+            let s = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:\(porta)/ws")!)
+            s.resume()
+            defer { s.cancel(with: .goingAway, reason: nil) }
+            return (await receberMensagem(s, tipo: "CONNECTED")).mensagem?["payload"] as? [String: Any]
+        }
+
+        let servidorFixadaReal = NetworkListenerService(port: 8121, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorFixadaReal.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let semFixada = await boasVindasEm(8121)
+            assertTest(semFixada != nil && semFixada?["pinned"] == nil, "Sem fixada, o CONNECTED não traz o campo pinned")
+
+            let socketFixada = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8121/ws")!)
+            socketFixada.resume()
+            _ = await receberMensagem(socketFixada, tipo: "CONNECTED")
+
+            let textoCapcioso = "Portal do Aluno: \"https://portal.exemplo.edu.br/aluno?a=1&b=2\"\nSenha: sua matrícula \\o/ 🎓"
+            servidorFixadaReal.updatePinnedMessage(textoCapcioso)
+            let fixou = await receberMensagem(socketFixada, tipo: "CHAT_PINNED")
+            assertTest(
+                (fixou.mensagem?["payload"] as? [String: Any])?["text"] as? String == textoCapcioso,
+                "CHAT_PINNED leva o texto intacto, com aspas, quebra de linha e barra invertida"
+            )
+            let comFixada = await boasVindasEm(8121)
+            assertTest(comFixada?["pinned"] as? String == textoCapcioso, "Quem entra depois recebe a fixada no CONNECTED")
+            assertTest(comFixada?["chatEnabled"] as? Bool == true && comFixada?["files"] != nil,
+                       "A fixada no CONNECTED não tira os outros campos das boas-vindas")
+
+            servidorFixadaReal.updatePinnedMessage("Prova na sexta")
+            let substituiu = await receberMensagem(socketFixada, tipo: "CHAT_PINNED")
+            assertTest((substituiu.mensagem?["payload"] as? [String: Any])?["text"] as? String == "Prova na sexta",
+                       "Fixar outra manda a substituta a quem está conectado")
+            assertTest((await boasVindasEm(8121))?["pinned"] as? String == "Prova na sexta",
+                       "O CONNECTED passa a trazer a substituta")
+
+            servidorFixadaReal.updatePinnedMessage(nil)
+            let desafixou = await receberMensagem(socketFixada, tipo: "CHAT_PINNED")
+            let payloadDesafixou = desafixou.mensagem?["payload"] as? [String: Any]
+            assertTest(payloadDesafixou?.keys.contains("text") == true && payloadDesafixou?["text"] is NSNull,
+                       "Desafixar manda CHAT_PINNED com text null")
+            let depoisDeDesafixar = await boasVindasEm(8121)
+            assertTest(depoisDeDesafixar != nil && depoisDeDesafixar?["pinned"] == nil,
+                       "Depois de desafixar, o CONNECTED volta a vir sem o campo pinned")
+
+            socketFixada.cancel(with: .goingAway, reason: nil)
+            servidorFixadaReal.stop()
+        } catch {
+            assertTest(false, "Falha no teste E2E da mensagem fixada: \(error.localizedDescription)")
+        }
 
         // SUMÁRIO FINAL
         print("\n==========================================")

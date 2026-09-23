@@ -33,6 +33,9 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     public weak var clientObserver: ClientObserverProtocol? {
         didSet { webSocketHandler.clientObserver = clientObserver }
     }
+    public weak var handRaiseObserver: HandRaiseObserverProtocol? {
+        didSet { webSocketHandler.handRaiseObserver = handRaiseObserver }
+    }
 
     public var onFailure: ((String) -> Void)?
 
@@ -150,6 +153,14 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     public func updateSharedFiles(_ files: [SharedFile]) {
         downloads.atualizar(files)
         webSocketHandler.anunciarArquivos(files)
+    }
+
+    public func lowerHand(clientId: String) {
+        webSocketHandler.abaixarMao(clientId: clientId)
+    }
+
+    public func updatePinnedMessage(_ text: String?) {
+        webSocketHandler.fixarMensagem(text)
     }
 
     private func handleConnection(_ connection: NWConnection) {

@@ -2,8 +2,13 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#111">
+  <!-- viewport-fit=cover: aberta pela Tela de Início do iPhone, a página ocupa também a
+       faixa do relógio e do entalhe; os recuos `safe-area-inset` do CSS tiram o conteúdo
+       de baixo deles. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#F8FAFD" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1B1B1B" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <title>AulaCast</title>
   <!-- Ícone da aba: o mesmo do aplicativo (quadrado azul com o símbolo de transmissão).
        Antes era só o símbolo em branco sobre fundo transparente, que sumia na barra de
@@ -12,126 +17,187 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <!-- "Adicionar à Tela de Início": a aula abre como app, sem a barra do navegador. É o
+       único jeito de ter tela cheia no iPhone, cujo Safari só põe <video> em tela cheia
+       (a transmissão é uma imagem MJPEG). O manifesto cobre o Android; as metas da Apple,
+       o iPhone e o iPad. -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AulaCast">
+  <!-- A fonte dos ícones vem antes de tudo: sem ela, cada botão mostraria um quadradinho. -->
+  <link rel="preload" href="fonts/MaterialSymbolsRounded-AulaCast.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <!-- Portaria: o aluno só vê a aula depois de se identificar. -->
   <div id="entryGate" class="entry-gate">
     <form id="entryForm" class="entry-card" novalidate>
-      <div class="entry-brand">AulaCast</div>
+      <div class="entry-brand">
+        <svg class="marca" viewBox="0 0 24 24" aria-hidden="true">
+          <defs><linearGradient id="marcaGradiente" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a8cff"/><stop offset="1" stop-color="#005cdb"/></linearGradient></defs>
+          <rect width="24" height="24" rx="5.37" fill="url(#marcaGradiente)"/>
+          <g transform="translate(-2.232 1.333) scale(0.8889)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></g>
+        </svg>
+        <span>AulaCast</span>
+      </div>
       <h1 class="entry-title">Entrar na aula</h1>
       <p class="entry-sub">Diga seu nome para o professor saber quem está assistindo.</p>
 
-      <label class="entry-label" for="entryName">Seu nome completo</label>
-      <input type="text" id="entryName" class="input entry-input" autocomplete="name"
-             placeholder="Ex.: Ana Beatriz Sousa" maxlength="40" required>
+      <!-- Campo contornado do Material 3: o rótulo mora dentro do campo e sobe para a borda
+           quando o aluno toca nele. O input vem antes do rótulo porque o CSS usa o seletor
+           de irmão (`input:focus + label`), que funciona até em navegador antigo. -->
+      <div class="campo">
+        <input type="text" id="entryName" class="campo-input" autocomplete="name"
+               placeholder="Ex.: Ana Beatriz Sousa" maxlength="40" required>
+        <label class="campo-rotulo" for="entryName">Seu nome completo</label>
+      </div>
 
       <p id="entryError" class="entry-error" role="alert" hidden></p>
 
-      <button type="submit" id="entrySubmit" class="btn btn-entry">Entrar na aula</button>
+      <button type="submit" id="entrySubmit" class="botao botao-preenchido botao-grande">Entrar na aula</button>
     </form>
   </div>
 
   <div id="app" class="app">
-    <header class="header">
-      <div class="header-left">
-        <span class="logo">AulaCast</span>
-        <span id="studentBadge" class="student-badge" title="Você entrou com este nome" hidden></span>
-      </div>
-      <div class="header-right">
-        <div id="connectionStatus" class="badge connecting">
-          <span class="dot"></span>
-          <span class="status-text">Conectando...</span>
-        </div>
-        <!-- Reabre o painel de conversa e arquivos. Só aparece com o painel fechado:
-             aberto, quem fecha é o X dentro dele. -->
-        <button id="menuToggleBtn" class="panel-toggle" type="button" aria-controls="sidebar"
-                aria-expanded="false" aria-label="Abrir conversa e arquivos" title="Abrir conversa e arquivos">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>
-          </svg>
-          <span id="panelBadge" class="panel-badge" aria-label="novidades não lidas" hidden></span>
-        </button>
-      </div>
-    </header>
-
     <main class="content">
-      <section class="video-area">
+      <!-- Palco: a tela do professor sobre fundo quase preto, nos dois temas, como o palco
+           do Meet e o da tela do professor. -->
+      <section class="stage" aria-label="Tela do professor">
         <div class="video-wrap">
-          <img id="videoStream" src="" alt="Tela do professor" class="stream">
+          <img id="videoStream" alt="Tela do professor" class="stream">
+          <!-- O vigia do vídeo insere aqui, logo depois da imagem, o `.stream-congelado`
+               que segura o último quadro quando a conexão cai. -->
 
           <div id="placeholder" class="placeholder">
-            <div class="spinner"></div>
+            <span class="icone placeholder-icon" aria-hidden="true">&#xE0DF;</span>
             <p class="placeholder-title">Aguardando transmissão</p>
             <p class="placeholder-sub">A tela do professor aparecerá aqui automaticamente.</p>
-          </div>
-
-          <div id="reconnectOverlay" class="reconnect-overlay" hidden>
-            <div class="spinner spinner-amber"></div>
-            <p class="reconnect-title">Reconectando à aula&hellip;</p>
-            <p class="reconnect-sub">Não precisa atualizar a página, a transmissão volta sozinha assim que a rede voltar.</p>
-            <p id="reconnectAttempt" class="reconnect-attempt">reconectando</p>
-          </div>
-
-          <div id="disconnectedState" class="disconnected-state" hidden>
-            <div class="disconnected-icon">!</div>
-            <p class="disconnected-title">Sem conexão com o professor</p>
-            <p class="disconnected-sub">Verifique se você está na mesma rede do laboratório e tente novamente.</p>
-            <button id="retryConnectionBtn" class="btn btn-retry">Tentar de novo</button>
+            <svg class="spinner progresso" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20"/></svg>
           </div>
 
           <div id="pausedOverlay" class="paused-overlay" hidden>
-            <div class="paused-icon"><span></span><span></span></div>
-            <p class="paused-title">Transmissão pausada</p>
-            <p class="paused-sub">O professor interrompeu a transmissão por um instante.</p>
+            <span class="icone icone-cheio paused-icon" aria-hidden="true">&#xE1A2;</span>
+            <p class="paused-title">Pausada</p>
+            <p class="paused-sub">O professor pausou a transmissão por um instante.</p>
           </div>
 
-          <button id="fullscreenBtn" class="fs-btn" aria-label="Tela cheia" title="Tela cheia">
-            <svg class="fs-icon-enter" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-              <path d="M4 9V4h5v2H6v3H4zm11-5h5v5h-2V6h-3V4zM4 15h2v3h3v2H4v-5zm14 3v-3h2v5h-5v-2h3z"/>
-            </svg>
-            <svg class="fs-icon-exit" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-              <path d="M9 4v5H4V7h3V4h2zm6 0h2v3h3v2h-5V4zM4 15h5v5H7v-3H4v-2zm11 5v-5h5v2h-3v3h-2z"/>
-            </svg>
-          </button>
+          <!-- Reconectando: só um aviso pequeno por cima do último quadro. Antes a imagem
+               sumia atrás de uma tela escura a cada oscilação da rede, e a turma via a aula
+               "apagar e piscar". -->
+          <div id="reconnectOverlay" class="reconnect-overlay" role="status" hidden>
+            <svg class="progresso progresso-pequeno" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20"/></svg>
+            <span class="reconnect-title">Reconectando&hellip;</span>
+            <span id="reconnectAttempt" class="reconnect-attempt"></span>
+          </div>
+
+          <div id="disconnectedState" class="disconnected-state" hidden>
+            <div class="aviso-cartao" role="alert">
+              <span class="icone disconnected-icon" aria-hidden="true">&#xE648;</span>
+              <p class="disconnected-title">Sem conexão com o professor</p>
+              <p class="disconnected-sub">Confira se você está na rede do laboratório.</p>
+              <button id="retryConnectionBtn" class="botao botao-preenchido" type="button">
+                <span class="icone" aria-hidden="true">&#xE5D5;</span>Tentar de novo
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
-      <aside id="sidebar" class="sidebar" aria-label="Conversa e arquivos">
+      <!-- Painel lateral no desenho do professor: um cartão de cantos grandes com uma área
+           de cada vez (Chat OU Arquivos), título e botão de fechar. No celular vira folha
+           por cima do vídeo. -->
+      <aside id="sidebar" class="sidebar" aria-labelledby="panelTitle">
         <div class="sidebar-top">
-          <span class="sidebar-title">Conversa e arquivos</span>
-          <button id="sidebarCloseBtn" class="sidebar-close" type="button" aria-label="Fechar painel" title="Fechar painel">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          <h2 id="panelTitle" class="sidebar-title">Chat</h2>
+          <button id="sidebarCloseBtn" class="botao-icone" type="button" aria-label="Fechar o painel" title="Fechar o painel">
+            <span class="icone" aria-hidden="true">&#xE5CD;</span>
           </button>
         </div>
 
-        <section id="filesSection" class="files" hidden>
-          <div class="sidebar-head sidebar-head-files">Arquivos</div>
-          <ul id="filesList" class="files-list"></ul>
-        </section>
+        <section id="chatArea" class="area area-chat" aria-label="Chat com o professor">
+          <!-- Mensagem fixada pelo professor (link do portal, recado da aula): fica à vista
+               mesmo com a conversa andando. -->
+          <div id="chatPinned" class="fixada" hidden>
+            <div class="fixada-cabeca">
+              <span class="icone icone-cheio" aria-hidden="true">&#xF10D;</span>
+              <span>Mensagem fixada</span>
+            </div>
+            <p id="chatPinnedText" class="fixada-texto"></p>
+            <button id="chatPinnedMore" class="fixada-mais" type="button" aria-expanded="false" hidden>Ver mais</button>
+          </div>
 
-        <div class="sidebar-head sidebar-head-chat">Conversa com o professor</div>
-
-        <section id="chatTab" class="panel active">
           <div id="chatMessages" class="messages" role="log" aria-live="polite">
-            <div class="sys-msg">Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.</div>
+            <div class="sys-msg">
+              <span class="icone" aria-hidden="true">&#xE88E;</span>
+              <span>Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.</span>
+            </div>
           </div>
 
           <form id="chatForm" class="chat-form">
-            <div class="send-row">
-              <input type="text" id="chatMessageInput" placeholder="Escreva para o professor..." maxlength="1000" required autocomplete="off" class="input input-msg">
-              <button type="submit" id="chatSendBtn" class="btn btn-send">Enviar</button>
+            <!-- Levantar a mão fica aqui, pequeno, ao lado do campo: é um jeito de chamar o
+                 professor sem escrever, e continua valendo com o chat desligado. -->
+            <button id="raiseHandBtn" class="botao-icone botao-mao" type="button" aria-pressed="false"
+                    aria-label="Levantar a mão" title="Levantar a mão">
+              <span class="icone" aria-hidden="true">&#xE764;</span>
+            </button>
+            <div class="pilula">
+              <input type="text" id="chatMessageInput" placeholder="Escreva para o professor" maxlength="1000"
+                     required autocomplete="off" enterkeyhint="send" class="input-msg" aria-label="Mensagem para o professor">
+              <button type="submit" id="chatSendBtn" class="botao-icone btn-send" aria-label="Enviar" title="Enviar">
+                <span class="icone" aria-hidden="true">&#xE163;</span>
+              </button>
             </div>
           </form>
         </section>
+
+        <section id="filesArea" class="area area-arquivos" aria-label="Arquivos da aula" hidden>
+          <ul id="filesList" class="files-list" hidden></ul>
+          <div id="filesEmpty" class="vazio">
+            <span class="icone" aria-hidden="true">&#xE2C7;</span>
+            <p class="vazio-titulo">Nenhum arquivo ainda</p>
+            <p class="vazio-sub">Os arquivos que o professor compartilhar aparecem aqui para baixar.</p>
+          </div>
+        </section>
       </aside>
 
-      <!-- Fundo escuro da gaveta no celular: tocar fora fecha a conversa. -->
+      <!-- Véu da folha no celular: tocar fora fecha o painel. -->
       <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
     </main>
+
+    <!-- Barra de baixo no estilo do Meet: estado e nome à esquerda, tela cheia no centro,
+         os painéis à direita. -->
+    <footer class="control-bar">
+      <div class="barra-estado">
+        <div id="connectionStatus" class="chip-estado connecting" role="status">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="status-text">Conectando…</span>
+        </div>
+        <span id="studentBadge" class="student-badge" title="Você entrou com este nome" hidden></span>
+      </div>
+
+      <div class="barra-centro">
+        <button id="fullscreenBtn" class="botao-icone botao-tonal botao-barra" type="button"
+                aria-label="Tela cheia (F)" title="Tela cheia (F)">
+          <span class="icone fs-icon-enter" aria-hidden="true">&#xE5D0;</span>
+          <span class="icone fs-icon-exit" aria-hidden="true">&#xE5D1;</span>
+        </button>
+      </div>
+
+      <div class="barra-paineis">
+        <button id="chatToggleBtn" class="botao-icone botao-barra" type="button" aria-controls="sidebar"
+                aria-expanded="false" aria-label="Chat" title="Chat">
+          <span class="icone" aria-hidden="true">&#xE0C9;</span>
+          <span id="chatBadge" class="contador" aria-hidden="true" hidden></span>
+        </button>
+        <button id="filesToggleBtn" class="botao-icone botao-barra" type="button" aria-controls="sidebar"
+                aria-expanded="false" aria-label="Arquivos" title="Arquivos">
+          <span class="icone" aria-hidden="true">&#xE226;</span>
+          <span id="filesBadge" class="contador contador-neutro" aria-hidden="true" hidden></span>
+        </button>
+      </div>
+    </footer>
   </div>
 
   <script type="module" src="js/main.js"></script>

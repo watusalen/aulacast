@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Painel de alunos: quem está na aula e quem está com ela à vista (SRP).
-/// No desenho da lista de Pessoas do Meet: avatar com as iniciais, nome e uma linha de apoio.
+/// Painel de alunos: quem está na aula, quem está com ela à vista e quem levantou a mão (SRP).
+/// No desenho da lista de Pessoas do Meet: avatar com as iniciais, nome e uma linha de apoio;
+/// quem está com a mão levantada sobe para o topo, na ordem em que levantou.
 public struct StudentListView: View {
     @ObservedObject var clientManager: ClientManagerService
     @ObservedObject var viewModel: MainViewModel
@@ -28,20 +29,36 @@ public struct StudentListView: View {
                 .padding(.horizontal, 24)
                 .help("Olho aberto: com a aula à vista. Olho cortado: conectado, mas em outra janela ou aba.")
 
+                if maos > 0 {
+                    HStack(spacing: 8) {
+                        M3Icone(nome: "back_hand", tamanho: 18, preenchido: true)
+                            .foregroundColor(M3.atencao)
+                        Text(maos == 1 ? "1 mão levantada" : "\(maos) mãos levantadas")
+                            .m3(.labelLarge)
+                            .foregroundColor(M3.onSurface)
+                    }
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+                }
+
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(clientManager.identifiedClients) { aluno in
+                        ForEach(alunos) { aluno in
                             linha(aluno)
                         }
                     }
                     .padding(.horizontal, 8)
                     .padding(.bottom, 12)
-                    .animation(M3.Mola.padrao, value: clientManager.identifiedClients.map(\.id))
+                    .animation(M3.Mola.padrao, value: alunos.map(\.id))
                 }
             }
             .padding(.top, 4)
+            .animation(M3.Mola.padrao, value: maos)
         }
     }
+
+    private var alunos: [ConnectedClient] { clientManager.identifiedClientsInListOrder }
+    private var maos: Int { clientManager.handRaisedCount }
 
     private func linha(_ aluno: ConnectedClient) -> some View {
         HStack(spacing: 16) {
@@ -59,6 +76,18 @@ public struct StudentListView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if aluno.isHandRaised {
+                // A mão é o próprio botão de abaixá-la, como no Meet: o professor atende o
+                // aluno e tira o pedido da fila com um clique.
+                M3BotaoDeIcone(
+                    icone: "back_hand",
+                    variante: .atencao,
+                    tamanho: 36,
+                    iconePreenchido: true,
+                    ajuda: "Abaixar a mão"
+                ) { viewModel.lowerHand(clientId: aluno.id) }
+                .transition(.scale.combined(with: .opacity))
+            }
             M3Icone(nome: aluno.isWatching ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.isWatching)
                 .foregroundColor(aluno.isWatching ? M3.tertiary : M3.outline)
                 .help(aluno.ipAddress)

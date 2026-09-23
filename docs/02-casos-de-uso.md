@@ -51,8 +51,14 @@
 
 ---
 
-### ~~UC-03: Levantar a Mão (Pedir Ajuda)~~
-**Removido.** O botão foi retirado a pedido do professor; o aluno pede ajuda pelo chat reservado (UC-04). Uma página antiga que ainda envie `RAISE_HAND` é ignorada pelo servidor, sem derrubar o aluno.
+### UC-03: Levantar a Mão (Pedir Ajuda)
+Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo de mensagem.
+- **Ator:** Aluno (e Professor).
+- **Fluxo:**
+  1. O aluno toca na mão; ela fica preenchida e o servidor confirma (`RAISE_HAND_ACK`).
+  2. No professor, o aluno sobe para o topo da lista com a mão destacada, e o botão Alunos mostra quantas mãos há.
+  3. O aluno abaixa a mão no mesmo ícone, ou o professor abaixa pela lista (`HAND_LOWERED`), e o aluno vê "O professor abaixou sua mão".
+- **Regras:** vale só para aluno identificado; funciona com o chat desligado; ao reconectar, a mão é reenviada.
 
 ---
 

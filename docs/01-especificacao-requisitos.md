@@ -33,7 +33,8 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 | **RF-08** | Interface Web do Aluno (Player) | O cliente Web deve fornecer um player de vídeo HTML5 responsivo com suporte a Tela Cheia (Full Screen). | **MUST** |
 | **RF-09** | Chat Local Offline | Mensagens de texto na rede local. A mensagem do aluno é reservada com o professor (volta apenas para o autor); a do professor é vista por toda a turma. | **SHOULD** |
 | **RF-10** | Identificação do Aluno | Antes de assistir, o aluno deve informar o nome, validado tanto no cliente quanto no servidor. | **MUST** |
-| ~~**RF-11**~~ | ~~Notificação "Levantar a Mão"~~ | **Removido.** Foi implementado e retirado a pedido do professor: o chat reservado já cobre o pedido de ajuda. Era **SHOULD**. | — |
+| **RF-11** | Notificação "Levantar a Mão" | O aluno levanta e abaixa a mão por um ícone no chat; o professor vê quem levantou, em ordem, e pode abaixar. Foi retirado e voltou a pedido da turma (feedback de 23/09/2026), mais discreto que o botão original. | **SHOULD** |
+| **RF-16** | Mensagem Fixada | O professor fixa uma mensagem sua (um link, um prazo), que fica no topo do chat de toda a turma, inclusive de quem entra depois. | **SHOULD** |
 | ~~**RF-12**~~ | ~~Ícone na Barra de Menus (StatusItem)~~ | **Descartado.** Foi implementado e removido: o painel duplicava o que a janela principal já mostra, e um ícone permanente na barra de menus cobra atenção o tempo todo em troca de pouco. Era **SHOULD**, e a decisão foi não ter. | — |
 | **RF-13** | Configuração de Qualidade de Vídeo | O professor pode alternar a resolução de saída (720p / 1080p) e taxa de quadros (15 / 30 / 45 fps), com efeito imediato na transmissão em andamento. | **SHOULD** |
 | **RF-14** | Indicador de Presença Efetiva | O aplicativo deve distinguir alunos que estão com a transmissão à vista daqueles apenas conectados (janela minimizada, outra aba ou outro aplicativo em foco). | **SHOULD** |

@@ -1,33 +1,77 @@
 import { ConnectionState } from './config.js';
 import { StreamWatchdog } from './stream-watchdog.js';
 
-/** Abaixo desta largura o painel vira gaveta por cima do vídeo (mesmo corte do CSS). */
-const LARGURA_DA_GAVETA = '(max-width: 860px)';
+/**
+ * Abaixo desta largura (ou com pouca altura, o celular deitado) o painel vira folha por
+ * cima do vídeo. É o mesmo corte do CSS.
+ */
+export const LARGURA_DA_GAVETA = '(max-width: 860px), (max-height: 500px)';
 const CHAVE_PAINEL_FECHADO = 'aulacast.painelFechado';
+const CHAVE_AREA = 'aulacast.areaDoPainel';
 
-/** Preferência do aluno no computador; sem armazenamento, o painel começa aberto. */
-function lerPainelFechado() {
+/** As áreas do painel: uma de cada vez, como no professor. */
+const TITULOS = { chat: 'Chat', arquivos: 'Arquivos' };
+
+/** O que o chip da barra diz em cada estado. */
+const TEXTO_DO_ESTADO = {
+  'ao-vivo': 'Ao vivo',
+  pausada: 'Pausada',
+  encerrada: 'Encerrada',
+  conectando: 'Conectando…',
+  reconectando: 'Reconectando…',
+  'sem-conexao': 'Sem conexão'
+};
+
+const ICONE_AGUARDANDO = String.fromCodePoint(0xE0DF); // present_to_all
+const ICONE_ENCERRADA = String.fromCodePoint(0xEF71); // stop_circle
+
+function ler(chave) {
   try {
-    return localStorage.getItem(CHAVE_PAINEL_FECHADO) === '1';
+    return localStorage.getItem(chave);
   } catch (_) {
-    return false;
+    return null;
   }
 }
 
-function salvarPainelFechado(fechado) {
+function salvar(chave, valor) {
   try {
-    localStorage.setItem(CHAVE_PAINEL_FECHADO, fechado ? '1' : '0');
+    localStorage.setItem(chave, valor);
   } catch (_) {
     // Modo privado ou armazenamento bloqueado: só não lembra na próxima vez.
   }
 }
 
+/**
+ * A tecla F não pode roubar a letra de quem está escrevendo: campo de texto, área de
+ * texto e conteúdo editável ficam com ela.
+ */
+export function ehCampoDeTexto(alvo) {
+  if (!alvo) return false;
+  if (alvo.isContentEditable) return true;
+  const tag = String(alvo.tagName || '').toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag !== 'INPUT') return false;
+  const tipo = String(alvo.type || 'text').toLowerCase();
+  return !['button', 'checkbox', 'radio', 'submit', 'reset', 'range', 'color', 'file', 'image'].includes(tipo);
+}
+
+/** Aberta pela Tela de Início (iPhone) ou instalada (Android): sem a barra do navegador. */
+export function ehModoApp(janela = typeof window !== 'undefined' ? window : null) {
+  if (!janela) return false;
+  const pelaMidia = typeof janela.matchMedia === 'function'
+    && janela.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+  return Boolean(pelaMidia || (janela.navigator && janela.navigator.standalone === true));
+}
+
 export class UIController {
-  constructor() {
+  /**
+   * @param {{ criarVigia?: (img: HTMLImageElement, opcoes: object) => object }} opcoes
+   *   `criarVigia` existe para os testes trocarem o vigia do vídeo por um dublê.
+   */
+  constructor({ criarVigia } = {}) {
     this.statusBadge = document.getElementById('connectionStatus');
     this.statusText = this.statusBadge.querySelector('.status-text');
     this.videoStream = document.getElementById('videoStream');
-    this.videoWrap = this.videoStream.closest('.video-wrap');
     this.placeholder = document.getElementById('placeholder');
     this.reconnectOverlay = document.getElementById('reconnectOverlay');
     this.reconnectAttemptText = document.getElementById('reconnectAttempt');
@@ -35,155 +79,256 @@ export class UIController {
     this.pausedOverlay = document.getElementById('pausedOverlay');
     this.fullscreenBtn = document.getElementById('fullscreenBtn');
     this.sidebar = document.getElementById('sidebar');
-    this.menuToggleBtn = document.getElementById('menuToggleBtn');
+    this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    this.sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+    this.panelTitle = document.getElementById('panelTitle');
+    this.appEl = document.getElementById('app');
+
+    this.botoes = {
+      chat: document.getElementById('chatToggleBtn'),
+      arquivos: document.getElementById('filesToggleBtn')
+    };
+    this.contadores = {
+      chat: document.getElementById('chatBadge'),
+      arquivos: document.getElementById('filesBadge')
+    };
+    this.areas = {
+      chat: document.getElementById('chatArea'),
+      arquivos: document.getElementById('filesArea')
+    };
+
+    /** Estado da conexão (WebSocket) e da transmissão (o que o professor está fazendo). */
+    this.conexao = ConnectionState.CONNECTING;
+    this.transmissao = 'ao-vivo';
+    /** Já chegou algum quadro desde que o vídeo foi pedido: há o que congelar. */
+    this.teveQuadro = false;
 
     // O vídeo trafega numa conexão separada do WebSocket e precisa do próprio vigia.
-    this.streamWatchdog = new StreamWatchdog(this.videoStream, {
+    const criar = criarVigia || ((img, opcoes) => new StreamWatchdog(img, opcoes));
+    this.streamWatchdog = criar(this.videoStream, {
       onRetry: (attempt, reason) => {
         console.warn(`Stream de vídeo interrompido (${reason}); tentativa ${attempt}.`);
-      }
+      },
+      onEstado: (estado) => this.aoMudarEstadoDoVideo(estado)
     });
+    // O `load` de um multipart dispara quando chega o primeiro quadro (Chrome e Safari):
+    // é a hora de trocar o "Aguardando transmissão" pela imagem.
+    this.videoStream.addEventListener('load', () => this.aoChegarQuadro());
 
-    this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
-    this.appEl = document.getElementById('app');
-    this.sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
-    this.panelBadge = document.getElementById('panelBadge');
-    this.naoLidas = 0;
-    this.painelFechadoNoComputador = lerPainelFechado();
+    // Painel: qual área, e se está aberto no computador. Na folha do celular ele sempre
+    // começa fechado, para a imagem aparecer primeiro.
+    this.area = ler(CHAVE_AREA) === 'arquivos' ? 'arquivos' : 'chat';
+    this.painelFechadoNoComputador = ler(CHAVE_PAINEL_FECHADO) === '1';
+    this.gavetaAberta = false;
+    this.naoLidas = { chat: 0, arquivos: 0 };
+    this.areaMostrada = null;
+    /** Chamado quando uma área passa a ficar à vista (o chat rola até o fim). */
+    this.aoMostrarArea = null;
+
     this.midiaDaGaveta = typeof window !== 'undefined' && window.matchMedia
       ? window.matchMedia(LARGURA_DA_GAVETA)
       : null;
 
-    // iPhone não põe elemento em tela cheia, e Safari antigo só tem a versão webkit.
-    // Chamar a função que não existe lançava erro e o botão simplesmente não fazia nada.
-    if (!this.videoWrap.requestFullscreen && !this.videoWrap.webkitRequestFullscreen) {
-      this.fullscreenBtn.hidden = true;
+    for (const area of Object.keys(this.botoes)) {
+      if (this.botoes[area]) this.botoes[area].addEventListener('click', () => this.alternarPainel(area));
     }
-    this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
-    this.menuToggleBtn.addEventListener('click', () => this.toggleSidebar());
-
-    // Tocar fora fecha a conversa. É o gesto que todo mundo tenta primeiro no
-    // celular; sem ele, a gaveta só fechava voltando no mesmo botão que a abriu.
+    // Tocar fora fecha a folha. É o gesto que todo mundo tenta primeiro no celular.
     if (this.sidebarBackdrop) {
       this.sidebarBackdrop.addEventListener('click', () => this.closeSidebar());
     }
     if (this.sidebarCloseBtn) {
       this.sidebarCloseBtn.addEventListener('click', () => this.closeSidebar());
     }
-    // Esc fecha a gaveta no celular/tablet com teclado.
     if (typeof document.addEventListener === 'function') {
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && this.ehGaveta() && this.painelVisivel()) this.closeSidebar();
-      });
+      document.addEventListener('keydown', (e) => this.aoApertarTecla(e));
+      document.addEventListener('fullscreenchange', () => this.atualizarBotaoDeTelaCheia());
+      document.addEventListener('webkitfullscreenchange', () => this.atualizarBotaoDeTelaCheia());
     }
-    // Girar o tablet (ou redimensionar a janela) troca de gaveta para coluna e vice-versa.
+    // Girar o tablet (ou redimensionar a janela) troca de folha para coluna e vice-versa.
     if (this.midiaDaGaveta && this.midiaDaGaveta.addEventListener) {
       this.midiaDaGaveta.addEventListener('change', () => this.aplicarLayoutDoPainel());
     }
+
+    this.configurarTelaCheia();
     this.aplicarLayoutDoPainel();
+    this.atualizarChip();
   }
 
+  // MARK: - Conexão e transmissão
+
   updateState(state, attempts = 0) {
-    this.statusBadge.className = `badge ${state}`;
+    this.conexao = state;
 
     switch (state) {
       case ConnectionState.CONNECTED:
-        this.statusText.textContent = 'Conectado';
-        this.hideAllOverlays();
-        this.videoStream.classList.add('active');
-        this.streamWatchdog.start();
+        this.reconnectOverlay.hidden = true;
+        this.disconnectedState.hidden = true;
+        // O aviso de pausa também sai: se o professor retomou enquanto o aluno estava sem
+        // conexão, o STREAM_RESUMED se perdeu. Quem diz como a aula está agora é a
+        // mensagem de boas-vindas (CONNECTED), que chega logo depois.
+        this.hidePaused();
+        if (this.transmissao !== 'encerrada') this.iniciarVideo();
         break;
+
       case ConnectionState.CONNECTING:
-        this.statusText.textContent = 'Conectando...';
-        this.hideAllOverlays();
-        this.showPlaceholder();
-        break;
       case ConnectionState.RECONNECTING:
-        this.statusText.textContent = 'Reconectando...';
-        this.hideAllOverlays();
-        this.showReconnecting(attempts);
+        this.disconnectedState.hidden = true;
+        this.hidePaused();
+        // Na primeira conexão não há quadro: fica o "Aguardando transmissão". Depois de
+        // ter havido imagem, ela fica parada na tela com o aviso pequeno por cima.
+        if (state === ConnectionState.RECONNECTING || this.teveQuadro) {
+          this.showReconnecting(attempts);
+        }
         break;
+
       case ConnectionState.DISCONNECTED:
-        this.statusText.textContent = 'Desconectado';
-        this.hideAllOverlays();
-        this.showDisconnected();
+        this.reconnectOverlay.hidden = true;
+        this.hidePaused();
+        this.disconnectedState.hidden = false;
+        this.congelarVideo();
         break;
+    }
+    this.atualizarChip();
+  }
+
+  /**
+   * Reconectando: congela o último quadro e põe só um chip por cima. Antes a imagem era
+   * escondida atrás de uma tela escura a cada oscilação da rede, e a turma via a aula
+   * "apagar e piscar".
+   */
+  showReconnecting(attempts) {
+    this.reconnectAttemptText.textContent = attempts > 1 ? `tentativa ${attempts}` : '';
+    this.reconnectOverlay.hidden = false;
+    this.congelarVideo();
+  }
+
+  congelarVideo() {
+    this.streamWatchdog.congelar();
+  }
+
+  /** Pede o vídeo; enquanto não chega o primeiro quadro, o palco diz que está aguardando. */
+  iniciarVideo() {
+    this.videoStream.classList.add('active');
+    this.streamWatchdog.start();
+    if (!this.teveQuadro) this.mostrarAguardando();
+  }
+
+  aoChegarQuadro() {
+    this.teveQuadro = true;
+    if (this.transmissao !== 'encerrada') this.placeholder.hidden = true;
+    // Só o vídeo tinha caído (o WebSocket seguiu de pé): o aviso sai com a imagem de volta.
+    if (this.conexao === ConnectionState.CONNECTED) this.reconnectOverlay.hidden = true;
+    this.atualizarChip();
+  }
+
+  /** Estado do vigia do vídeo, que é uma conexão separada do WebSocket. */
+  aoMudarEstadoDoVideo(estado) {
+    if (estado === 'ao-vivo') {
+      this.aoChegarQuadro();
+    } else if (estado === 'reconectando') {
+      // Só o vídeo caiu. Pausada ou encerrada, a falta de quadros é esperada.
+      if (this.conexao === ConnectionState.CONNECTED && this.transmissao === 'ao-vivo' && this.teveQuadro) {
+        this.reconnectAttemptText.textContent = '';
+        this.reconnectOverlay.hidden = false;
+      }
     }
   }
 
+  mostrarAguardando() {
+    this.definirPalcoVazio(ICONE_AGUARDANDO, 'Aguardando transmissão',
+      'A tela do professor aparecerá aqui automaticamente.', true);
+  }
+
+  /** Mantido com o nome antigo: é o palco vazio de "aguardando". */
   showPlaceholder() {
-    // Restaura o texto padrão: showStreamEnded pode tê-lo trocado numa aula anterior.
-    this.placeholder.querySelector('.placeholder-title').textContent = 'Aguardando transmissão';
-    this.placeholder.querySelector('.placeholder-sub').textContent =
-      'A tela do professor aparecerá aqui automaticamente.';
-    const spinner = this.placeholder.querySelector('.spinner');
-    if (spinner) spinner.hidden = false;
+    this.mostrarAguardando();
+  }
 
+  definirPalcoVazio(icone, titulo, subtitulo, comProgresso) {
+    const iconeEl = this.placeholder.querySelector('.placeholder-icon');
+    if (iconeEl) iconeEl.textContent = icone;
+    this.placeholder.querySelector('.placeholder-title').textContent = titulo;
+    this.placeholder.querySelector('.placeholder-sub').textContent = subtitulo;
+    const progresso = this.placeholder.querySelector('.spinner');
+    // Pelo atributo, e não por `.hidden`: o indicador é um <svg>, e SVGElement não tem a
+    // propriedade `hidden` (atribuí-la cria só um campo JS, e o giro continuava na tela).
+    if (progresso) {
+      if (comProgresso) progresso.removeAttribute('hidden');
+      else progresso.setAttribute('hidden', '');
+    }
     this.placeholder.hidden = false;
-    this.videoStream.classList.remove('active');
-    this.streamWatchdog.stop();
-  }
-
-  showReconnecting(attempts) {
-    this.reconnectAttemptText.textContent = attempts > 0
-      ? `tentativa ${attempts}`
-      : 'reconectando';
-    this.reconnectOverlay.hidden = false;
-    this.videoStream.classList.remove('active');
-    this.streamWatchdog.stop();
-  }
-
-  showDisconnected() {
-    this.disconnectedState.hidden = false;
-    this.videoStream.classList.remove('active');
-    this.streamWatchdog.stop();
   }
 
   /** A transmissão terminou do lado do professor: congelar não ajuda, é preciso dizer o motivo. */
   showStreamEnded(reason) {
-    this.hideAllOverlays();
-    this.hidePaused();
+    this.transmissao = 'encerrada';
+    this.reconnectOverlay.hidden = true;
+    this.pausedOverlay.hidden = true;
     this.streamWatchdog.stop();
     this.videoStream.classList.remove('active');
-
-    this.placeholder.hidden = false;
-    this.placeholder.querySelector('.placeholder-title').textContent = 'Transmissão encerrada';
-    this.placeholder.querySelector('.placeholder-sub').textContent =
-      reason || 'O professor encerrou a transmissão.';
-    const spinner = this.placeholder.querySelector('.spinner');
-    if (spinner) spinner.hidden = true;
+    this.teveQuadro = false;
+    this.definirPalcoVazio(ICONE_ENCERRADA, 'Transmissão encerrada',
+      reason || 'O professor encerrou a transmissão.', false);
+    this.atualizarChip();
   }
 
   /**
    * A transmissão voltou sem que o WebSocket tenha caído.
    *
-   * Depois de um `showStreamEnded` o vigia do vídeo está parado e o placeholder ocupa a
+   * Depois de um `showStreamEnded` o vigia do vídeo está parado e o palco vazio ocupa a
    * tela. Como a conexão continuou de pé o tempo todo, nada disparava `updateState` de
    * novo: o aluno ficava olhando "Transmissão encerrada" com a aula já rolando.
    */
   showStreaming() {
-    this.hideAllOverlays();
-    this.hidePaused();
-    this.videoStream.classList.add('active');
-    this.streamWatchdog.start();
+    this.transmissao = 'ao-vivo';
+    this.pausedOverlay.hidden = true;
+    if (this.conexao === ConnectionState.CONNECTED) this.reconnectOverlay.hidden = true;
+    this.iniciarVideo();
+    this.atualizarChip();
   }
 
   showPaused() {
+    this.transmissao = 'pausada';
     this.pausedOverlay.hidden = false;
+    if (this.conexao === ConnectionState.CONNECTED) this.reconnectOverlay.hidden = true;
+    this.atualizarChip();
   }
 
   hidePaused() {
+    if (this.transmissao === 'pausada') this.transmissao = 'ao-vivo';
     this.pausedOverlay.hidden = true;
+    this.atualizarChip();
   }
 
   hideAllOverlays() {
     this.placeholder.hidden = true;
     this.reconnectOverlay.hidden = true;
     this.disconnectedState.hidden = true;
-    // O aviso de pausa também: se o professor retomou enquanto o aluno estava sem
-    // conexão, o STREAM_RESUMED se perdeu e o aviso ficava por cima do vídeo ao vivo.
-    // Quem diz se a aula está pausada agora é a mensagem de boas-vindas.
     this.hidePaused();
+  }
+
+  /** O chip junta as duas coisas: sem conexão, é isso que importa; conectado, a aula. */
+  estadoDoChip() {
+    switch (this.conexao) {
+      case ConnectionState.RECONNECTING:
+        return 'reconectando';
+      case ConnectionState.DISCONNECTED:
+        return 'sem-conexao';
+      case ConnectionState.CONNECTING:
+        return this.teveQuadro ? 'reconectando' : 'conectando';
+    }
+    if (this.transmissao === 'pausada') return 'pausada';
+    if (this.transmissao === 'encerrada') return 'encerrada';
+    return 'ao-vivo';
+  }
+
+  atualizarChip() {
+    if (!this.statusBadge) return;
+    const estado = this.estadoDoChip();
+    this.statusBadge.className = `chip-estado ${estado}`;
+    this.statusText.textContent = TEXTO_DO_ESTADO[estado];
+    // No celular deitado o chip vira só o ponto: a dica guarda o texto.
+    this.statusBadge.title = TEXTO_DO_ESTADO[estado];
   }
 
   /// Mostra para o aluno com qual identidade ele entrou na aula.
@@ -195,113 +340,201 @@ export class UIController {
     }
   }
 
-  /** Tela estreita: o painel é gaveta por cima do vídeo. Sem `matchMedia`, idem. */
+  // MARK: - Painel (Chat OU Arquivos)
+
+  /** Tela estreita ou baixa: o painel é folha por cima do vídeo. Sem `matchMedia`, idem. */
   ehGaveta() {
     return this.midiaDaGaveta ? this.midiaDaGaveta.matches : true;
   }
 
   painelVisivel() {
-    return this.ehGaveta()
-      ? this.sidebar.classList.contains('open')
-      : !this.painelFechadoNoComputador;
+    return this.ehGaveta() ? this.gavetaAberta : !this.painelFechadoNoComputador;
   }
 
-  toggleSidebar() {
-    if (this.painelVisivel()) {
+  areaVisivel(area) {
+    return this.painelVisivel() && this.area === area;
+  }
+
+  /** Abre a área pedida; se ela já é a que está aberta, fecha o painel (como no Meet). */
+  alternarPainel(area) {
+    if (this.areaVisivel(area)) {
       this.closeSidebar();
     } else {
-      this.openSidebar();
+      this.openSidebar(area);
     }
   }
 
-  openSidebar() {
+  /** Mantém o nome antigo sem argumento: alterna a área atual. */
+  toggleSidebar() {
+    this.alternarPainel(this.area);
+  }
+
+  openSidebar(area = this.area) {
+    this.area = area === 'arquivos' ? 'arquivos' : 'chat';
+    salvar(CHAVE_AREA, this.area);
     if (this.ehGaveta()) {
-      this.sidebar.classList.add('open');
-      this.atualizarFundoDaGaveta(true);
+      this.gavetaAberta = true;
     } else {
       this.painelFechadoNoComputador = false;
-      salvarPainelFechado(false);
+      salvar(CHAVE_PAINEL_FECHADO, '0');
     }
     this.aplicarLayoutDoPainel();
+    // Na folha, o foco entra nela: quem usa teclado ou leitor de tela sabe onde está.
+    if (this.ehGaveta()) this.focar(this.sidebarCloseBtn);
   }
 
   closeSidebar() {
+    const eraGaveta = this.ehGaveta() && this.gavetaAberta;
     if (this.ehGaveta()) {
-      this.sidebar.classList.remove('open');
-      this.atualizarFundoDaGaveta(false);
+      this.gavetaAberta = false;
     } else {
       this.painelFechadoNoComputador = true;
-      salvarPainelFechado(true);
+      salvar(CHAVE_PAINEL_FECHADO, '1');
     }
     this.aplicarLayoutDoPainel();
+    // E volta para o botão que a abriu, em vez de se perder no começo da página.
+    if (eraGaveta) this.focar(this.botoes[this.area]);
   }
 
-  /** Deixa classes, botão e contador de acordo com o estado atual do painel. */
+  focar(elemento) {
+    if (elemento && typeof elemento.focus === 'function') elemento.focus({ preventScroll: true });
+  }
+
+  /** Deixa classes, botões e contadores de acordo com o estado atual do painel. */
   aplicarLayoutDoPainel() {
     const gaveta = this.ehGaveta();
     if (!gaveta) {
-      // Ao virar coluna, a gaveta aberta não pode ficar por cima de tudo.
-      this.sidebar.classList.remove('open');
-      this.atualizarFundoDaGaveta(false);
+      // Ao virar coluna, a folha aberta não pode ficar por cima de tudo.
+      this.gavetaAberta = false;
     }
+    this.sidebar.classList[gaveta && this.gavetaAberta ? 'add' : 'remove']('open');
+    this.atualizarFundoDaGaveta(gaveta && this.gavetaAberta);
     if (this.appEl) {
-      if (!gaveta && this.painelFechadoNoComputador) {
-        this.appEl.classList.add('painel-fechado');
-      } else {
-        this.appEl.classList.remove('painel-fechado');
-      }
+      this.appEl.classList[!gaveta && this.painelFechadoNoComputador ? 'add' : 'remove']('painel-fechado');
     }
+
+    for (const area of Object.keys(this.areas)) {
+      if (this.areas[area]) this.areas[area].hidden = area !== this.area;
+    }
+    if (this.panelTitle) this.panelTitle.textContent = TITULOS[this.area];
 
     const visivel = this.painelVisivel();
-    const rotulo = visivel ? 'Fechar conversa e arquivos' : 'Abrir conversa e arquivos';
-    this.menuToggleBtn.setAttribute('aria-expanded', String(visivel));
-    this.menuToggleBtn.setAttribute('aria-label', rotulo);
-    this.menuToggleBtn.title = rotulo;
-    // Com o painel aberto o botão some: quem fecha é o X dentro do painel, e dois
-    // controles para a mesma coisa lado a lado só confundem.
-    this.menuToggleBtn.hidden = visivel;
-    if (visivel) {
-      this.menuToggleBtn.classList.add('ativo');
-      this.zerarNaoLidas();
-    } else {
-      this.menuToggleBtn.classList.remove('ativo');
+    if (visivel) this.naoLidas[this.area] = 0;
+    for (const area of Object.keys(this.botoes)) {
+      this.desenharBotao(area);
+      this.atualizarContador(area);
+    }
+
+    // A área acabou de aparecer: o chat escondido não rola, então rola agora.
+    const mostrada = visivel ? this.area : null;
+    if (mostrada !== this.areaMostrada) {
+      this.areaMostrada = mostrada;
+      if (mostrada && typeof this.aoMostrarArea === 'function') this.aoMostrarArea(mostrada);
     }
   }
 
-  /** Conta mensagens do professor e arquivos que chegam com o painel fechado. */
-  marcarNovidade(quantidade = 1) {
-    if (this.painelVisivel()) return;
-    this.naoLidas += quantidade;
-    this.atualizarContador();
+  /** O botão do painel aberto fica preenchido, com o shape morph do M3. */
+  desenharBotao(area) {
+    const botao = this.botoes[area];
+    if (!botao) return;
+    const aberta = this.areaVisivel(area);
+    botao.classList[aberta ? 'add' : 'remove']('selecionado');
+    botao.setAttribute('aria-expanded', String(aberta));
+    const n = this.naoLidas[area];
+    const rotulo = n > 0
+      ? `${TITULOS[area]}, ${n} ${n === 1 ? 'novidade' : 'novidades'}`
+      : TITULOS[area];
+    botao.setAttribute('aria-label', rotulo);
+    botao.title = aberta ? `Fechar ${TITULOS[area].toLowerCase()}` : TITULOS[area];
   }
 
-  zerarNaoLidas() {
-    this.naoLidas = 0;
-    this.atualizarContador();
+  /**
+   * Conta o que chega com a área fechada: mensagens do professor e fixadas no Chat,
+   * arquivos novos em Arquivos.
+   */
+  marcarNovidade(area = 'chat', quantidade = 1) {
+    if (this.areaVisivel(area)) return;
+    this.naoLidas[area] += quantidade;
+    this.atualizarContador(area);
+    this.desenharBotao(area);
   }
 
-  atualizarContador() {
-    if (!this.panelBadge) return;
-    this.panelBadge.hidden = this.naoLidas === 0;
-    this.panelBadge.textContent = this.naoLidas > 9 ? '9+' : String(this.naoLidas);
+  zerarNaoLidas(area = this.area) {
+    this.naoLidas[area] = 0;
+    this.atualizarContador(area);
+    this.desenharBotao(area);
+  }
+
+  atualizarContador(area) {
+    const contador = this.contadores[area];
+    if (!contador) return;
+    const n = this.naoLidas[area];
+    contador.hidden = n === 0;
+    contador.textContent = n > 99 ? '99+' : String(n);
   }
 
   atualizarFundoDaGaveta(aberta) {
     if (!this.sidebarBackdrop) return;
     this.sidebarBackdrop.hidden = !aberta;
-    this.sidebarBackdrop.classList.toggle('visible', aberta);
+    this.sidebarBackdrop.classList[aberta ? 'add' : 'remove']('visible');
+  }
+
+  // MARK: - Teclado e tela cheia
+
+  aoApertarTecla(e) {
+    if (e.key === 'Escape') {
+      if (this.ehGaveta() && this.painelVisivel()) this.closeSidebar();
+      return;
+    }
+    // F entra e sai da tela cheia, como no YouTube. Com Ctrl/Cmd/Alt é atalho de outra
+    // coisa (Cmd+F é buscar), e num campo de texto é a letra F.
+    if (e.key !== 'f' && e.key !== 'F') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing) return;
+    if (ehCampoDeTexto(e.target) || ehCampoDeTexto(document.activeElement)) return;
+    if (!this.podeTelaCheia) return;
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    this.toggleFullscreen();
+  }
+
+  /**
+   * A página inteira vai para a tela cheia (como no Meet), e não só a imagem: a barra e
+   * o chat continuam à mão, e o botão de sair também.
+   *
+   * O botão some onde não há como: o Safari do iPhone só põe <video> em tela cheia (lá o
+   * caminho é "Adicionar à Tela de Início"), e a aula aberta como app em tela cheia já
+   * está sem a barra do navegador.
+   */
+  configurarTelaCheia() {
+    this.alvoDaTelaCheia = document.documentElement || null;
+    const alvo = this.alvoDaTelaCheia;
+    this.podeTelaCheia = Boolean(alvo && (alvo.requestFullscreen || alvo.webkitRequestFullscreen));
+    const jaSemBarra = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      && window.matchMedia('(display-mode: fullscreen)').matches;
+    this.fullscreenBtn.hidden = !this.podeTelaCheia || jaSemBarra;
+    this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    this.atualizarBotaoDeTelaCheia();
+  }
+
+  emTelaCheia() {
+    return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  atualizarBotaoDeTelaCheia() {
+    const cheia = this.emTelaCheia();
+    const rotulo = cheia ? 'Sair da tela cheia (F)' : 'Tela cheia (F)';
+    this.fullscreenBtn.setAttribute('aria-pressed', String(cheia));
+    this.fullscreenBtn.setAttribute('aria-label', rotulo);
+    this.fullscreenBtn.title = rotulo;
   }
 
   toggleFullscreen() {
-    // Coloca o container em tela cheia (e não a <img>), para que os controles
-    // e os avisos continuem visíveis por cima do vídeo, como no YouTube.
-    const emTelaCheia = document.fullscreenElement || document.webkitFullscreenElement;
-    if (!emTelaCheia) {
-      const entrar = this.videoWrap.requestFullscreen || this.videoWrap.webkitRequestFullscreen;
+    if (!this.emTelaCheia()) {
+      const alvo = this.alvoDaTelaCheia;
+      const entrar = alvo && (alvo.requestFullscreen || alvo.webkitRequestFullscreen);
       if (!entrar) return;
-      const resultado = entrar.call(this.videoWrap);
+      const resultado = entrar.call(alvo);
       if (resultado && resultado.catch) {
-        resultado.catch(err => console.error('Erro ao entrar em tela cheia:', err));
+        resultado.catch((err) => console.error('Erro ao entrar em tela cheia:', err));
       }
     } else {
       const sair = document.exitFullscreen || document.webkitExitFullscreen;

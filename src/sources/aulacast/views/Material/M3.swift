@@ -8,7 +8,7 @@ import CoreText
 // em manutenção desde 2021 e só roda em iOS/UIKit. Por isso os tokens (cor, tipo, forma,
 // movimento) estão aqui, com os valores do Material 3, e o que vem de biblioteca oficial
 // são as fontes: Google Sans Flex (OFL) e Material Symbols Rounded (Apache 2.0),
-// recortadas só para o que o app usa, em src/assets/fonts.
+// recortadas só para o que o app usa, em src/web-assets/fonts.
 
 // MARK: - Fontes
 
@@ -27,23 +27,12 @@ enum M3Fontes {
         return algum
     }()
 
-    /// Mesma busca da pasta do site: dentro do .app, rodando de src/ ou da raiz, ou subindo
-    /// a partir do executável do SwiftPM.
+    /// As fontes moram na pasta do site (`web-assets/fonts`): a página do aluno usa as
+    /// mesmas, então há uma cópia só, achada pela mesma busca que acha o site.
     static func pastaDasFontes() -> URL? {
-        let fm = FileManager.default
-        let atual = URL(fileURLWithPath: fm.currentDirectoryPath)
-        var candidatos: [URL] = []
-        if let recursos = Bundle.main.resourceURL { candidatos.append(recursos.appendingPathComponent("fonts")) }
-        candidatos.append(atual.appendingPathComponent("assets/fonts"))
-        candidatos.append(atual.appendingPathComponent("src/assets/fonts"))
-        var dir = Bundle.main.bundleURL
-        for _ in 0..<6 {
-            dir = dir.deletingLastPathComponent()
-            guard dir.path != "/" else { break }
-            candidatos.append(dir.appendingPathComponent("assets/fonts"))
-            candidatos.append(dir.appendingPathComponent("src/assets/fonts"))
-        }
-        return candidatos.first { var p: ObjCBool = false; return fm.fileExists(atPath: $0.path, isDirectory: &p) && p.boolValue }
+        let pasta = WebAssetsPathResolver.resolve().appendingPathComponent("fonts")
+        var ehPasta: ObjCBool = false
+        return FileManager.default.fileExists(atPath: pasta.path, isDirectory: &ehPasta) && ehPasta.boolValue ? pasta : nil
     }
 
     private static var cache: [String: NSFont] = [:]
@@ -90,6 +79,14 @@ enum M3 {
     static let onDanger = Color.white
     static let warningContainer = Color.dynamic(light: 0xFFDF99, dark: 0x5C4300)
     static let onWarningContainer = Color.dynamic(light: 0x261A00, dark: 0xFFDF99)
+    /// Atenção (mão levantada): a mesma paleta âmbar do `warningContainer`, em tom de
+    /// conteúdo (40 no claro, 80 no escuro) para ícone sobre a superfície. O vermelho fica
+    /// reservado para o que é erro ou não lido; mão levantada é pedido, não problema.
+    static let atencao = Color.dynamic(light: 0x7C5800, dark: 0xF8BD2A)
+    /// Âmbar saturado para o contador, igual nos dois modos (como o `danger`): num selo de
+    /// 18 pt o tom de contêiner some, e o professor precisa notar a mão de relance.
+    static let atencaoForte = Color(hex: 0xFBBC04)
+    static let onAtencaoForte = Color(hex: 0x261A00)
 
     static let surface = Color.dynamic(light: 0xFFFFFF, dark: 0x131314)
     static let surfaceContainerLowest = Color.dynamic(light: 0xFFFFFF, dark: 0x0E0E0E)
@@ -179,7 +176,9 @@ struct M3Icone: View {
 
     static let codigos: [String: UInt32] = [
         "add": 0xE145,
+        "arrow_forward": 0xE5C8,
         "attach_file": 0xE226,
+        "back_hand": 0xE764,
         "cancel": 0xE888,
         "cast": 0xE307,
         "cast_for_education": 0xEFEC,
@@ -189,6 +188,7 @@ struct M3Icone: View {
         "chevron_right": 0xE5CC,
         "circle": 0xEF4A,
         "close": 0xE5CD,
+        "cloud_off": 0xE2C1,
         "co_present": 0xEAF0,
         "content_copy": 0xE14D,
         "description": 0xE873,
@@ -199,11 +199,17 @@ struct M3Icone: View {
         "file_present": 0xEA0E,
         "folder": 0xE2C7,
         "forum": 0xE8AF,
+        "fullscreen": 0xE5D0,
+        "fullscreen_exit": 0xE5D1,
         "group": 0xEA21,
         "info": 0xE88E,
         "ios_share": 0xE6B8,
+        "keep": 0xF027,
+        "keep_off": 0xE6F9,
         "keyboard_arrow_down": 0xE313,
         "lan": 0xEB2F,
+        "link": 0xE250,
+        "logout": 0xE9BA,
         "mark_chat_unread": 0xF189,
         "more_vert": 0xE5D4,
         "open_in_new": 0xE89E,
@@ -213,14 +219,17 @@ struct M3Icone: View {
         "play_arrow": 0xE037,
         "play_circle": 0xE1C4,
         "present_to_all": 0xE0DF,
+        "push_pin": 0xF10D,
         "radio_button_checked": 0xE837,
         "refresh": 0xE5D5,
         "schedule": 0xEFD6,
         "screen_share": 0xE0E2,
+        "send": 0xE163,
         "sensors": 0xE51E,
         "slideshow": 0xE41B,
         "stop": 0xE047,
         "stop_circle": 0xEF71,
+        "sync": 0xE627,
         "tune": 0xE429,
         "upload_file": 0xE9FC,
         "visibility": 0xE8F4,
@@ -228,6 +237,7 @@ struct M3Icone: View {
         "warning": 0xF083,
         "web_asset": 0xE069,
         "wifi": 0xE63E,
+        "wifi_off": 0xE648,
     ]
 
     var body: some View {
@@ -266,7 +276,8 @@ struct M3CamadaDeEstado: ViewModifier {
 
 // MARK: - Botão de ícone
 
-enum M3VarianteDoIcone { case padrao, tonal, preenchido, perigo }
+/// `atencao` é o contêiner âmbar, para o que pede a vez do professor (a mão levantada).
+enum M3VarianteDoIcone { case padrao, tonal, preenchido, perigo, atencao }
 
 /// Botão de ícone do M3 Expressive: redondo; quando selecionado, fica preenchido e ganha
 /// cantos menores (o "shape morph" dos botões de alternância).
@@ -277,17 +288,22 @@ struct M3BotaoDeIcone: View {
     var selecionado = false
     var contador: Int? = nil
     var contadorNeutro = false
+    /// Contador em âmbar: conta quem está esperando o professor (mãos levantadas).
+    var contadorDeAtencao = false
+    /// Ícone preenchido mesmo sem estar selecionado: a mão levantada é um estado do aluno,
+    /// não do botão, e no Meet ela aparece sempre cheia.
+    var iconePreenchido = false
     var ajuda: String = ""
     let acao: () -> Void
 
     var body: some View {
         Button(action: acao) {
-            M3Icone(nome: icone, tamanho: tamanho * 0.46, preenchido: selecionado)
+            M3Icone(nome: icone, tamanho: tamanho * 0.46, preenchido: selecionado || iconePreenchido)
         }
         .buttonStyle(Estilo(variante: variante, tamanho: tamanho, selecionado: selecionado))
         .overlay(alignment: .topTrailing) {
             if let contador, contador > 0 {
-                M3Contador(valor: contador, neutro: contadorNeutro)
+                M3Contador(valor: contador, neutro: contadorNeutro, atencao: contadorDeAtencao)
                     .offset(x: 4, y: -2)
                     .transition(.scale.combined(with: .opacity))
             }
@@ -326,6 +342,7 @@ struct M3BotaoDeIcone: View {
             case .tonal: return (M3.surfaceContainerHighest, M3.onSurface)
             case .preenchido: return (M3.primary, M3.onPrimary)
             case .perigo: return (M3.danger, M3.onDanger)
+            case .atencao: return (M3.warningContainer, M3.onWarningContainer)
             }
         }
     }
@@ -390,17 +407,28 @@ struct M3Botao: View {
 
 struct M3Contador: View {
     let valor: Int
-    /// Neutro para quantidades (alunos, arquivos); vermelho só para o que pede atenção.
+    /// Neutro para quantidades (alunos, arquivos); vermelho para o que não foi lido;
+    /// âmbar para quem está esperando a vez (mãos levantadas).
     var neutro = false
+    var atencao = false
 
     var body: some View {
         Text(valor > 99 ? "99+" : "\(valor)")
             .font(M3Tipo.fonte(tamanho: 11, peso: 600).monospacedDigit())
-            .foregroundColor(neutro ? M3.onSecondaryContainer : .white)
+            .foregroundColor(frente)
             .padding(.horizontal, 5)
             .frame(minWidth: 18, minHeight: 18)
-            .background(Capsule().fill(neutro ? M3.secondaryContainer : M3.danger))
+            .background(Capsule().fill(fundo))
             .overlay(Capsule().stroke(M3.surface, lineWidth: 2))
+            .animation(M3.Mola.efeito, value: atencao)
+    }
+
+    private var fundo: Color {
+        atencao ? M3.atencaoForte : neutro ? M3.secondaryContainer : M3.danger
+    }
+
+    private var frente: Color {
+        atencao ? M3.onAtencaoForte : neutro ? M3.onSecondaryContainer : .white
     }
 }
 

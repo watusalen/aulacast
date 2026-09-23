@@ -56,8 +56,11 @@ Cenário: Transmitir apenas uma janela específica
 
 ---
 
-### ~~US-04: Notificação de Dúvida ("Levantar a Mão")~~ e ~~US-05: Acompanhar Dúvidas da Turma~~
-**Removidas.** O recurso de levantar a mão foi retirado a pedido do professor; dúvidas vão pelo chat reservado (US-07).
+### US-04: Notificação de Dúvida ("Levantar a Mão") e US-05: Acompanhar Dúvidas da Turma
+**Como** aluno, **quero** levantar a mão sem precisar escrever, **para que** o professor saiba que tenho uma dúvida.
+**Como** professor, **quero** ver quem levantou a mão, na ordem, e abaixá-la depois de atender, **para que** ninguém fique esquecido.
+
+Retiradas numa rodada anterior e de volta a pedido da turma, agora como um ícone discreto no chat do aluno.
 
 ---
 

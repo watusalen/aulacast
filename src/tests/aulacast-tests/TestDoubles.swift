@@ -4,7 +4,7 @@ import AulaCastCore
 
 /// Dublês mínimos para montar um MainViewModel sem tocar em captura de tela nem em rede.
 /// Servem para testar a ligação entre as camadas — é justamente numa dessas emendas que
-/// o id do aluno se perdia sem erro nenhum.
+/// o id do aluno se perdia e a mão levantada sumia sem erro nenhum.
 
 /// Simula a permissão de Gravação de Tela, que numa máquina real depende de um clique
 /// do usuário nos Ajustes do Sistema e não pode ser exercitada por teste automatizado.
@@ -75,6 +75,7 @@ final class FakeServer: NetworkServerProtocol {
     weak var chatObserver: ChatObserverProtocol?
     weak var clientObserver: ClientObserverProtocol?
     weak var presenceObserver: StudentPresenceObserverProtocol?
+    weak var handRaiseObserver: HandRaiseObserverProtocol?
     var onFailure: ((String) -> Void)?
 
     /// Quadros entregues aos alunos, para conferir que a pausa de fato os segura.
@@ -98,6 +99,14 @@ final class FakeServer: NetworkServerProtocol {
     func updateSharedFiles(_ files: [SharedFile]) { arquivosCompartilhados = files }
     var onFileDownloadUpdate: ((FileDownloadStats) -> Void)?
     func broadcastChatMessage(_ message: ChatMessage) {}
+
+    /// Alunos cuja mão o professor abaixou, na ordem, para conferir o HAND_LOWERED.
+    private(set) var maosAbaixadas: [String] = []
+    func lowerHand(clientId: String) { maosAbaixadas.append(clientId) }
+
+    /// Cada fixação (texto) e desafixação (`nil`) pedida ao servidor, na ordem.
+    private(set) var fixacoes: [String?] = []
+    func updatePinnedMessage(_ text: String?) { fixacoes.append(text) }
     func broadcastControlMessage(type: String, payload: [String: String]?) {
         controlMessages.append((type: type, payload: payload))
     }

@@ -5,6 +5,13 @@ public protocol ChatObserverProtocol: AnyObject {
     func didReceiveChatMessage(_ message: ChatMessage)
 }
 
+/// Interface segregada para observadores da mão levantada (ISP).
+/// Identifica o aluno pela conexão (`clientId`), e não pelo nome digitado: o mesmo aluno
+/// pode trocar de nome no meio da aula, e isso não pode criar um segundo registro.
+/// O `displayName` é sempre o nome aceito no IDENTIFY, nunca o que a mensagem trouxer.
+public protocol HandRaiseObserverProtocol: AnyObject {
+    func didToggleHandRaise(clientId: String, displayName: String, isRaised: Bool)
+}
 
 /// Interface segregada para observadores de conexões de clientes (ISP).
 public protocol ClientObserverProtocol: AnyObject {

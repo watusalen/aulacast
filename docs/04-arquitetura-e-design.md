@@ -75,13 +75,14 @@ Enviada pelo servidor assim que o aluno conecta. Carrega o estado atual do chat 
 transmissão: sem isso, quem entra (ou reconecta) no meio da aula veria o campo de mensagem
 liberado com o chat desligado, ou o último quadro congelado como se a aula estivesse ao vivo
 quando ela está pausada ou encerrada. `stream` é `live`, `paused` ou `ended` (este com
-`reason`).
+`reason`). `pinned` só vem quando há mensagem fixada (seção 3.11).
 ```json
 {
   "type": "CONNECTED",
   "payload": {
     "chatEnabled": true,
-    "stream": "paused"
+    "stream": "paused",
+    "pinned": "Portal do Aluno: https://portal.exemplo.edu.br"
   }
 }
 ```
@@ -119,7 +120,6 @@ lista vai em `payload.files` do `CONNECTED`. O download é uma requisição HTTP
 RFC 6266/5987, e um nome só ASCII de reserva). O arquivo é lido do disco em pedaços de
 256 KB, e o próximo só sai quando o anterior foi entregue — um arquivo grande não vai
 inteiro para a memória. Id desconhecido, arquivo removido ou apagado do disco: 404.
-(`RAISE_HAND`, que ocupava esta seção, foi removido; o servidor ignora a mensagem.)
 ```json
 {
   "type": "FILES",
@@ -184,6 +184,24 @@ o notebook que dormiu ou saiu do Wi-Fi sem fechar a conexão.
 Frames do navegador precisam vir mascarados. Frames de controle têm até 125 bytes e não são
 fragmentados. Opcodes reservados e bits RSV encerram a conexão. Um `CLOSE` recebido é
 devolvido antes de fechar.
+
+#### 3.10. Mão levantada (`RAISE_HAND`, `RAISE_HAND_ACK`, `HAND_LOWERED`)
+O aluno levanta ou abaixa a mão com `{"type":"RAISE_HAND","payload":{"active":true}}`, e o
+servidor confirma com `RAISE_HAND_ACK` (mesmo `active`). Só vale depois do `IDENTIFY`
+aceito, e o nome é sempre o do `IDENTIFY`, nunca um campo do payload: de outra forma um aluno
+levantaria a mão em nome de um colega. Quando o professor abaixa a mão de alguém, só aquele
+aluno recebe `{"type":"HAND_LOWERED"}`. A mão é estado da conexão: ao reconectar, o cliente
+reenvia `RAISE_HAND` logo depois do `IDENTIFY`; ao sair, a mão sai com ele.
+
+#### 3.11. Mensagem fixada (`CHAT_PINNED`)
+O professor fixa uma mensagem sua (um link do Portal do Aluno, o prazo de uma lista) e ela
+fica no topo do chat de toda a turma. Uma por vez: fixar outra substitui. O texto vai
+serializado por `JSONSerialization` (aspas e quebras de linha chegam intactas); `null`
+desafixa. Quem entra depois recebe a fixada no `CONNECTED`.
+```json
+{ "type": "CHAT_PINNED", "payload": { "text": "Lista 4: https://portal.exemplo.edu.br/l4" } }
+{ "type": "CHAT_PINNED", "payload": { "text": null } }
+```
 
 ---
 
@@ -288,7 +306,7 @@ Continua mínima: cada informação tem um lugar só.
 - **Fontes:** o texto usa a **Google Sans Flex** (SIL OFL 1.1) e os ícones usam os **Material Symbols
   Rounded** (Apache 2.0), as fontes do Material 3. As duas são variáveis: o ícone do painel aberto
   aparece preenchido pelo eixo FILL. Foram reduzidas ao alfabeto latino e aos cerca de 50 ícones usados:
-  270 KB e 74 KB, com as licenças ao lado em `src/assets/fonts`. O app as registra em tempo de execução
+  270 KB e 65 KB, com as licenças ao lado em `src/web-assets/fonts`, a mesma pasta que a página do aluno usa. O app as registra em tempo de execução
   (`CTFontManagerRegisterFontsForURL`) e, se não achar, volta para a fonte do sistema.
 - **Por que não uma biblioteca:** o *Material Components for iOS* está em modo de manutenção desde 2021 e
   é UIKit/iOS. Não há biblioteca Material mantida para SwiftUI no macOS, então os tokens foram escritos
@@ -302,6 +320,43 @@ e [movimento](https://m3.material.io/styles/motion/overview/how-it-works) no m3.
 [Material Symbols](https://github.com/google/material-design-icons);
 [Google Meet](https://workspace.google.com/products/meet/);
 [Material Components iOS em manutenção](https://github.com/material-components/material-components-ios).
+
+### 4.3. Tela do aluno: o mesmo desenho, do lado do navegador
+
+A página do aluno foi refeita com os mesmos tokens do professor (cores claro/escuro, tipos,
+formas, fontes), servidos pelo próprio app, sem internet. O que mudou, e por quê (feedback da
+turma, triado de forma enxuta em `docs/feedback-tela-do-aluno.md`):
+
+- **Palco + barra + painel, como no Meet:** a imagem num palco escuro; embaixo, o estado ("Ao
+  vivo", "Pausada", "Reconectando…") e o nome com que o aluno entrou, a tela cheia no centro e
+  os botões **Chat** e **Arquivos** à direita, cada um com seu contador. Uma área por vez no
+  painel lateral, que o aluno fecha para ganhar tela.
+- **Celular:** em pé, o painel sobe como folha por cima da imagem (tocar fora ou Esc fecha);
+  deitado, a barra vira um trilho vertical à direita e a imagem ganha a altura inteira. Alvos
+  de toque de 48 px e margens do entalhe do iPhone (`safe-area-inset`).
+- **Tela cheia:** a tecla **F** entra e sai (ignorada enquanto se digita), e a tela cheia é a
+  página inteira, com a barra e o chat à mão. O Safari do iPhone não põe imagem em tela cheia;
+  lá o caminho é "Adicionar à Tela de Início": o `manifest.webmanifest` (`display:
+  fullscreen`) e as metas `apple-mobile-web-app-*` abrem a aula como app, sem a barra do
+  navegador.
+- **Mão levantada:** um ícone pequeno ao lado do campo de mensagem, que funciona mesmo com o
+  chat desligado. O professor vê quem levantou primeiro no topo da lista e pode abaixar.
+- **Links e mensagem fixada:** os links nas mensagens do professor viram clicáveis (só
+  `http(s)://` e `www.`, montados com DOM, nunca `innerHTML`); a fixada fica no topo do chat.
+  Com isso, "materiais e links da aula" não precisou de uma área nova: arquivos já têm o painel
+  Arquivos, e links vão pelo chat.
+- **Imagem que não pisca:** o vigia do vídeo só troca o `src` quando precisa (antes, cada
+  reconexão reiniciava o vídeo duas vezes) e, ao trocar ou quando a conexão cai, pinta o
+  último quadro num `<canvas>` por cima até chegar o quadro novo. Medido no Chrome 153 e no
+  WebKit: nenhum quadro vazio na troca; antes, cerca de 1,85 s de área vazia. Com a conexão
+  caída o aluno vê a imagem parada com um aviso pequeno, e não mais uma tela preta.
+- **Tela que não apaga:** a Wake Lock API só existe em `https://`, e a aula é `http://`. O
+  módulo `manter-tela-acesa.js` usa a API quando pode e, fora disso, a técnica do NoSleep.js
+  (MIT): um vídeo minúsculo em laço, iniciado no gesto de "Entrar na aula". Medido com `pmset
+  -g assertions`: Chrome e WebKit seguram a tela acordada. O vídeo **não pode ser mudo**
+  (`muted` não segura a tela em nenhum dos dois), precisa estar no DOM (fora da tela, 1 px)
+  e custa 3 a 4 pontos de CPU no Chrome. No celular, por ter trilha de áudio (silenciosa), pode
+  pausar a música de outro app.
 
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
@@ -361,22 +416,29 @@ AulaCast/
     │           ├── QualitySettingsView.swift
     │           ├── ACBrandMark.swift
     │           └── AulaCastPalette.swift      # Cores da marca
-    ├── assets/fonts/                      # Google Sans Flex e Material Symbols (+ licenças)
     ├── tests/aulacast-tests/
     │   ├── TestRunnerMain.swift               # Suíte executável
     │   └── TestDoubles.swift                  # Dublês de captura, rede e codificação
     └── web-assets/                            # Cliente do aluno (sem framework)
         ├── index.html
-        ├── styles.css
+        ├── styles.css                         # Tokens do Material 3 (claro e escuro)
+        ├── manifest.webmanifest               # "Adicionar à Tela de Início" em tela cheia
         ├── apple-touch-icon.png
+        ├── fonts/                             # Google Sans Flex e Material Symbols (+ licenças),
+        │                                      #   usadas também pela tela do professor
         ├── js/
         │   ├── main.js
         │   ├── entry-gate.js                  # Tela de identificação
         │   ├── student-identity.js            # Nome do aluno na sessão
         │   ├── presence-reporter.js           # Presença na tela
         │   ├── socket-client.js               # WebSocket + reconexão
-        │   ├── stream-watchdog.js             # Vigia o MJPEG
+        │   ├── stream-watchdog.js             # Vigia o MJPEG; segura o último quadro
+        │   ├── manter-tela-acesa.js           # Wake Lock ou vídeo em laço (NoSleep.js)
+        │   ├── vendor/nosleep-media.js        # Vídeos do NoSleep.js (MIT)
         │   ├── chat-manager.js
+        │   ├── links.js                       # Links clicáveis, montados com DOM
+        │   ├── raise-hand.js                  # Mão levantada
+        │   ├── files-list.js
         │   ├── ui-controller.js
         │   └── config.js
         └── tests/                             # Testes com node --test

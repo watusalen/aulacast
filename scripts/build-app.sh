@@ -80,18 +80,13 @@ else
 fi
 
 # O cliente web precisa viajar junto: o WebAssetsPathResolver procura em
-# Bundle.main.resourceURL quando o app roda instalado.
+# Bundle.main.resourceURL quando o app roda instalado. As fontes (web-assets/fonts)
+# vão junto e servem às duas telas, a do professor e a do aluno.
 # Os testes do cliente ficam de fora — não têm utilidade para quem só usa o aplicativo.
 mkdir -p "$APP/Contents/Resources/web-assets"
 (cd "$RAIZ/src/web-assets" && \
   find . -type f -not -path "./tests/*" -not -name ".DS_Store" \
     -exec ditto "{}" "$APP/Contents/Resources/web-assets/{}" \;)
-
-# Fontes da interface do professor (Google Sans Flex e Material Symbols, já recortadas
-# para o que o app usa) e as licenças delas. Sem isto o app instalado cai na fonte do
-# sistema e nos ícones de reserva.
-mkdir -p "$APP/Contents/Resources/fonts"
-ditto "$RAIZ/src/assets/fonts" "$APP/Contents/Resources/fonts"
 
 echo "==> Gerando o ícone"
 ICONE="$SAIDA/AppIcon.icns"

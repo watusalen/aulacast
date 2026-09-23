@@ -17,16 +17,27 @@ export function formatarTamanho(bytes) {
   return `${texto} ${unidades[i]}`;
 }
 
+/** Um ícone do Material Symbols (só visual: o leitor de tela lê o nome do arquivo). */
+function icone(nome, codigo) {
+  const el = document.createElement('span');
+  el.className = nome ? `icone ${nome}` : 'icone';
+  el.setAttribute('aria-hidden', 'true');
+  el.textContent = String.fromCodePoint(codigo);
+  return el;
+}
+
 /**
- * Lista de arquivos que o professor compartilhou.
+ * Lista de arquivos que o professor compartilhou, no desenho de lista do Material: ícone
+ * num quadrado tonal, nome e tamanho. O item inteiro é o link de download: é o único
+ * jeito de baixar, e um alvo grande é mais fácil de acertar no celular.
  *
  * O nome do arquivo vem do Mac do professor e vai para a tela só como texto — nunca
  * como HTML —, então um nome esquisito não vira código na página do aluno.
  */
 export class FilesList {
   constructor({ onNovidade } = {}) {
-    this.section = document.getElementById('filesSection');
     this.list = document.getElementById('filesList');
+    this.vazio = document.getElementById('filesEmpty');
     this.onNovidade = onNovidade || (() => {});
     this.idsConhecidos = null;
     /** Arquivos que chegaram durante a aula e o aluno ainda não baixou. */
@@ -44,7 +55,8 @@ export class FilesList {
       novos = lista.filter((a) => !this.idsConhecidos.has(a.id));
       for (const a of novos) this.naoBaixados.add(a.id);
     }
-    this.section.hidden = lista.length === 0;
+    this.list.hidden = lista.length === 0;
+    if (this.vazio) this.vazio.hidden = lista.length > 0;
 
     while (this.list.firstChild) this.list.removeChild(this.list.firstChild);
 
@@ -58,22 +70,33 @@ export class FilesList {
       link.setAttribute('download', arquivo.name);
       link.addEventListener('click', () => this.marcarComoBaixado(arquivo.id, item));
 
+      const quadrado = document.createElement('span');
+      quadrado.className = 'file-icone';
+      quadrado.appendChild(icone('', 0xE873));
+
+      const texto = document.createElement('span');
+      texto.className = 'file-texto';
+
       const nome = document.createElement('span');
       nome.className = 'file-name';
       nome.textContent = arquivo.name;
+      nome.setAttribute('title', arquivo.name);
 
       const tamanho = document.createElement('span');
       tamanho.className = 'file-size';
       tamanho.textContent = formatarTamanho(arquivo.size);
 
-      link.appendChild(nome);
+      texto.appendChild(nome);
+      texto.appendChild(tamanho);
+      link.appendChild(quadrado);
+      link.appendChild(texto);
       if (this.naoBaixados.has(arquivo.id)) {
         const etiqueta = document.createElement('span');
         etiqueta.className = 'file-new';
         etiqueta.textContent = 'Novo';
         link.appendChild(etiqueta);
       }
-      link.appendChild(tamanho);
+      link.appendChild(icone('file-baixar', 0xF090));
       item.appendChild(link);
       this.list.appendChild(item);
     }

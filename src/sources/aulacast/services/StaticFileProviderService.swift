@@ -115,6 +115,10 @@ public final class StaticFileProviderService {
             return "image/svg+xml"
         case "ico":
             return "image/x-icon"
+        case "ttf":
+            return "font/ttf"
+        case "webmanifest":
+            return "application/manifest+json"
         default:
             return "application/octet-stream"
         }

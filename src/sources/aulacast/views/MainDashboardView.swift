@@ -368,16 +368,21 @@ public struct MainDashboardView: View {
         .animation(M3.Mola.padrao, value: viewModel.isStreaming)
     }
 
+    private var maos: Int { viewModel.clientManager.handRaisedCount }
+
     // Direita: um botão por painel, com contadores.
     private var botoesDosPaineis: some View {
         HStack(spacing: 8) {
+            // Com mão levantada, o selo do botão troca o total de alunos pelo número de mãos,
+            // em âmbar: é o que pede o professor agora. Sem mãos, volta a ser a contagem neutra.
             M3BotaoDeIcone(
                 icone: "group",
                 variante: .padrao,
                 selecionado: painelAberto && aba.wrappedValue == .alunos,
-                contador: viewModel.clientManager.identifiedClients.count,
-                contadorNeutro: true,
-                ajuda: "Alunos"
+                contador: maos > 0 ? maos : viewModel.clientManager.identifiedClients.count,
+                contadorNeutro: maos == 0,
+                contadorDeAtencao: maos > 0,
+                ajuda: maos == 0 ? "Alunos" : maos == 1 ? "Alunos — 1 mão levantada" : "Alunos — \(maos) mãos levantadas"
             ) { alternarPainel(.alunos) }
 
             M3BotaoDeIcone(

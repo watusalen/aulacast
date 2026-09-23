@@ -13,14 +13,14 @@ function criarElemento(tag = 'div') {
     dispatch(evt) { (el.listeners[evt] || []).forEach((fn) => fn()); },
     querySelector(sel) {
       const classe = sel.replace('.', '');
-      const achar = (n) => (n.className === classe ? n : n.filhos.map(achar).find(Boolean));
+      const achar = (n) => (n.className.split(' ').includes(classe) ? n : n.filhos.map(achar).find(Boolean));
       return el.filhos.map(achar).find(Boolean) || null;
     }
   };
   return el;
 }
 
-const elementos = { filesSection: criarElemento('section'), filesList: criarElemento('ul') };
+const elementos = { filesList: criarElemento('ul'), filesEmpty: criarElemento('div') };
 globalThis.document = {
   getElementById: (id) => elementos[id] ?? null,
   createElement: (tag) => criarElemento(tag)
@@ -28,29 +28,57 @@ globalThis.document = {
 
 const { FilesList, formatarTamanho } = await import('../js/files-list.js');
 
-test('Sem arquivos, a seção fica escondida', () => {
+test('Sem arquivos, a lista some e fica o estado vazio', () => {
   const lista = new FilesList();
   lista.render([]);
-  assert.strictEqual(elementos.filesSection.hidden, true);
+  assert.strictEqual(elementos.filesList.hidden, true);
+  assert.strictEqual(elementos.filesEmpty.hidden, false);
 });
 
-test('Cada arquivo vira um link de download com nome e tamanho', () => {
+/** O link do item, o texto do nome e o do tamanho. */
+function partesDoItem(indice = 0) {
+  const link = elementos.filesList.filhos[indice].filhos[0];
+  return {
+    link,
+    nome: link.querySelector('.file-name'),
+    tamanho: link.querySelector('.file-size')
+  };
+}
+
+test('Cada arquivo vira um item que inteiro é o link de download, com nome e tamanho', () => {
   const lista = new FilesList();
   lista.render([{ id: 'abc-1', name: 'Apostila.pdf', size: 1500 }]);
 
-  assert.strictEqual(elementos.filesSection.hidden, false);
-  const link = elementos.filesList.filhos[0].filhos[0];
+  assert.strictEqual(elementos.filesList.hidden, false);
+  assert.strictEqual(elementos.filesEmpty.hidden, true);
+  const { link, nome, tamanho } = partesDoItem();
+  assert.strictEqual(link.tagName, 'a');
   assert.strictEqual(link.href, '/arquivos/abc-1');
   assert.strictEqual(link.attrs.download, 'Apostila.pdf');
-  assert.strictEqual(link.filhos[0].textContent, 'Apostila.pdf');
-  assert.strictEqual(link.filhos[1].textContent, '1,5 KB');
+  assert.strictEqual(nome.textContent, 'Apostila.pdf');
+  assert.strictEqual(tamanho.textContent, '1,5 KB');
+  const links = [];
+  const juntar = (n) => { if (n.tagName === 'a') links.push(n); n.filhos.forEach(juntar); };
+  juntar(elementos.filesList.filhos[0]);
+  assert.strictEqual(links.length, 1, 'um único jeito de baixar');
+});
+
+test('Os ícones do item são só visuais', () => {
+  const lista = new FilesList();
+  lista.render([{ id: 'i', name: 'i.pdf', size: 1 }]);
+  const { link } = partesDoItem();
+  const icones = [];
+  const juntar = (n) => { if (n.className.split(' ').includes('icone')) icones.push(n); n.filhos.forEach(juntar); };
+  juntar(link);
+  assert.ok(icones.length >= 2, 'o do documento e o de baixar');
+  assert.ok(icones.every((i) => i.attrs['aria-hidden'] === 'true'));
 });
 
 test('Nome de arquivo com HTML aparece como texto, não vira código na página', () => {
   const lista = new FilesList();
   const nome = '<img src=x onerror=alert(1)>.txt';
   lista.render([{ id: 'x', name: nome, size: 10 }]);
-  const span = elementos.filesList.filhos[0].filhos[0].filhos[0];
+  const { nome: span } = partesDoItem();
   assert.strictEqual(span.textContent, nome);
   assert.strictEqual(span.innerHTML, undefined, 'innerHTML nunca é usado');
 });

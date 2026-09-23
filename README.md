@@ -39,8 +39,10 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 - Entrada identificada: o aluno informa o **nome** antes de assistir
 - Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)
 - Compartilhamento de arquivos de qualquer tipo: o professor escolhe (ou arrasta) e a turma baixa pela página da aula, sem internet
-- Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros)
-- Reconexão automática do vídeo e do chat quando a rede oscila
+- Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros), com links clicáveis e uma **mensagem fixada** pelo professor no topo
+- **Levantar a mão** pelo chat; o professor vê quem levantou primeiro e pode abaixar
+- Página do aluno em Material 3, no desenho do Google Meet, feita para computador e celular: tela cheia pela tecla **F**, "Adicionar à Tela de Início" no iPhone, e a tela do aluno não apaga durante a aula
+- Reconexão automática do vídeo e do chat quando a rede oscila, com o último quadro na tela (sem tela preta)
 
 ## Requisitos
 
@@ -160,8 +162,7 @@ src/
     views/                  # Telas SwiftUI
   sources/aulacast-app/     # Ponto de entrada do app
   tests/aulacast-tests/     # Suíte de testes
-  web-assets/               # Cliente web do aluno (HTML/CSS/JS, sem framework)
-  assets/fonts/             # Fontes do Material 3 usadas na tela do professor
+  web-assets/               # Cliente web do aluno (HTML/CSS/JS, sem framework) e as fontes
 docs/                       # Especificação, casos de uso, histórias de usuário, arquitetura
 ```
 
@@ -174,7 +175,7 @@ docs/                       # Especificação, casos de uso, histórias de usuá
 - **Captura na proporção da fonte** — sem faixas pretas e sem janela encostada no canto.
 - **Último quadro repetido uma vez quando a imagem para** — o Safari só desenha um quadro quando o próximo chega; sem isso a turma via o quadro anterior.
 - **Identificação revalidada no servidor** — a lista de presença não pode confiar apenas na checagem do navegador.
-- **Tela do professor em Material 3 Expressive, no desenho do Google Meet** — palco com a prévia, controles da aula numa barra embaixo, um painel lateral por vez. Os tokens (cores, tipos, formas, movimento) foram escritos em SwiftUI, porque não há biblioteca Material mantida para macOS. Detalhes e fontes em `docs/04-arquitetura-e-design.md`, seção 4.2.
+- **As duas telas em Material 3 Expressive, no desenho do Google Meet** — palco com a imagem, controles numa barra embaixo, um painel lateral por vez. Do lado do professor, os tokens (cores, tipos, formas, movimento) foram escritos em SwiftUI, porque não há biblioteca Material mantida para macOS; do lado do aluno, em CSS, com as mesmas fontes servidas pelo próprio app. Detalhes em `docs/04-arquitetura-e-design.md`, seções 4.2 e 4.3.
 
 ## Sobre o desenvolvimento: pair programming com IA
 
@@ -256,8 +257,9 @@ código funcional esconde o quanto ainda depende de alguém disposto a conferir 
 
 Projeto acadêmico desenvolvido no IFPI — Campus Piripiri.
 
-Fontes de terceiros incluídas em `src/assets/fonts/`, com as licenças ao lado:
-- **Google Sans Flex**, © Google, [SIL Open Font License 1.1](src/assets/fonts/GoogleSansFlex-OFL.txt);
-- **Material Symbols Rounded**, © Google, [Apache License 2.0](src/assets/fonts/MaterialSymbols-LICENSE.txt).
+Componentes de terceiros incluídos, com as licenças junto:
+- **Google Sans Flex**, © Google, [SIL Open Font License 1.1](src/web-assets/fonts/GoogleSansFlex-OFL.txt);
+- **Material Symbols Rounded**, © Google, [Apache License 2.0](src/web-assets/fonts/MaterialSymbols-LICENSE.txt);
+- **NoSleep.js** (os vídeos em laço que mantêm a tela do aluno acesa), © Rich Tibbett, licença MIT, no topo de `src/web-assets/js/vendor/nosleep-media.js`.
 
-As duas foram reduzidas aos caracteres e ícones usados pelo app.
+As fontes foram reduzidas aos caracteres e ícones usados pelo app e servem às duas telas.

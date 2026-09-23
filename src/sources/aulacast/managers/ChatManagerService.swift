@@ -12,6 +12,13 @@ public final class ChatManagerService: ObservableObject {
 
     @Published public private(set) var messages: [ChatMessage] = []
 
+    /// A mensagem que o professor fixou para a turma (o link do Portal do Aluno, por
+    /// exemplo), ou `nil`. Uma por vez: fixar outra substitui.
+    ///
+    /// Guardada como cópia, e não como índice no histórico: o histórico descarta as mais
+    /// antigas, e a fixada precisa continuar de pé a aula inteira.
+    @Published public private(set) var pinnedMessage: ChatMessage?
+
     public init() {}
 
     public func addMessage(_ message: ChatMessage) {
@@ -28,5 +35,24 @@ public final class ChatManagerService: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let msg = ChatMessage(sender: "Professor", text: trimmed, isProf: true)
         addMessage(msg)
+    }
+
+    /// Fixa uma mensagem do professor. Devolve se algo mudou, para quem chama saber se
+    /// precisa avisar a turma.
+    ///
+    /// Só as do professor: fixar a pergunta de um aluno a mostraria para a turma inteira,
+    /// e as mensagens dos alunos são privadas com o professor.
+    @discardableResult
+    public func pin(_ message: ChatMessage) -> Bool {
+        guard message.isProf, pinnedMessage?.id != message.id else { return false }
+        pinnedMessage = message
+        return true
+    }
+
+    @discardableResult
+    public func unpin() -> Bool {
+        guard pinnedMessage != nil else { return false }
+        pinnedMessage = nil
+        return true
     }
 }
