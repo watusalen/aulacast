@@ -161,6 +161,7 @@ src/
   sources/aulacast-app/     # Ponto de entrada do app
   tests/aulacast-tests/     # Suíte de testes
   web-assets/               # Cliente web do aluno (HTML/CSS/JS, sem framework)
+  assets/fonts/             # Fontes do Material 3 usadas na tela do professor
 docs/                       # Especificação, casos de uso, histórias de usuário, arquitetura
 ```
 
@@ -173,6 +174,7 @@ docs/                       # Especificação, casos de uso, histórias de usuá
 - **Captura na proporção da fonte** — sem faixas pretas e sem janela encostada no canto.
 - **Último quadro repetido uma vez quando a imagem para** — o Safari só desenha um quadro quando o próximo chega; sem isso a turma via o quadro anterior.
 - **Identificação revalidada no servidor** — a lista de presença não pode confiar apenas na checagem do navegador.
+- **Tela do professor em Material 3 Expressive, no desenho do Google Meet** — palco com a prévia, controles da aula numa barra embaixo, um painel lateral por vez. Os tokens (cores, tipos, formas, movimento) foram escritos em SwiftUI, porque não há biblioteca Material mantida para macOS. Detalhes e fontes em `docs/04-arquitetura-e-design.md`, seção 4.2.
 
 ## Sobre o desenvolvimento: pair programming com IA
 
@@ -253,3 +255,9 @@ código funcional esconde o quanto ainda depende de alguém disposto a conferir 
 ## Licença
 
 Projeto acadêmico desenvolvido no IFPI — Campus Piripiri.
+
+Fontes de terceiros incluídas em `src/assets/fonts/`, com as licenças ao lado:
+- **Google Sans Flex**, © Google, [SIL Open Font License 1.1](src/assets/fonts/GoogleSansFlex-OFL.txt);
+- **Material Symbols Rounded**, © Google, [Apache License 2.0](src/assets/fonts/MaterialSymbols-LICENSE.txt).
+
+As duas foram reduzidas aos caracteres e ícones usados pelo app.

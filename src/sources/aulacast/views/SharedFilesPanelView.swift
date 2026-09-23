@@ -16,104 +16,59 @@ public struct SharedFilesPanelView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(viewModel.sharedFiles.isEmpty ? "Nenhum arquivo compartilhado"
-                     : viewModel.sharedFiles.count == 1 ? "1 arquivo disponível para a turma"
-                     : "\(viewModel.sharedFiles.count) arquivos disponíveis para a turma")
-                    .font(.system(size: 12))
-                    .foregroundColor(AC.textSecondary)
-                Spacer()
-                Button(action: escolherArquivos) {
-                    Label("Compartilhar", systemImage: "square.and.arrow.up")
-                }
-                .buttonStyle(.acOutline(height: 28, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
-                .help("Escolher arquivos para a turma baixar")
+        VStack(alignment: .leading, spacing: 12) {
+            M3Botao(titulo: "Compartilhar arquivo", icone: "upload_file", variante: .tonal, altura: 40) {
+                escolherArquivos()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-
-            Divider()
+            .help("Escolher arquivos para a turma baixar (ou arraste para cá)")
+            .padding(.horizontal, 16)
 
             if let aviso = viewModel.sharedFilesNotice {
-                Text(aviso)
-                    .font(.system(size: 12))
-                    .foregroundColor(AC.stopRed)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
+                HStack(alignment: .top, spacing: 8) {
+                    M3Icone(nome: "warning", tamanho: 18, preenchido: true)
+                    Text(aviso).m3(.bodySmall).fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundColor(M3.onErrorContainer)
+                .padding(12)
+                .m3Superficie(M3.errorContainer, canto: M3.Canto.medio)
+                .padding(.horizontal, 16)
             }
 
             if viewModel.sharedFiles.isEmpty {
-                VStack(spacing: 6) {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 22))
-                        .foregroundColor(AC.textTertiary)
-                    Text("Arraste arquivos para cá ou clique em Compartilhar.")
-                        .font(.system(size: 13))
-                        .foregroundColor(AC.textSecondary)
+                VStack(spacing: 10) {
+                    M3Icone(nome: "folder", tamanho: 40)
+                        .foregroundColor(M3.onSurfaceVariant)
+                    Text("Nenhum arquivo ainda")
+                        .m3(.titleMedium)
+                        .foregroundColor(M3.onSurface)
+                    Text("Arraste arquivos para cá. Qualquer tipo serve; a turma baixa pela página da aula.")
+                        .m3(.bodyMedium)
+                        .foregroundColor(M3.onSurfaceVariant)
                         .multilineTextAlignment(.center)
-                    Text("Qualquer tipo de arquivo. A turma baixa pela página da aula.")
-                        .font(.system(size: 12))
-                        .foregroundColor(AC.textTertiary)
-                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 260)
                 }
-                .padding(20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(spacing: 0) {
+                    VStack(spacing: 4) {
                         ForEach(viewModel.sharedFiles) { arquivo in
-                            // Uma informação por linha: o painel lateral tem 360 pt, e com tudo
-                            // lado a lado o nome, a disponibilidade e os downloads saíam cortados.
-                            HStack(alignment: .top, spacing: 10) {
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: arquivo.url.path))
-                                    .resizable()
-                                    .frame(width: 26, height: 26)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(arquivo.name)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(AC.textPrimary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                        .help(arquivo.name)
-                                    HStack(spacing: 4) {
-                                        Text(ByteCountFormatter.string(fromByteCount: arquivo.size, countStyle: .file))
-                                        Text("·").foregroundColor(AC.textTertiary)
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(AC.liveGreen)
-                                        Text(textoDeDisponivel)
-                                    }
-                                    .font(.system(size: 12))
-                                    .foregroundColor(AC.textSecondary)
-                                    .lineLimit(1)
-                                    situacaoDosDownloads(viewModel.fileDownloadStats[arquivo.id])
-                                }
-                                Spacer(minLength: 4)
-                                Button(action: { viewModel.removeSharedFile(id: arquivo.id) }) {
-                                    Image(systemName: "xmark")
-                                }
-                                .buttonStyle(.acIcon(size: 24, cornerRadius: 6, fontSize: 10))
-                                .help("Parar de compartilhar")
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(recentes.contains(arquivo.id) ? AC.liveGreen.opacity(0.12) : Color.clear)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                            Divider()
+                            linha(arquivo)
+                                .transition(.move(edge: .top).combined(with: .opacity))
                         }
                     }
-                    .animation(.easeOut(duration: 0.25), value: viewModel.sharedFiles)
-                    .animation(.easeOut(duration: 0.6), value: recentes)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 12)
+                    .animation(M3.Mola.padrao, value: viewModel.sharedFiles)
+                    .animation(M3.Mola.lenta, value: recentes)
                 }
             }
         }
-        .background(AC.panelBG)
+        .padding(.top, 4)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(AC.accent, lineWidth: 2)
+            RoundedRectangle(cornerRadius: M3.Canto.extraGrande, style: .continuous)
+                .stroke(M3.primary, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 .opacity(arrastandoPorCima ? 1 : 0)
-                .padding(4)
+                .padding(6)
         )
         .onDrop(of: [UTType.fileURL], isTargeted: $arrastandoPorCima) { itens in
             receberArrastados(itens)
@@ -132,38 +87,82 @@ public struct SharedFilesPanelView: View {
         }
     }
 
-    /// Para quantos alunos o arquivo já aparece. A lista chega na hora a quem está
-    /// conectado, e a quem entrar depois junto com as boas-vindas.
-    private var textoDeDisponivel: String {
-        switch viewModel.clientManager.identifiedClients.count {
-        case 0: return "Disponível (nenhum aluno conectado)"
-        case 1: return "Disponível para 1 aluno"
-        case let n: return "Disponível para \(n) alunos"
+    /// Item de lista do Material: ícone à esquerda, nome, e uma informação por linha
+    /// (o painel tem 360 pt; lado a lado o nome e o estado saíam cortados).
+    private func linha(_ arquivo: SharedFile) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: M3.Canto.medio, style: .continuous)
+                    .fill(M3.secondaryContainer)
+                M3Icone(nome: "description", tamanho: 22)
+                    .foregroundColor(M3.onSecondaryContainer)
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(arquivo.name)
+                    .m3(.bodyLarge)
+                    .foregroundColor(M3.onSurface)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(arquivo.name)
+                Text(ByteCountFormatter.string(fromByteCount: arquivo.size, countStyle: .file))
+                    .m3(.bodyMedium)
+                    .foregroundColor(M3.onSurfaceVariant)
+                situacao(viewModel.fileDownloadStats[arquivo.id])
+            }
+            Spacer(minLength: 0)
+            M3BotaoDeIcone(icone: "close", variante: .padrao, tamanho: 36, ajuda: "Parar de compartilhar") {
+                viewModel.removeSharedFile(id: arquivo.id)
+            }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: M3.Canto.grande, style: .continuous)
+                .fill(recentes.contains(arquivo.id) ? M3.tertiaryContainer : Color.clear)
+        )
     }
 
-    @ViewBuilder
-    private func situacaoDosDownloads(_ estatisticas: FileDownloadStats?) -> some View {
-        if let estatisticas, estatisticas.emAndamento > 0 || estatisticas.concluidos > 0 {
-            HStack(spacing: 10) {
-                if estatisticas.concluidos > 0 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text(estatisticas.concluidos == 1 ? "baixado por 1" : "baixado por \(estatisticas.concluidos)")
-                    }
-                    .foregroundColor(AC.textSecondary)
-                }
-                if estatisticas.emAndamento > 0 {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.small).scaleEffect(0.55).frame(width: 12, height: 12)
-                        Text("baixando (\(estatisticas.emAndamento))")
-                    }
-                    .foregroundColor(AC.accent)
-                }
+    /// O estado do arquivo numa frase curta, que cabe no painel de 360 pt:
+    /// ninguém baixou ainda → para quantos está disponível; já baixaram → "3 de 4
+    /// baixaram"; e, durante um download, "· 1 baixando" com o indicador de atividade.
+    private func situacao(_ estatisticas: FileDownloadStats?) -> some View {
+        let alunos = viewModel.clientManager.identifiedClients.count
+        let concluidos = estatisticas?.concluidos ?? 0
+        let baixando = estatisticas?.emAndamento ?? 0
+        let frase: String
+        if concluidos > 0 {
+            frase = alunos > 0 ? "\(min(concluidos, max(alunos, concluidos))) de \(max(alunos, concluidos)) baixaram"
+                               : (concluidos == 1 ? "1 baixou" : "\(concluidos) baixaram")
+        } else {
+            switch alunos {
+            case 0: frase = "Disponível para a turma"
+            case 1: frase = "Disponível para 1 aluno"
+            default: frase = "Disponível para \(alunos) alunos"
             }
-            .font(.system(size: 12))
-            .lineLimit(1)
         }
+        // O download em andamento vai numa linha própria: na mesma linha da frase, as duas
+        // coisas não cabiam no painel e a frase saía cortada.
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                M3Icone(nome: concluidos > 0 ? "download" : "check_circle", tamanho: 16, preenchido: concluidos == 0)
+                    .foregroundColor(concluidos > 0 ? M3.onSurfaceVariant : M3.tertiary)
+                Text(frase)
+                    .foregroundColor(M3.onSurfaceVariant)
+            }
+            if baixando > 0 {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small).scaleEffect(0.55).frame(width: 16, height: 16)
+                    Text(baixando == 1 ? "1 baixando agora" : "\(baixando) baixando agora")
+                }
+                .foregroundColor(M3.primary)
+                .transition(.opacity)
+            }
+        }
+        .m3(.labelMedium)
+        .lineLimit(1)
+        .padding(.top, 2)
     }
 
     private func escolherArquivos() {

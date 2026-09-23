@@ -87,6 +87,12 @@ mkdir -p "$APP/Contents/Resources/web-assets"
   find . -type f -not -path "./tests/*" -not -name ".DS_Store" \
     -exec ditto "{}" "$APP/Contents/Resources/web-assets/{}" \;)
 
+# Fontes da interface do professor (Google Sans Flex e Material Symbols, já recortadas
+# para o que o app usa) e as licenças delas. Sem isto o app instalado cai na fonte do
+# sistema e nos ícones de reserva.
+mkdir -p "$APP/Contents/Resources/fonts"
+ditto "$RAIZ/src/assets/fonts" "$APP/Contents/Resources/fonts"
+
 echo "==> Gerando o ícone"
 ICONE="$SAIDA/AppIcon.icns"
 swift "$RAIZ/scripts/gerar-icone.swift" "$ICONE" >/dev/null

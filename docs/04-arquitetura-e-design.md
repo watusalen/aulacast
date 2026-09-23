@@ -254,13 +254,54 @@ Fontes: exemplo "Capturing screen content in macOS" (Apple); WWDC22 10156 e 1015
 do µStreamer (pikvm/ustreamer); bug 36536 do WebKit; bug 987135 do Firefox; "We Mass-Deployed
 15-Year-Old Screen Sharing Technology" (blog da Helix.ml).
 
-### 4.2. Tela do professor: organização e referências
+### 4.2. Tela do professor: Material 3 Expressive no desenho do Google Meet
 
-- **Barra superior no lugar da barra de ferramentas do Mac:** marca, estado da aula ("Ao vivo · 12:04", "Pausada", "Fora do ar", "Transmissão interrompida") e endereço da turma com botão de copiar. O botão do painel lateral fica ancorado na ponta direita, para não virar alvo que muda de lugar (Apple HIG; guia de barras de ferramentas de Mario Guzmán). A barra ocupa a faixa dos botões de fechar/minimizar da janela, como nos apps do Mac.
-- **Painel lateral com abas (Alunos, Chat, Arquivos), uma área por vez:** antes eram três painéis empilhados, cada um com um terço da altura. É o padrão do painel do anfitrião nos apps de reunião (Google Meet: pessoas, chat, atividades). O painel abre e fecha pelo botão da barra ou por ⌥⌘I (o atalho de "Mostrar Inspetor" dos apps da Apple) e lembra a escolha.
-- **Contador de não lidas:** mensagens de alunos que chegam com o chat fora de vista aparecem num contador vermelho na aba Chat e, com o painel fechado, no botão do painel — o mesmo contador da página do aluno.
-- **Área principal:** prévia sem textos por cima da imagem (na pausa, um véu diz que a turma vê a imagem congelada); controles logo abaixo, com a ação principal à esquerda e fonte/qualidade à direita; grade de fontes com número de colunas pela largura (2 a 6).
-- **Chat explica quem vê o quê:** "Suas mensagens vão para toda a turma. As dos alunos chegam só para você."
+A tela do professor segue o **Material 3 Expressive** (Google, 2025) e a organização do **Google Meet**:
+um palco escuro com a prévia, uma barra de controles embaixo e um painel lateral que mostra uma área por vez.
+Continua mínima: cada informação tem um lugar só.
+
+- **Barra inferior em três partes, como a do Meet:**
+  - *Esquerda:* estado da aula num chip ("Ao vivo 12:04", "Pausada", "Interrompida", "Fora do ar") e o endereço
+    da turma com botão de copiar. O endereço nunca é cortado. Se a janela estreita, o chip mostra só o ponto
+    e o tempo.
+  - *Centro:* os controles da aula (o que apresentar, pausar, qualidade) e a ação principal, "Iniciar
+    transmissão" ou a pílula vermelha "Encerrar", no lugar do "Sair da chamada" do Meet.
+  - *Direita:* os botões dos painéis (Alunos, Chat, Arquivos), com contadores. O botão do painel aberto
+    fica preenchido e troca o círculo por um quadrado arredondado: é o *shape morph* do M3 Expressive.
+- **Painel lateral, uma área por vez:** um cartão arredondado (28 pt) com título e botão de fechar. Clicar
+  no botão do painel já aberto fecha o painel, como no Meet. O painel "Apresentar" (escolha de tela ou
+  janela) também fica ali. O painel e a aba abertos são lembrados, e ⌥⌘I abre e fecha.
+- **Não lidas:** as mensagens dos alunos que chegam com o chat fora de vista contam no botão do chat, num
+  badge vermelho.
+- **Chat:** no topo, o controle "Alunos podem escrever", onde o Meet põe o "Permitir que todos enviem
+  mensagens". Antes ele ficava escondido no popover de qualidade. Abaixo vem o aviso de quem vê o quê. As
+  mensagens aparecem sem balões (nome, hora e texto) e o campo de mensagem é uma pílula.
+- **Alunos:** a lista segue o painel Pessoas do Meet. Cada aluno tem um avatar com as iniciais, numa cor
+  fixa pelo nome, e uma linha "com a aula à vista" ou "em outra janela ou aba". No topo, um resumo diz
+  quantos estão com a aula à vista.
+- **Qualidade:** a resolução e os quadros por segundo são escolhidos em *connected button groups*, o
+  substituto do segmented button no M3 Expressive.
+- **Tokens:** o código tem os papéis de cor do M3 (surface containers tonais, primary, error e outros, com
+  a paleta do Google para o modo claro e o escuro), a escala de tipos (display → label), os cantos 4/8/12/16/28, as
+  molas de movimento (rígidas para efeitos, amortecidas para posição) e as camadas de estado (8% no hover,
+  10% no clique). Tudo está em `views/Material/M3.swift`.
+- **Fontes:** o texto usa a **Google Sans Flex** (SIL OFL 1.1) e os ícones usam os **Material Symbols
+  Rounded** (Apache 2.0), as fontes do Material 3. As duas são variáveis: o ícone do painel aberto
+  aparece preenchido pelo eixo FILL. Foram reduzidas ao alfabeto latino e aos cerca de 50 ícones usados:
+  270 KB e 74 KB, com as licenças ao lado em `src/assets/fonts`. O app as registra em tempo de execução
+  (`CTFontManagerRegisterFontsForURL`) e, se não achar, volta para a fonte do sistema.
+- **Por que não uma biblioteca:** o *Material Components for iOS* está em modo de manutenção desde 2021 e
+  é UIKit/iOS. Não há biblioteca Material mantida para SwiftUI no macOS, então os tokens foram escritos
+  à mão a partir da especificação.
+
+Referências: [Material 3 Expressive](https://m3.material.io/blog/building-with-m3-expressive);
+[cores](https://m3.material.io/styles/color/roles), [formas](https://m3.material.io/styles/shape/corner-radius-scale)
+e [movimento](https://m3.material.io/styles/motion/overview/how-it-works) no m3.material.io;
+[button groups](https://m3.material.io/components/button-groups/overview);
+[Google Sans Flex](https://fonts.google.com/specimen/Google+Sans+Flex);
+[Material Symbols](https://github.com/google/material-design-icons);
+[Google Meet](https://workspace.google.com/products/meet/);
+[Material Components iOS em manutenção](https://github.com/material-components/material-components-ios).
 
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
@@ -310,12 +351,17 @@ AulaCast/
     │       ├── viewmodels/
     │       │   └── MainViewModel.swift
     │       └── views/
-    │           ├── MainDashboardView.swift
+    │           ├── Material/M3.swift          # Tokens e componentes do Material 3
+    │           ├── MainDashboardView.swift    # Palco + barra inferior (desenho do Meet)
+    │           ├── ClassInspectorView.swift   # Painel lateral (uma área por vez)
     │           ├── SourcePickerView.swift
     │           ├── StudentListView.swift
     │           ├── ChatPanelView.swift
+    │           ├── SharedFilesPanelView.swift
     │           ├── QualitySettingsView.swift
-    │           └── AulaCastPalette.swift      # Tokens de cor e controles próprios
+    │           ├── ACBrandMark.swift
+    │           └── AulaCastPalette.swift      # Cores da marca
+    ├── assets/fonts/                      # Google Sans Flex e Material Symbols (+ licenças)
     ├── tests/aulacast-tests/
     │   ├── TestRunnerMain.swift               # Suíte executável
     │   └── TestDoubles.swift                  # Dublês de captura, rede e codificação

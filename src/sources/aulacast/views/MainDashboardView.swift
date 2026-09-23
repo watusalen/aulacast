@@ -7,14 +7,22 @@ private struct ImagemCapturada: @unchecked Sendable {
     let imagem: NSImage?
 }
 
-/// Janela principal de controle do aplicativo AulaCast para macOS.
+/// Janela principal do professor, no desenho de uma chamada do Google Meet em Material 3:
+/// um palco com o que a turma vê, uma barra de controles embaixo e, à direita, um painel
+/// que mostra uma área de cada vez (Apresentar, Alunos, Chat, Arquivos).
+///
+/// Barra de baixo, como no Meet: à esquerda o estado da aula e o endereço; no centro os
+/// controles da aula, com a ação principal em pílula (azul para começar, vermelha para
+/// encerrar, como o "sair da chamada"); à direita os botões que abrem cada painel, com
+/// contadores. Clicar de novo no botão do painel aberto fecha o painel.
 public struct MainDashboardView: View {
     @EnvironmentObject private var viewModel: MainViewModel
-    @State private var showQualitySettings = false
+    @State private var mostrarQualidade = false
 
-    /// Painel lateral (alunos, chat, arquivos) aberto ou fechado, lembrado entre aberturas.
+    /// Painel lateral aberto ou fechado, e qual área, lembrados entre aberturas.
+    /// Na primeira abertura mostra "Apresentar": é o primeiro passo de qualquer aula.
     @AppStorage("aulacast.painelAberto") private var painelAberto = true
-    @AppStorage("aulacast.abaDoPainel") private var abaSalva = AbaDoPainel.alunos.rawValue
+    @AppStorage("aulacast.abaDoPainel") private var abaSalva = AbaDoPainel.apresentar.rawValue
 
     /// Quantas mensagens de alunos o professor já teve à vista (o resto é "não lida").
     @State private var mensagensVistas = 0
@@ -26,8 +34,33 @@ public struct MainDashboardView: View {
     public init() {}
 
     public var body: some View {
-        dashboardContent
-        // Reinicia a atualização quando a fonte muda ou quando a transmissão começa/para.
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 16) {
+                palco
+                if painelAberto {
+                    SidePanelView(
+                        viewModel: viewModel,
+                        clientManager: viewModel.clientManager,
+                        captureService: resolvedCaptureService,
+                        aba: aba.wrappedValue,
+                        fechar: { painelAberto = false }
+                    )
+                    .frame(width: 360)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 16)
+            // Faixa dos botões de fechar/minimizar da janela, que ficam por cima.
+            .padding(.top, 38)
+
+            barraDeControles
+        }
+        .frame(minWidth: painelAberto ? 1040 : 760, minHeight: 620)
+        .background(M3.surfaceContainerLow)
+        .overlay(alignment: .topLeading) { tituloDaJanela }
+        .ignoresSafeArea(.container, edges: .top)
+        .animation(M3.Mola.padrao, value: painelAberto)
+        .animation(M3.Mola.padrao, value: abaSalva)
         .task(id: chavePrevia) {
             await manterPreviaDaFonteAtualizada()
         }
@@ -39,9 +72,11 @@ public struct MainDashboardView: View {
         }
     }
 
+    // MARK: - Estado do painel
+
     private var aba: Binding<AbaDoPainel> {
         Binding(
-            get: { AbaDoPainel(rawValue: abaSalva) ?? .alunos },
+            get: { AbaDoPainel(rawValue: abaSalva) ?? .apresentar },
             set: { abaSalva = $0.rawValue }
         )
     }
@@ -50,72 +85,193 @@ public struct MainDashboardView: View {
 
     private var naoLidas: Int { max(0, viewModel.studentMessagesReceived - mensagensVistas) }
 
-    /// Barra superior (estado da aula, endereço, botão do painel) + área principal
-    /// (prévia, controles, fontes) + painel lateral que abre e fecha.
-    private var dashboardContent: some View {
-        VStack(spacing: 0) {
-            barraSuperior
-            Divider()
+    /// Abre a área pedida; se ela já é a que está aberta, fecha o painel (como no Meet).
+    private func alternarPainel(_ destino: AbaDoPainel) {
+        if painelAberto && aba.wrappedValue == destino {
+            painelAberto = false
+        } else {
+            aba.wrappedValue = destino
+            painelAberto = true
+        }
+    }
 
-            HStack(spacing: 0) {
-                areaPrincipal
+    // MARK: - Título na faixa da janela
 
-                if painelAberto {
-                    Divider()
-                    ClassInspectorView(
-                        viewModel: viewModel,
-                        clientManager: viewModel.clientManager,
-                        aba: aba,
-                        naoLidas: naoLidas
-                    )
-                    .frame(width: 360)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+    private var tituloDaJanela: some View {
+        HStack(spacing: 8) {
+            ACBrandMark(tamanho: 18)
+            Text("AulaCast")
+                .m3(.titleSmall)
+                .foregroundColor(M3.onSurfaceVariant)
+        }
+        .padding(.leading, 84)
+        .frame(height: 30)
+        .padding(.top, 2)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Palco
+
+    /// Enquanto transmite, mostra o último quadro realmente enviado aos alunos.
+    /// Antes de transmitir, mostra a fonte selecionada, para o professor conferir
+    /// se escolheu a tela certa sem precisar entrar no ar para descobrir.
+    private var imagemDaPrevia: NSImage? {
+        viewModel.isStreaming ? viewModel.latestPreviewImage : previewDaFonteSelecionada
+    }
+
+    private var palco: some View {
+        VStack(spacing: 12) {
+            if let erro = viewModel.streamErrorMessage {
+                bannerDeErro(erro)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            ZStack {
+                // Fundo escuro nos dois modos: é onde fica a imagem, como o palco do Meet.
+                Color(hex: 0x0E0E0E)
+
+                if let preview = imagemDaPrevia {
+                    Image(nsImage: preview)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    palcoVazio
+                }
+
+                if viewModel.isStreaming && viewModel.isPaused {
+                    ZStack {
+                        Color.black.opacity(0.55)
+                        VStack(spacing: 12) {
+                            M3Icone(nome: "pause_circle", tamanho: 48, preenchido: true)
+                            Text("Pausada")
+                                .m3(.titleLarge)
+                            Text("A turma vê a imagem congelada")
+                                .m3(.bodyMedium)
+                                .opacity(0.8)
+                        }
+                        .foregroundColor(.white)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: M3.Canto.extraGrande, style: .continuous))
+            .animation(M3.Mola.efeito, value: viewModel.isPaused)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(M3.Mola.padrao, value: viewModel.streamErrorMessage)
+    }
+
+    /// Nada para mostrar ainda: diz o que fazer e dá o caminho direto (guia de estados
+    /// vazios do NN/g: situação, próximo passo, ação).
+    private var palcoVazio: some View {
+        VStack(spacing: 14) {
+            M3Icone(nome: "present_to_all", tamanho: 48)
+                .foregroundColor(Color(white: 0.75))
+            Text(viewModel.isStreaming ? "Preparando a imagem…" : "Escolha o que a turma vai ver")
+                .m3(.titleLarge)
+                .foregroundColor(.white)
+            if !viewModel.isStreaming {
+                M3Botao(titulo: "Apresentar", icone: "present_to_all", variante: .tonal) {
+                    aba.wrappedValue = .apresentar
+                    painelAberto = true
                 }
             }
         }
-        // A barra ocupa a faixa dos botões de fechar/minimizar, como a barra de
-        // ferramentas dos apps do Mac, em vez de deixar uma tira vazia acima dela.
-        .ignoresSafeArea(.container, edges: .top)
-        .frame(minWidth: painelAberto ? 1000 : 700, minHeight: 640)
-        .background(AC.windowBG)
-        .animation(.easeInOut(duration: 0.2), value: painelAberto)
     }
 
-    private var areaPrincipal: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let error = viewModel.streamErrorMessage {
-                streamErrorBanner(error)
+    /// A transmissão caiu sozinha, ou falta autorização: o professor precisa ver isso,
+    /// não descobrir pelos alunos. É um "banner" do Material: aviso e as saídas possíveis.
+    private func bannerDeErro(_ mensagem: String) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            M3Icone(nome: "error", tamanho: 24, preenchido: true)
+                .foregroundColor(M3.onErrorContainer)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.needsScreenRecordingPermission
+                     ? "Falta a autorização do macOS"
+                     : "A transmissão foi interrompida")
+                    .m3(.titleSmall)
+                Text(mensagem)
+                    .m3(.bodyMedium)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            livePreviewCard
-            barraDeControles
-            SourcePickerView(recorder: resolvedCaptureService)
+            .foregroundColor(M3.onErrorContainer)
+
+            Spacer(minLength: 8)
+
+            // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho:
+            // são exatamente as duas saídas possíveis, sem competir com o aviso do macOS.
+            if viewModel.needsScreenRecordingPermission {
+                M3Botao(titulo: "Abrir Ajustes", variante: .texto) {
+                    ScreenRecordingPermissionService.openSystemSettings()
+                }
+                M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
+                    ScreenRecordingPermissionService.relaunch()
+                }
+            } else {
+                M3Botao(titulo: "Dispensar", variante: .texto) {
+                    viewModel.streamErrorMessage = nil
+                }
+            }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-        .padding(.bottom, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AC.windowBG)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .m3Superficie(M3.errorContainer, canto: M3.Canto.grande)
     }
 
-    // MARK: - Barra superior
+    // MARK: - Barra de controles (embaixo)
 
-    /// Segue a barra de ferramentas do Mac: identidade e estado à esquerda, o que precisa
-    /// ficar sempre à mão à direita, e o botão do painel ancorado na ponta direita, para
-    /// não virar alvo que muda de lugar (Apple HIG).
-    private var barraSuperior: some View {
-        HStack(spacing: 12) {
-            ACBrandMark(tamanho: 22)
-            statusDaAula
-            Spacer(minLength: 16)
-            enderecoDaTurma
-            botaoDoPainel
+    private var barraDeControles: some View {
+        // Três seções lado a lado, com as laterais de largura igual e flexível: assim os
+        // controles ficam no meio quando há espaço e, na janela estreita, o endereço
+        // encolhe com reticências em vez de ficar por baixo dos botões (era um ZStack, e
+        // na largura padrão o ícone de copiar invadia o botão de apresentar).
+        HStack(spacing: 16) {
+            estadoEEndereco
+                .frame(maxWidth: .infinity, alignment: .leading)
+            controlesDaAula
+                .fixedSize()
+            botoesDosPaineis
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        // Espaço para os botões de fechar/minimizar/ampliar da janela.
-        .padding(.leading, 82)
-        .padding(.trailing, 12)
-        .frame(height: 34)
-        .padding(.top, 2)
-        .background(AC.panelBG)
+        .padding(.horizontal, 20)
+        .frame(height: 88)
+    }
+
+    // Esquerda: estado da aula e o endereço que a turma digita.
+    /// O endereço nunca é cortado: é o que o professor dita para a turma. Faltando espaço,
+    /// quem cede é o rótulo do estado ("Ao vivo"), e fica o ponto colorido com o tempo.
+    private var estadoEEndereco: some View {
+        ViewThatFits(in: .horizontal) {
+            estadoEEnderecoCompleto(compacto: false)
+            estadoEEnderecoCompleto(compacto: true)
+        }
+    }
+
+    private func estadoEEnderecoCompleto(compacto: Bool) -> some View {
+        HStack(spacing: 14) {
+            chipDeEstado(compacto: compacto)
+                .fixedSize()
+
+            Rectangle()
+                .fill(M3.outlineVariant)
+                .frame(width: 1, height: 20)
+
+            HStack(spacing: 4) {
+                Text(viewModel.displayAddress)
+                    .font(M3Tipo.fonte(tamanho: 15, peso: 500).monospacedDigit())
+                    .foregroundColor(M3.onSurface)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .fixedSize()
+                M3BotaoDeIcone(
+                    icone: enderecoCopiado ? "check" : "content_copy",
+                    variante: .padrao,
+                    tamanho: 36,
+                    ajuda: enderecoCopiado ? "Link copiado" : "Copiar o link da turma"
+                ) { copiarEndereco() }
+            }
+        }
     }
 
     private enum EstadoDaAula { case aoVivo, pausada, interrompida, foraDoAr }
@@ -125,64 +281,36 @@ public struct MainDashboardView: View {
         return viewModel.isSessionOpen ? .interrompida : .foraDoAr
     }
 
-    private var statusDaAula: some View {
-        let cor: Color
-        let texto: String
-        switch estadoDaAula {
-        case .aoVivo: cor = AC.liveGreen; texto = "Ao vivo"
-        case .pausada: cor = AC.pausedAmber; texto = "Pausada"
-        case .interrompida: cor = AC.stopRed; texto = "Transmissão interrompida"
-        case .foraDoAr: cor = AC.textTertiary; texto = "Fora do ar"
-        }
-        return HStack(spacing: 7) {
+    private func chipDeEstado(compacto: Bool) -> some View {
+        let (fundo, frente, texto): (Color, Color, String) = {
+            switch estadoDaAula {
+            case .aoVivo: return (M3.tertiaryContainer, M3.onTertiaryContainer, "Ao vivo")
+            case .pausada: return (M3.warningContainer, M3.onWarningContainer, "Pausada")
+            case .interrompida: return (M3.errorContainer, M3.onErrorContainer, "Interrompida")
+            case .foraDoAr: return (M3.surfaceContainerHighest, M3.onSurfaceVariant, "Fora do ar")
+            }
+        }()
+        return HStack(spacing: 8) {
             if estadoDaAula == .aoVivo {
-                ACPulsingDot(color: cor, size: 8)
+                ACPulsingDot(color: M3.tertiary, size: 8)
             } else {
-                Circle().fill(cor).frame(width: 8, height: 8)
+                Circle().fill(frente.opacity(0.7)).frame(width: 8, height: 8)
             }
-            Text(texto)
-                .font(.system(size: 12, weight: .semibold))
+            if !compacto {
+                Text(texto).m3(.labelLarge)
+            }
             if let inicio = viewModel.streamStartedAt, viewModel.isStreaming {
-                Text("·").foregroundColor(AC.textTertiary)
                 Text(inicio, style: .timer)
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-                    .foregroundColor(AC.textSecondary)
+                    .font(M3Tipo.fonte(tamanho: 14, peso: 500).monospacedDigit())
+                    .opacity(0.8)
             }
         }
-        .foregroundColor(estadoDaAula == .foraDoAr ? AC.textSecondary : cor)
-        .padding(.horizontal, 10)
-        .frame(height: 24)
-        .background(Capsule().fill(cor.opacity(0.13)))
-        .help(estadoDaAula == .aoVivo ? "A turma está vendo a sua tela. O tempo é desde o início da transmissão." : "")
-    }
-
-    /// Endereço que a turma digita. Na barra superior, e não num cartão grande: fica sempre
-    /// à vista (é o que o professor mais repete no começo da aula) sem tirar espaço da prévia.
-    private var enderecoDaTurma: some View {
-        HStack(spacing: 8) {
-            Text("Turma:")
-                .font(.system(size: 12))
-                .foregroundColor(AC.textSecondary)
-            Text(viewModel.displayAddress)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundColor(AC.textPrimary)
-                .textSelection(.enabled)
-                .lineLimit(1)
-            Button(action: copiarEndereco) {
-                Image(systemName: enderecoCopiado ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(enderecoCopiado ? AC.liveGreen : AC.textSecondary)
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(enderecoCopiado ? "Link copiado" : "Copiar o link (com http://, para colar num grupo ou documento)")
-        }
-        .padding(.leading, 10)
-        .padding(.trailing, 6)
-        .frame(height: 26)
-        .background(RoundedRectangle(cornerRadius: 7).fill(AC.inputBG))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(AC.border, lineWidth: 1))
+        .foregroundColor(frente)
+        .padding(.horizontal, 14)
+        .frame(height: 36)
+        .background(Capsule(style: .continuous).fill(fundo))
+        .help(texto)
+        .animation(M3.Mola.efeito, value: estadoDaAula == .aoVivo)
     }
 
     private func copiarEndereco() {
@@ -192,200 +320,93 @@ public struct MainDashboardView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { enderecoCopiado = false }
     }
 
-    /// Abre e fecha o painel lateral. Com ele fechado, o contador de mensagens novas fica
-    /// no próprio botão — como na página do aluno.
-    private var botaoDoPainel: some View {
-        Button(action: { painelAberto.toggle() }) {
-            Image(systemName: "sidebar.right")
-                .font(.system(size: 14))
-                .foregroundColor(painelAberto ? AC.accent : AC.textSecondary)
-                .frame(width: 30, height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(painelAberto ? AC.accent.opacity(0.12) : Color.clear)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .topTrailing) {
-            if !painelAberto && naoLidas > 0 {
-                ACContador(valor: naoLidas).offset(x: 6, y: -5)
+    // Centro: apresentar, pausar, qualidade e a ação principal.
+    private var controlesDaAula: some View {
+        HStack(spacing: 12) {
+            M3BotaoDeIcone(
+                icone: "present_to_all",
+                selecionado: painelAberto && aba.wrappedValue == .apresentar,
+                ajuda: "Escolher o que a turma vê"
+            ) { alternarPainel(.apresentar) }
+
+            M3BotaoDeIcone(
+                icone: viewModel.isPaused ? "play_arrow" : "pause",
+                selecionado: viewModel.isPaused,
+                ajuda: viewModel.isPaused ? "Retomar a transmissão" : "Pausar (a turma vê a imagem congelada)"
+            ) { viewModel.togglePause() }
+            .disabled(!viewModel.isStreaming)
+
+            M3BotaoDeIcone(icone: "tune", selecionado: mostrarQualidade, ajuda: "Qualidade da transmissão") {
+                mostrarQualidade.toggle()
             }
-        }
-        .keyboardShortcut("i", modifiers: [.command, .option])
-        .help(painelAberto ? "Esconder alunos, chat e arquivos (⌥⌘I)" : "Mostrar alunos, chat e arquivos (⌥⌘I)")
-    }
-
-    /// Enquanto transmite, mostra o último quadro realmente enviado aos alunos.
-    /// Antes de transmitir, mostra a fonte selecionada, para o professor conferir
-    /// se escolheu a tela certa sem precisar entrar no ar para descobrir.
-    private var imagemDaPrevia: NSImage? {
-        viewModel.isStreaming ? viewModel.latestPreviewImage : previewDaFonteSelecionada
-    }
-
-    private var livePreviewCard: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 11)
-                .fill(AC.windowBG)
-
-            if let preview = imagemDaPrevia {
-                Image(nsImage: preview)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                VStack(spacing: 6) {
-                    Text(viewModel.isStreaming ? "o que os alunos estão vendo" : "Pronto para transmitir")
-                        .font(.system(size: 16, weight: viewModel.isStreaming ? .regular : .semibold))
-                        .foregroundColor(viewModel.isStreaming ? AC.textTertiary : AC.textPrimary)
-                    if let source = resolvedCaptureService.selectedSource {
-                        Text("prévia de \(SourceNaming.title(source))")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(AC.textTertiary)
-                    }
-                }
+            // Popover ancorado no botão: fecha clicando fora ou com Esc. Cada ajuste já
+            // vale na hora, então não há nada a confirmar.
+            .popover(isPresented: $mostrarQualidade, arrowEdge: .top) {
+                QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
             }
-
-            // Pausada: a turma vê a imagem congelada, e a prévia mostra isso.
-            if viewModel.isStreaming && viewModel.isPaused {
-                ZStack {
-                    Color.black.opacity(0.5)
-                    VStack(spacing: 8) {
-                        Image(systemName: "pause.fill")
-                            .font(.system(size: 24))
-                        Text("Pausada: a turma vê a imagem congelada")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(.white)
-                }
-            }
-        }
-        // Teto de altura para a prévia não engolir a grade de fontes em janelas menores;
-        // sem layoutPriority, a prévia cede espaço primeiro quando a janela encolhe.
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: 470)
-        .clipShape(RoundedRectangle(cornerRadius: 11))
-        .overlay(RoundedRectangle(cornerRadius: 11).stroke(AC.border, lineWidth: 1))
-    }
-
-    /// A transmissão caiu sozinha — o professor precisa ver isso, não descobrir pelos alunos.
-    private func streamErrorBanner(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(AC.stopRed)
-                .font(.system(size: 14))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.needsScreenRecordingPermission
-                     ? "Falta a autorização do macOS"
-                     : "A transmissão foi interrompida")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(AC.textPrimary)
-                Text(message)
-                    .font(.system(size: 12))
-                    .foregroundColor(AC.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho:
-            // são exatamente as duas saídas possíveis, sem competir com o aviso do macOS.
-            if viewModel.needsScreenRecordingPermission {
-                Button("Abrir Ajustes") {
-                    ScreenRecordingPermissionService.openSystemSettings()
-                }
-                .buttonStyle(.acOutline(height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
-
-                Button("Reabrir o AulaCast") {
-                    ScreenRecordingPermissionService.relaunch()
-                }
-                .buttonStyle(.acFilled(AC.accent, height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
-            } else {
-                Button("Dispensar") {
-                    viewModel.streamErrorMessage = nil
-                }
-                .buttonStyle(.acOutline(height: 26, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(AC.stopRed.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(AC.stopRed.opacity(0.35), lineWidth: 1))
-    }
-
-    /// Controles logo abaixo da prévia, como a barra de controles dos apps de reunião:
-    /// a ação principal (iniciar/parar) à esquerda e larga o bastante para não errar, a
-    /// pausa ao lado, e à direita o que está indo para a turma e o ajuste de qualidade.
-    private var barraDeControles: some View {
-        HStack(spacing: 10) {
-            Button(action: {
-                if viewModel.isStreaming {
-                    viewModel.stopStream()
-                } else {
-                    viewModel.startStream()
-                }
-            }) {
-                HStack(spacing: 9) {
-                    Image(systemName: viewModel.isStreaming ? "stop.fill" : "play.fill")
-                        .font(.system(size: 13))
-                    Text(viewModel.isStreaming ? "Parar transmissão" : "Iniciar transmissão")
-                }
-                .frame(minWidth: 210)
-            }
-            .buttonStyle(.acFilled(
-                viewModel.isStreaming ? AC.stopRed : AC.accent,
-                height: 40,
-                cornerRadius: 9,
-                fontSize: 15,
-                horizontalPadding: 18
-            ))
-            .disabled(viewModel.isStarting)
-            .opacity(viewModel.isStarting ? 0.6 : 1)
 
             // A captura caiu, mas a turma segue conectada: além de tentar de novo, o
             // professor precisa de um jeito de encerrar a sessão e liberar o Mac.
             if viewModel.isSessionOpen && !viewModel.isStreaming {
-                Button(action: { viewModel.stopStream() }) {
-                    Image(systemName: "stop.fill")
+                M3BotaoDeIcone(icone: "stop", variante: .perigo, ajuda: "Encerrar a sessão e desconectar a turma") {
+                    viewModel.stopStream()
                 }
-                .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
-                .help("Encerrar a sessão e desconectar a turma")
             }
 
-            Button(action: { viewModel.togglePause() }) {
-                Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")
-            }
-            .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
-            .disabled(!viewModel.isStreaming)
-            .opacity(viewModel.isStreaming ? 1 : 0.4)
-            .help(viewModel.isPaused ? "Retomar transmissão" : "Pausar transmissão (a turma vê a imagem congelada)")
-
-            Spacer(minLength: 12)
-
-            // O que está indo para a turma, em texto discreto — antes ficava por cima da
-            // própria prévia, tampando a imagem.
-            Text(resumoDaFonte)
-                .font(.system(size: 12))
-                .foregroundColor(AC.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Button(action: { showQualitySettings.toggle() }) {
-                Image(systemName: "slider.horizontal.3")
-            }
-            .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
-            .help("Qualidade da transmissão e chat")
-            // Popover ancorado no botão: fecha clicando fora ou com Esc. Como cada
-            // ajuste já vale na hora, não há nada a confirmar com um botão.
-            .popover(isPresented: $showQualitySettings, arrowEdge: .bottom) {
-                QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
+            if viewModel.isStreaming {
+                M3Botao(titulo: "Encerrar", icone: "stop", variante: .perigo, altura: 48, larguraMinima: 140) {
+                    viewModel.stopStream()
+                }
+                .help("Parar a transmissão")
+            } else {
+                M3Botao(titulo: "Iniciar transmissão", icone: "play_arrow", variante: .preenchido, altura: 48) {
+                    viewModel.startStream()
+                }
+                .disabled(viewModel.isStarting)
             }
         }
+        .animation(M3.Mola.padrao, value: viewModel.isStreaming)
     }
 
-    private var resumoDaFonte: String {
-        let fonte = resolvedCaptureService.selectedSource.map(SourceNaming.title) ?? "Nenhuma fonte"
-        return "\(fonte) · \(resolvedCaptureService.resolution.rawValue) · \(resolvedCaptureService.frameRate) fps"
+    // Direita: um botão por painel, com contadores.
+    private var botoesDosPaineis: some View {
+        HStack(spacing: 8) {
+            M3BotaoDeIcone(
+                icone: "group",
+                variante: .padrao,
+                selecionado: painelAberto && aba.wrappedValue == .alunos,
+                contador: viewModel.clientManager.identifiedClients.count,
+                contadorNeutro: true,
+                ajuda: "Alunos"
+            ) { alternarPainel(.alunos) }
+
+            M3BotaoDeIcone(
+                icone: "chat",
+                variante: .padrao,
+                selecionado: chatVisivel,
+                contador: naoLidas,
+                ajuda: naoLidas > 0 ? "Chat — \(naoLidas) mensagem(ns) nova(s)" : "Chat"
+            ) { alternarPainel(.chat) }
+
+            M3BotaoDeIcone(
+                icone: "attach_file",
+                variante: .padrao,
+                selecionado: painelAberto && aba.wrappedValue == .arquivos,
+                contador: viewModel.sharedFiles.count,
+                contadorNeutro: true,
+                ajuda: "Arquivos da aula"
+            ) { alternarPainel(.arquivos) }
+        }
+        // ⌥⌘I, o atalho de "Mostrar Inspetor" dos apps da Apple, abre e fecha o painel.
+        .background(
+            Button("") { painelAberto.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .opacity(0)
+                .allowsHitTesting(false)
+        )
     }
+
+    // MARK: - Captura
 
     /// Serviço de captura concreto, para os componentes que precisam observá-lo.
     ///

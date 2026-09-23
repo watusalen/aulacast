@@ -13,6 +13,6 @@ public struct AulaCastApp: App {
                 .environmentObject(viewModel)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1000, height: 680)
+        .defaultSize(width: 1280, height: 800)
     }
 }

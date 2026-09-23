@@ -2,20 +2,18 @@ import SwiftUI
 import CoreGraphics
 import AppKit
 
-/// Componente para selecao de monitor ou janela para transmitir, com preview real (DIP).
-/// Grade responsiva de 3 colunas iguais (como no mockup) — os cards ocupam a largura
-/// disponível em vez de um tamanho fixo em pixels, e a seção inteira rola verticalmente
-/// junto com o resto do painel (sem rolagem horizontal escondida).
+/// Painel "Apresentar": o professor escolhe o monitor ou a janela que a turma vê.
+/// Como o "Apresentar agora" do Meet, fica num painel próprio, e o palco fica só para a
+/// imagem que está indo para a turma.
 public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     @ObservedObject var recorder: CaptureService
     @State private var thumbnails: [String: NSImage] = [:]
 
-    /// Colunas pela largura disponível (uma a cada ~200 pt, de 2 a 6). Com 3 colunas fixas
-    /// os cards ficavam enormes numa janela larga e a grade mal mostrava uma linha inteira.
-    @State private var quantasColunas = 3
+    /// Colunas pela largura disponível (uma a cada ~200 pt, de 2 a 6).
+    @State private var quantasColunas = 2
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 14), count: quantasColunas)
+        Array(repeating: GridItem(.flexible(), spacing: 12), count: quantasColunas)
     }
 
     public static func colunas(paraLargura largura: CGFloat) -> Int {
@@ -27,39 +25,34 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Fonte de captura")
-                    .font(.system(size: 13))
-                    .foregroundColor(AC.textSecondary)
+                Text("O que a turma vai ver")
+                    .m3(.bodyMedium)
+                    .foregroundColor(M3.onSurfaceVariant)
                 Spacer()
-                Button(action: {
+                M3BotaoDeIcone(icone: "refresh", variante: .padrao, tamanho: 36, ajuda: "Atualizar a lista") {
                     Task {
                         await recorder.fetchAvailableSources()
                         await captureThumbnails()
                     }
-                }) {
-                    Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.acIcon(size: 28, cornerRadius: 7, fontSize: 12))
-                .help("Atualizar fontes")
             }
+            .padding(.leading, 24)
+            .padding(.trailing, 12)
 
             if recorder.availableSources.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "desktopcomputer")
-                        .font(.system(size: 26))
-                        .foregroundColor(AC.textTertiary)
-                    Text("Nenhuma fonte encontrada.")
-                        .font(.system(size: 13))
-                        .foregroundColor(AC.textSecondary)
+                VStack(spacing: 10) {
+                    M3Icone(nome: "desktop_windows", tamanho: 40)
+                        .foregroundColor(M3.onSurfaceVariant)
+                    Text("Nenhuma tela encontrada")
+                        .m3(.titleMedium)
+                        .foregroundColor(M3.onSurface)
                 }
-                .frame(maxWidth: .infinity, minHeight: 96)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // A rolagem fica contida nesta área: o restante do painel esquerdo
-                // (cabeçalho, prévia, botões e endereço) permanece sempre visível.
                 ScrollView(.vertical) {
-                    LazyVGrid(columns: columns, spacing: 14) {
+                    LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(recorder.availableSources) { source in
                             SourceCard(
                                 source: source,
@@ -69,27 +62,20 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
                                 recorder.selectedSource = source
                             }
                         }
-                        // Um único card-convite ao final, como no mockup. Preencher a linha
-                        // inteira duplicava a mesma mensagem lado a lado.
-                        if showsPlaceholderCard {
-                            SourcePlaceholderCard()
-                        }
                     }
-                    .padding(.bottom, 4)
-                    // Espaço para a barra de rolagem: no macOS ela flutua por cima do
-                    // conteúdo e cobria a borda direita dos cards da última coluna.
-                    .padding(.trailing, 14)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    .animation(M3.Mola.padrao, value: recorder.selectedSource?.id)
                 }
                 .background(
                     GeometryReader { geo in
                         Color.clear
-                            .onAppear { quantasColunas = Self.colunas(paraLargura: geo.size.width - 14) }
+                            .onAppear { quantasColunas = Self.colunas(paraLargura: geo.size.width - 32) }
                             .onChange(of: geo.size.width) { largura in
-                                quantasColunas = Self.colunas(paraLargura: largura - 14)
+                                quantasColunas = Self.colunas(paraLargura: largura - 32)
                             }
                     }
                 )
-                .frame(maxWidth: .infinity, minHeight: 150, alignment: .top)
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
@@ -114,12 +100,6 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
             let intervalo: UInt64 = recorder.isRecording ? 15_000_000_000 : 5_000_000_000
             try? await Task.sleep(nanoseconds: intervalo)
         }
-    }
-
-    /// O card-convite só faz sentido quando ainda há espaço sobrando na última linha:
-    /// se a linha já está cheia, ele abriria uma linha nova só para si.
-    private var showsPlaceholderCard: Bool {
-        recorder.availableSources.count % quantasColunas != 0
     }
 
     private func captureThumbnails() async {
@@ -149,7 +129,7 @@ private struct Miniaturas: @unchecked Sendable {
 /// Extrai nome do app / subtítulo do rótulo combinado de DisplaySource ("[App] Título").
 enum SourceNaming {
     static func title(_ source: DisplaySource) -> String {
-        guard source.type == .window else { return "Monitor Completo" }
+        guard source.type == .window else { return "Tela inteira" }
         return source.name.components(separatedBy: "] ").first?.replacingOccurrences(of: "[", with: "") ?? source.name
     }
 
@@ -159,6 +139,9 @@ enum SourceNaming {
     }
 }
 
+/// Cartão de fonte em Material 3: miniatura com cantos grandes, título e legenda; o
+/// selecionado ganha contorno na cor primária e o selo de "check", como na escolha do
+/// que apresentar no Meet.
 struct SourceCard: View {
     let source: DisplaySource
     let thumbnail: NSImage?
@@ -167,12 +150,11 @@ struct SourceCard: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
                 // A miniatura entra como overlay de um retângulo com proporção fixa: assim é o
-                // retângulo que define o tamanho do card, e não a imagem (que, em .fill, reporta
-                // um tamanho ideal enorme e fazia o card estourar a largura da coluna).
-                Rectangle()
-                    .fill(AC.windowBG)
+                // retângulo que define o tamanho do card, e não a imagem.
+                RoundedRectangle(cornerRadius: M3.Canto.grande, style: .continuous)
+                    .fill(M3.surfaceContainerHighest)
                     .aspectRatio(16.0 / 10.0, contentMode: .fit)
                     .overlay(
                         Group {
@@ -181,92 +163,52 @@ struct SourceCard: View {
                                     .resizable()
                                     .scaledToFill()
                             } else {
-                                Image(systemName: source.type == .display ? "desktopcomputer" : "macwindow")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(AC.textTertiary)
+                                M3Icone(nome: source.type == .display ? "desktop_windows" : "web_asset", tamanho: 28)
+                                    .foregroundColor(M3.onSurfaceVariant)
                             }
                         }
                     )
-                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: M3.Canto.grande, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: M3.Canto.grande, style: .continuous)
+                            .stroke(isSelected ? M3.primary : M3.outlineVariant, lineWidth: isSelected ? 3 : 1)
+                    )
+                    .overlay(alignment: .topTrailing) {
+                        if isSelected {
+                            M3Icone(nome: "check_circle", tamanho: 24, preenchido: true)
+                                .foregroundColor(M3.primary)
+                                .background(Circle().fill(M3.surface).padding(3))
+                                .padding(8)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(SourceNaming.title(source))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(isSelected ? AC.accent : AC.textPrimary)
+                        .m3(.labelLarge)
+                        .foregroundColor(isSelected ? M3.primary : M3.onSurface)
                         .lineLimit(1)
-                        .truncationMode(.tail)
                     Text(SourceNaming.subtitle(source))
-                        .font(.system(size: 11))
-                        .foregroundColor(AC.textSecondary)
+                        .m3(.bodySmall)
+                        .foregroundColor(M3.onSurfaceVariant)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
+                .padding(.horizontal, 4)
             }
             .frame(maxWidth: .infinity)
-            .background(isSelected ? AC.accent.opacity(0.08) : AC.cardBG)
-            .cornerRadius(10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? AC.accent : AC.border, lineWidth: isSelected ? 1.5 : 1)
-            )
+            .contentShape(Rectangle())
         }
-        .buttonStyle(SourceCardButtonStyle())
+        .buttonStyle(CardDeFonteEstilo())
+        .help(source.name)
     }
 }
 
-/// Feedback de toque dos cards de fonte (o estilo .plain não dá nenhum retorno visual).
-private struct SourceCardButtonStyle: ButtonStyle {
+/// Retorno do clique nos cartões: encolhe levemente, com a mola rápida do M3.
+private struct CardDeFonteEstilo: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.black.opacity(configuration.isPressed ? 0.12 : 0))
-            )
-            .scaleEffect(configuration.isPressed ? 0.975 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
-/// Card tracejado que fecha a grade, convidando a abrir mais um app.
-/// Espelha a estrutura do SourceCard (miniatura + bloco de legenda) para ter exatamente
-/// a mesma altura dos cards reais em qualquer largura de janela.
-struct SourcePlaceholderCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Rectangle()
-                .fill(Color.clear)
-                .aspectRatio(16.0 / 10.0, contentMode: .fit)
-
-            // Espaçador com as mesmas fontes da legenda dos cards reais: garante altura
-            // idêntica sem depender de números fixos que quebrariam ao mudar a tipografia.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: " ").font(.system(size: 13, weight: .semibold))
-                Text(verbatim: " ").font(.system(size: 11))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .hidden()
-        }
-        .frame(maxWidth: .infinity)
-        // O texto fica sobre o card inteiro (miniatura + legenda), e não só sobre a
-        // área da miniatura, para ficar centralizado no meio real do card.
-        .overlay(
-            Text("Abra um app para vê-lo aqui")
-                .font(.system(size: 12))
-                .foregroundColor(AC.textTertiary)
-                .multilineTextAlignment(.center)
-                .padding(10)
-        )
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(AC.windowBG)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(AC.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-        )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(M3.Mola.rapida, value: configuration.isPressed)
     }
 }

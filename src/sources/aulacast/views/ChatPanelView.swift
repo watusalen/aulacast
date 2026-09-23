@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Aba de conversa do painel lateral do professor (SRP).
+/// Painel de chat do professor (SRP), no desenho do chat do Meet: o controle de quem pode
+/// escrever no topo, um aviso de privacidade, mensagens sem balões (nome, hora e texto) e
+/// o campo de mensagem em pílula embaixo.
 public struct ChatPanelView: View {
     @ObservedObject var viewModel: MainViewModel
     @ObservedObject private var chatManager: ChatManagerService
@@ -13,140 +15,131 @@ public struct ChatPanelView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Quem vê o quê, dito uma vez: o professor fala com a turma inteira, e cada aluno
-            // fala só com o professor. Sem isso, dá para achar que a resposta vai só para
-            // quem perguntou.
-            HStack(alignment: .top, spacing: 7) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 11))
+            // No Meet, "Permitir que todos enviem mensagens" fica no topo do chat — é onde
+            // o professor procura quando quer silenciar a conversa. Antes ficava escondido
+            // no popover de qualidade.
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Alunos podem escrever")
+                        .m3(.titleSmall)
+                        .foregroundColor(M3.onSurface)
+                    Text(viewModel.isChatEnabled ? "O campo de mensagem aparece para a turma" : "O campo fica inativo na tela dos alunos")
+                        .m3(.bodySmall)
+                        .foregroundColor(M3.onSurfaceVariant)
+                }
+                Spacer()
+                Toggle("", isOn: $viewModel.isChatEnabled)
+                    .toggleStyle(.switch)
+                    .tint(M3.primary)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 8)
+
+            // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.
+            HStack(alignment: .top, spacing: 10) {
+                M3Icone(nome: "info", tamanho: 18)
                 Text("Suas mensagens vão para toda a turma. As dos alunos chegam só para você.")
-                    .font(.system(size: 12))
+                    .m3(.bodySmall)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .foregroundColor(AC.textSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            Divider()
+            .foregroundColor(M3.onSurfaceVariant)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .m3Superficie(M3.surfaceContainer, canto: M3.Canto.medio)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
 
             if chatManager.messages.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 22))
-                        .foregroundColor(AC.textTertiary)
+                VStack(spacing: 10) {
+                    M3Icone(nome: "forum", tamanho: 40)
+                        .foregroundColor(M3.onSurfaceVariant)
                     Text("Nenhuma mensagem ainda")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(AC.textPrimary)
+                        .m3(.titleMedium)
+                        .foregroundColor(M3.onSurface)
                     Text("As perguntas dos alunos aparecem aqui.")
-                        .font(.system(size: 12))
-                        .foregroundColor(AC.textSecondary)
+                        .m3(.bodyMedium)
+                        .foregroundColor(M3.onSurfaceVariant)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(chatManager.messages) { msg in
-                            HStack {
-                                if msg.isProf { Spacer(minLength: 32) }
-
-                                VStack(alignment: msg.isProf ? .trailing : .leading, spacing: 4) {
-                                    if !msg.isProf {
-                                        Text(msg.sender)
-                                            .font(.system(size: 11))
-                                            .foregroundColor(AC.textSecondary)
-                                    }
-                                    Text(msg.text)
-                                        .font(.system(size: 14))
-                                        .foregroundColor(msg.isProf ? .white : AC.textPrimary)
-                                        .padding(.horizontal, 13)
-                                        .padding(.vertical, 9)
-                                        .background(msg.isProf ? AC.accent : AC.chatBubbleOther)
-                                        .clipShape(bubbleShape(isProf: msg.isProf))
-                                }
-
-                                if !msg.isProf { Spacer(minLength: 32) }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            ForEach(chatManager.messages) { msg in
+                                mensagem(msg).id(msg.id)
                             }
-                            .id(msg.id)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                    }
+                    .onChange(of: chatManager.messages.count) { _ in
+                        if let ultima = chatManager.messages.last {
+                            withAnimation(M3.Mola.padrao) { proxy.scrollTo(ultima.id, anchor: .bottom) }
                         }
                     }
-                    .padding(14)
-                }
-                .onChange(of: chatManager.messages.count) { _ in
-                    if let lastMsg = chatManager.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                    // Ao abrir o painel, já na mensagem mais recente.
+                    .onAppear {
+                        if let ultima = chatManager.messages.last {
+                            proxy.scrollTo(ultima.id, anchor: .bottom)
                         }
                     }
                 }
-                // Ao voltar para a aba, abre já na mensagem mais recente.
-                .onAppear {
-                    if let lastMsg = chatManager.messages.last {
-                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
-                    }
-                }
-            }
-            .background(AC.panelBG)
             }
 
-            Divider()
-
-            HStack(spacing: 10) {
-                TextField("Mensagem para toda a turma…", text: $messageText)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(AC.inputBG))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(AC.border, lineWidth: 1))
-                    .onSubmit {
-                        sendMessage()
-                    }
-
-                Button("Enviar") {
-                    sendMessage()
-                }
-                .buttonStyle(.acFilled(AC.accent, height: 34, cornerRadius: 8, fontSize: 14, horizontalPadding: 16))
-            }
-            .padding(14)
+            campoDeMensagem
         }
-        .background(AC.panelBG)
     }
 
-    private func bubbleShape(isProf: Bool) -> some Shape {
-        ChatBubbleShape(sharpCorner: isProf ? .bottomTrailing : .bottomLeading)
+    private func mensagem(_ msg: ChatMessage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(msg.isProf ? "Você" : msg.sender)
+                    .m3(.titleSmall)
+                    .foregroundColor(msg.isProf ? M3.primary : M3.onSurface)
+                Text(msg.timestamp, style: .time)
+                    .m3(.labelMedium)
+                    .foregroundColor(M3.onSurfaceVariant)
+            }
+            Text(msg.text)
+                .m3(.bodyMedium)
+                .foregroundColor(M3.onSurface)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var campoDeMensagem: some View {
+        HStack(spacing: 8) {
+            TextField("Mensagem para toda a turma", text: $messageText)
+                .textFieldStyle(.plain)
+                .m3(.bodyLarge)
+                .foregroundColor(M3.onSurface)
+                .padding(.horizontal, 20)
+                .frame(height: 48)
+                .onSubmit { sendMessage() }
+            M3BotaoDeIcone(
+                icone: "chevron_right",
+                variante: temTexto ? .preenchido : .padrao,
+                tamanho: 40,
+                ajuda: "Enviar"
+            ) { sendMessage() }
+            .disabled(!temTexto)
+            .padding(.trailing, 4)
+        }
+        .background(Capsule(style: .continuous).fill(M3.surfaceContainerHigh))
+        .padding(16)
+        .animation(M3.Mola.efeito, value: temTexto)
+    }
+
+    private var temTexto: Bool {
+        !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func sendMessage() {
-        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard temTexto else { return }
         viewModel.sendProfMessage(text: messageText)
         messageText = ""
-    }
-}
-
-/// Balão de chat com um canto "pontudo" (estilo iMessage), compatível com macOS 13.
-private struct ChatBubbleShape: Shape {
-    enum Corner { case bottomLeading, bottomTrailing }
-
-    let sharpCorner: Corner
-    let radius: CGFloat = 16
-    let sharpRadius: CGFloat = 5
-
-    func path(in rect: CGRect) -> Path {
-        let bottomLeading = sharpCorner == .bottomLeading ? sharpRadius : radius
-        let bottomTrailing = sharpCorner == .bottomTrailing ? sharpRadius : radius
-
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-        path.addArc(center: CGPoint(x: rect.maxX - radius, y: rect.minY + radius), radius: radius, startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - bottomTrailing))
-        path.addArc(center: CGPoint(x: rect.maxX - bottomTrailing, y: rect.maxY - bottomTrailing), radius: bottomTrailing, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + bottomLeading, y: rect.maxY))
-        path.addArc(center: CGPoint(x: rect.minX + bottomLeading, y: rect.maxY - bottomLeading), radius: bottomLeading, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-        path.addArc(center: CGPoint(x: rect.minX + radius, y: rect.minY + radius), radius: radius, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
-        path.closeSubpath()
-        return path
     }
 }
