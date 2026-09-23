@@ -42,6 +42,12 @@ public final class MainViewModel: ObservableObject {
     /// "enviando", e sim quem está baixando e quem já baixou.
     @Published public private(set) var fileDownloadStats: [String: FileDownloadStats] = [:]
 
+    /// Quantas mensagens de alunos chegaram desde que o app abriu.
+    ///
+    /// Serve para o contador de não lidas do painel: contar pelo tamanho do histórico não
+    /// funciona, porque ele guarda só as últimas 500 e para de crescer.
+    @Published public private(set) var studentMessagesReceived: Int = 0
+
     /// Recado sobre o último compartilhamento (uma pasta escolhida, um arquivo ilegível).
     @Published public var sharedFilesNotice: String?
 
@@ -469,6 +475,7 @@ extension MainViewModel: ChatObserverProtocol {
     public nonisolated func didReceiveChatMessage(_ message: ChatMessage) {
         Task { @MainActor in
             self.chatManager.addMessage(message)
+            if !message.isProf { self.studentMessagesReceived += 1 }
         }
     }
 }

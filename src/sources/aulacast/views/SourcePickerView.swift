@@ -10,7 +10,17 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     @ObservedObject var recorder: CaptureService
     @State private var thumbnails: [String: NSImage] = [:]
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 3)
+    /// Colunas pela largura disponível (uma a cada ~200 pt, de 2 a 6). Com 3 colunas fixas
+    /// os cards ficavam enormes numa janela larga e a grade mal mostrava uma linha inteira.
+    @State private var quantasColunas = 3
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 14), count: quantasColunas)
+    }
+
+    public static func colunas(paraLargura largura: CGFloat) -> Int {
+        max(2, min(6, Int((largura + 14) / 200)))
+    }
 
     public init(recorder: CaptureService) {
         self.recorder = recorder
@@ -70,6 +80,15 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
                     // conteúdo e cobria a borda direita dos cards da última coluna.
                     .padding(.trailing, 14)
                 }
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear { quantasColunas = Self.colunas(paraLargura: geo.size.width - 14) }
+                            .onChange(of: geo.size.width) { largura in
+                                quantasColunas = Self.colunas(paraLargura: largura - 14)
+                            }
+                    }
+                )
                 .frame(maxWidth: .infinity, minHeight: 150, alignment: .top)
             }
         }
@@ -100,7 +119,7 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     /// O card-convite só faz sentido quando ainda há espaço sobrando na última linha:
     /// se a linha já está cheia, ele abriria uma linha nova só para si.
     private var showsPlaceholderCard: Bool {
-        recorder.availableSources.count % 3 != 0
+        recorder.availableSources.count % quantasColunas != 0
     }
 
     private func captureThumbnails() async {

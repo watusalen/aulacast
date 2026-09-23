@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Painel de Chat local no app do Professor (SRP).
+/// Aba de conversa do painel lateral do professor (SRP).
 public struct ChatPanelView: View {
     @ObservedObject var viewModel: MainViewModel
     @ObservedObject private var chatManager: ChatManagerService
@@ -13,12 +13,36 @@ public struct ChatPanelView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Chat da Sala")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(AC.textPrimary)
-                .padding(14)
+            // Quem vê o quê, dito uma vez: o professor fala com a turma inteira, e cada aluno
+            // fala só com o professor. Sem isso, dá para achar que a resposta vai só para
+            // quem perguntou.
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 11))
+                Text("Suas mensagens vão para toda a turma. As dos alunos chegam só para você.")
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundColor(AC.textSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
 
             Divider()
+
+            if chatManager.messages.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 22))
+                        .foregroundColor(AC.textTertiary)
+                    Text("Nenhuma mensagem ainda")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AC.textPrimary)
+                    Text("As perguntas dos alunos aparecem aqui.")
+                        .font(.system(size: 12))
+                        .foregroundColor(AC.textSecondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -56,13 +80,20 @@ public struct ChatPanelView: View {
                         }
                     }
                 }
+                // Ao voltar para a aba, abre já na mensagem mais recente.
+                .onAppear {
+                    if let lastMsg = chatManager.messages.last {
+                        proxy.scrollTo(lastMsg.id, anchor: .bottom)
+                    }
+                }
             }
             .background(AC.panelBG)
+            }
 
             Divider()
 
             HStack(spacing: 10) {
-                TextField("Mensagem para a turma…", text: $messageText)
+                TextField("Mensagem para toda a turma…", text: $messageText)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12)
                     .frame(height: 34)

@@ -18,9 +18,11 @@ public struct SharedFilesPanelView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Arquivos da Aula (\(viewModel.sharedFiles.count))")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AC.textPrimary)
+                Text(viewModel.sharedFiles.isEmpty ? "Nenhum arquivo compartilhado"
+                     : viewModel.sharedFiles.count == 1 ? "1 arquivo disponível para a turma"
+                     : "\(viewModel.sharedFiles.count) arquivos disponíveis para a turma")
+                    .font(.system(size: 12))
+                    .foregroundColor(AC.textSecondary)
                 Spacer()
                 Button(action: escolherArquivos) {
                     Label("Compartilhar", systemImage: "square.and.arrow.up")
@@ -28,7 +30,8 @@ public struct SharedFilesPanelView: View {
                 .buttonStyle(.acOutline(height: 28, cornerRadius: 7, fontSize: 12, horizontalPadding: 10))
                 .help("Escolher arquivos para a turma baixar")
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
 
             Divider()
 
@@ -61,34 +64,36 @@ public struct SharedFilesPanelView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(viewModel.sharedFiles) { arquivo in
-                            HStack(spacing: 10) {
+                            // Uma informação por linha: o painel lateral tem 360 pt, e com tudo
+                            // lado a lado o nome, a disponibilidade e os downloads saíam cortados.
+                            HStack(alignment: .top, spacing: 10) {
                                 Image(nsImage: NSWorkspace.shared.icon(forFile: arquivo.url.path))
                                     .resizable()
-                                    .frame(width: 22, height: 22)
-                                VStack(alignment: .leading, spacing: 2) {
+                                    .frame(width: 26, height: 26)
+                                VStack(alignment: .leading, spacing: 3) {
                                     Text(arquivo.name)
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 13, weight: .medium))
                                         .foregroundColor(AC.textPrimary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
+                                        .help(arquivo.name)
                                     HStack(spacing: 4) {
                                         Text(ByteCountFormatter.string(fromByteCount: arquivo.size, countStyle: .file))
-                                            .foregroundColor(AC.textSecondary)
                                         Text("·").foregroundColor(AC.textTertiary)
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(AC.liveGreen)
                                         Text(textoDeDisponivel)
-                                            .foregroundColor(AC.textSecondary)
                                     }
                                     .font(.system(size: 12))
+                                    .foregroundColor(AC.textSecondary)
                                     .lineLimit(1)
+                                    situacaoDosDownloads(viewModel.fileDownloadStats[arquivo.id])
                                 }
-                                Spacer()
-                                situacaoDosDownloads(viewModel.fileDownloadStats[arquivo.id])
+                                Spacer(minLength: 4)
                                 Button(action: { viewModel.removeSharedFile(id: arquivo.id) }) {
                                     Image(systemName: "xmark")
                                 }
-                                .buttonStyle(.acIcon(size: 26, cornerRadius: 6, fontSize: 11))
+                                .buttonStyle(.acIcon(size: 24, cornerRadius: 6, fontSize: 10))
                                 .help("Parar de compartilhar")
                             }
                             .padding(.horizontal, 14)
@@ -140,24 +145,24 @@ public struct SharedFilesPanelView: View {
     @ViewBuilder
     private func situacaoDosDownloads(_ estatisticas: FileDownloadStats?) -> some View {
         if let estatisticas, estatisticas.emAndamento > 0 || estatisticas.concluidos > 0 {
-            VStack(alignment: .trailing, spacing: 2) {
+            HStack(spacing: 10) {
+                if estatisticas.concluidos > 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text(estatisticas.concluidos == 1 ? "baixado por 1" : "baixado por \(estatisticas.concluidos)")
+                    }
+                    .foregroundColor(AC.textSecondary)
+                }
                 if estatisticas.emAndamento > 0 {
-                    HStack(spacing: 5) {
-                        ProgressView().controlSize(.small).scaleEffect(0.7)
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small).scaleEffect(0.55).frame(width: 12, height: 12)
                         Text("baixando (\(estatisticas.emAndamento))")
                     }
                     .foregroundColor(AC.accent)
                 }
-                if estatisticas.concluidos > 0 {
-                    Label(
-                        estatisticas.concluidos == 1 ? "baixado por 1 aluno" : "baixado por \(estatisticas.concluidos) alunos",
-                        systemImage: "arrow.down.circle.fill"
-                    )
-                    .foregroundColor(AC.textSecondary)
-                }
             }
-            .font(.system(size: 11))
-            .frame(height: 30)
+            .font(.system(size: 12))
+            .lineLimit(1)
         }
     }
 

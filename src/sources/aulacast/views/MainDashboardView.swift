@@ -12,6 +12,13 @@ public struct MainDashboardView: View {
     @EnvironmentObject private var viewModel: MainViewModel
     @State private var showQualitySettings = false
 
+    /// Painel lateral (alunos, chat, arquivos) aberto ou fechado, lembrado entre aberturas.
+    @AppStorage("aulacast.painelAberto") private var painelAberto = true
+    @AppStorage("aulacast.abaDoPainel") private var abaSalva = AbaDoPainel.alunos.rawValue
+
+    /// Quantas mensagens de alunos o professor já teve à vista (o resto é "não lida").
+    @State private var mensagensVistas = 0
+    @State private var enderecoCopiado = false
 
     /// Prévia da fonte escolhida enquanto a transmissão ainda não começou.
     @State private var previewDaFonteSelecionada: NSImage?
@@ -24,75 +31,189 @@ public struct MainDashboardView: View {
         .task(id: chavePrevia) {
             await manterPreviaDaFonteAtualizada()
         }
+        .onChange(of: viewModel.studentMessagesReceived) { total in
+            if chatVisivel { mensagensVistas = total }
+        }
+        .onChange(of: chatVisivel) { visivel in
+            if visivel { mensagensVistas = viewModel.studentMessagesReceived }
+        }
     }
 
+    private var aba: Binding<AbaDoPainel> {
+        Binding(
+            get: { AbaDoPainel(rawValue: abaSalva) ?? .alunos },
+            set: { abaSalva = $0.rawValue }
+        )
+    }
+
+    private var chatVisivel: Bool { painelAberto && aba.wrappedValue == .chat }
+
+    private var naoLidas: Int { max(0, viewModel.studentMessagesReceived - mensagensVistas) }
+
+    /// Barra superior (estado da aula, endereço, botão do painel) + área principal
+    /// (prévia, controles, fontes) + painel lateral que abre e fecha.
     private var dashboardContent: some View {
-        HSplitView {
-            // Painel Esquerdo: Transmissao e Seletor.
-            // Só a grade de fontes rola; o resto fica fixo e sempre visível.
-            VStack(alignment: .leading, spacing: 22) {
-                header
-                livePreviewCard
-                if let error = viewModel.streamErrorMessage {
-                    streamErrorBanner(error)
+        VStack(spacing: 0) {
+            barraSuperior
+            Divider()
+
+            HStack(spacing: 0) {
+                areaPrincipal
+
+                if painelAberto {
+                    Divider()
+                    ClassInspectorView(
+                        viewModel: viewModel,
+                        clientManager: viewModel.clientManager,
+                        aba: aba,
+                        naoLidas: naoLidas
+                    )
+                    .frame(width: 360)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
-                actionButtonRow
-                addressCard
-                SourcePickerView(recorder: resolvedCaptureService)
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 26)
-            .frame(minWidth: 640, maxHeight: .infinity, alignment: .top)
-            .background(AC.windowBG)
-
-            // Painel Direito: Alunos e Chat (SRP e ISP)
-            VSplitView {
-                StudentListView(clientManager: viewModel.clientManager, serverURLString: viewModel.serverURLString)
-                    .frame(minHeight: 180)
-
-                SharedFilesPanelView(viewModel: viewModel)
-                    .frame(minHeight: 150)
-
-                ChatPanelView(viewModel: viewModel)
-                    .frame(minHeight: 220)
-            }
-            .frame(minWidth: 340)
-            .background(AC.panelBG)
         }
-        .frame(minWidth: 1020, minHeight: 760)
+        // A barra ocupa a faixa dos botões de fechar/minimizar, como a barra de
+        // ferramentas dos apps do Mac, em vez de deixar uma tira vazia acima dela.
+        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: painelAberto ? 1000 : 700, minHeight: 640)
+        .background(AC.windowBG)
+        .animation(.easeInOut(duration: 0.2), value: painelAberto)
     }
 
-    /// Sem o nome do aplicativo: quem abriu já sabe onde está, e o ícone dá a identidade.
-    /// O espaço fica para o estado da transmissão, que é o que muda e o que importa saber.
-    private var header: some View {
+    private var areaPrincipal: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let error = viewModel.streamErrorMessage {
+                streamErrorBanner(error)
+            }
+            livePreviewCard
+            barraDeControles
+            SourcePickerView(recorder: resolvedCaptureService)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(AC.windowBG)
+    }
+
+    // MARK: - Barra superior
+
+    /// Segue a barra de ferramentas do Mac: identidade e estado à esquerda, o que precisa
+    /// ficar sempre à mão à direita, e o botão do painel ancorado na ponta direita, para
+    /// não virar alvo que muda de lugar (Apple HIG).
+    private var barraSuperior: some View {
         HStack(spacing: 12) {
-            ACBrandMark(tamanho: 34)
-            statusBadge
+            ACBrandMark(tamanho: 22)
+            statusDaAula
+            Spacer(minLength: 16)
+            enderecoDaTurma
+            botaoDoPainel
         }
+        // Espaço para os botões de fechar/minimizar/ampliar da janela.
+        .padding(.leading, 82)
+        .padding(.trailing, 12)
+        .frame(height: 34)
+        .padding(.top, 2)
+        .background(AC.panelBG)
     }
 
-    private var statusBadge: some View {
-        HStack(spacing: 9) {
-            if viewModel.isStreaming {
-                ACPulsingDot(color: AC.liveGreen, size: 10)
-            } else {
-                Circle()
-                    .fill(AC.offlineRed)
-                    .frame(width: 10, height: 10)
-            }
-            Text(viewModel.isStreaming ? "TRANSMITINDO AO VIVO" : "OFFLINE")
-                .font(.system(size: 14, weight: .bold))
-                .tracking(0.7)
-                .foregroundColor(viewModel.isStreaming ? AC.liveGreen : AC.offlineRed)
+    private enum EstadoDaAula { case aoVivo, pausada, interrompida, foraDoAr }
+
+    private var estadoDaAula: EstadoDaAula {
+        if viewModel.isStreaming { return viewModel.isPaused ? .pausada : .aoVivo }
+        return viewModel.isSessionOpen ? .interrompida : .foraDoAr
+    }
+
+    private var statusDaAula: some View {
+        let cor: Color
+        let texto: String
+        switch estadoDaAula {
+        case .aoVivo: cor = AC.liveGreen; texto = "Ao vivo"
+        case .pausada: cor = AC.pausedAmber; texto = "Pausada"
+        case .interrompida: cor = AC.stopRed; texto = "Transmissão interrompida"
+        case .foraDoAr: cor = AC.textTertiary; texto = "Fora do ar"
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            Capsule().fill((viewModel.isStreaming ? AC.liveGreen : AC.offlineRed).opacity(0.14))
-        )
-        .overlay(
-            Capsule().stroke((viewModel.isStreaming ? AC.liveGreen : AC.offlineRed).opacity(0.35), lineWidth: 1)
-        )
+        return HStack(spacing: 7) {
+            if estadoDaAula == .aoVivo {
+                ACPulsingDot(color: cor, size: 8)
+            } else {
+                Circle().fill(cor).frame(width: 8, height: 8)
+            }
+            Text(texto)
+                .font(.system(size: 12, weight: .semibold))
+            if let inicio = viewModel.streamStartedAt, viewModel.isStreaming {
+                Text("·").foregroundColor(AC.textTertiary)
+                Text(inicio, style: .timer)
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
+                    .foregroundColor(AC.textSecondary)
+            }
+        }
+        .foregroundColor(estadoDaAula == .foraDoAr ? AC.textSecondary : cor)
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background(Capsule().fill(cor.opacity(0.13)))
+        .help(estadoDaAula == .aoVivo ? "A turma está vendo a sua tela. O tempo é desde o início da transmissão." : "")
+    }
+
+    /// Endereço que a turma digita. Na barra superior, e não num cartão grande: fica sempre
+    /// à vista (é o que o professor mais repete no começo da aula) sem tirar espaço da prévia.
+    private var enderecoDaTurma: some View {
+        HStack(spacing: 8) {
+            Text("Turma:")
+                .font(.system(size: 12))
+                .foregroundColor(AC.textSecondary)
+            Text(viewModel.displayAddress)
+                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .foregroundColor(AC.textPrimary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+            Button(action: copiarEndereco) {
+                Image(systemName: enderecoCopiado ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(enderecoCopiado ? AC.liveGreen : AC.textSecondary)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(enderecoCopiado ? "Link copiado" : "Copiar o link (com http://, para colar num grupo ou documento)")
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: 26)
+        .background(RoundedRectangle(cornerRadius: 7).fill(AC.inputBG))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(AC.border, lineWidth: 1))
+    }
+
+    private func copiarEndereco() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(viewModel.serverURLString, forType: .string)
+        enderecoCopiado = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { enderecoCopiado = false }
+    }
+
+    /// Abre e fecha o painel lateral. Com ele fechado, o contador de mensagens novas fica
+    /// no próprio botão — como na página do aluno.
+    private var botaoDoPainel: some View {
+        Button(action: { painelAberto.toggle() }) {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: 14))
+                .foregroundColor(painelAberto ? AC.accent : AC.textSecondary)
+                .frame(width: 30, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(painelAberto ? AC.accent.opacity(0.12) : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if !painelAberto && naoLidas > 0 {
+                ACContador(valor: naoLidas).offset(x: 6, y: -5)
+            }
+        }
+        .keyboardShortcut("i", modifiers: [.command, .option])
+        .help(painelAberto ? "Esconder alunos, chat e arquivos (⌥⌘I)" : "Mostrar alunos, chat e arquivos (⌥⌘I)")
     }
 
     /// Enquanto transmite, mostra o último quadro realmente enviado aos alunos.
@@ -124,54 +245,24 @@ public struct MainDashboardView: View {
                 }
             }
 
-            if viewModel.isStreaming {
-                VStack {
-                    HStack {
-                        HStack(spacing: 7) {
-                            if viewModel.isPaused {
-                                Circle()
-                                    .fill(AC.textTertiary)
-                                    .frame(width: 8, height: 8)
-                            } else {
-                                ACPulsingDot(color: AC.stopRed, size: 8)
-                            }
-                            Text(viewModel.isPaused ? "PAUSADO" : "AO VIVO")
-                                .font(.system(size: 11, weight: .bold))
-                                .tracking(1)
-                                .foregroundColor(.white)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(Color.black.opacity(0.6)))
-                        Spacer()
+            // Pausada: a turma vê a imagem congelada, e a prévia mostra isso.
+            if viewModel.isStreaming && viewModel.isPaused {
+                ZStack {
+                    Color.black.opacity(0.5)
+                    VStack(spacing: 8) {
+                        Image(systemName: "pause.fill")
+                            .font(.system(size: 24))
+                        Text("Pausada: a turma vê a imagem congelada")
+                            .font(.system(size: 13, weight: .medium))
                     }
-                    Spacer()
-                    HStack {
-                        Text(resolvedCaptureService.selectedSource.map(SourceNaming.title) ?? "Fonte")
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.black.opacity(0.6)))
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Text("\(resolvedCaptureService.resolution.rawValue) · \(resolvedCaptureService.frameRate) fps ·")
-                            if let startedAt = viewModel.streamStartedAt {
-                                Text(startedAt, style: .timer)
-                            }
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.black.opacity(0.6)))
-                    }
+                    .foregroundColor(.white)
                 }
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(Color(white: 0.85))
-                .padding(12)
             }
         }
         // Teto de altura para a prévia não engolir a grade de fontes em janelas menores;
         // sem layoutPriority, a prévia cede espaço primeiro quando a janela encolhe.
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .frame(maxWidth: .infinity, maxHeight: 430)
+        .frame(maxWidth: .infinity, maxHeight: 470)
         .clipShape(RoundedRectangle(cornerRadius: 11))
         .overlay(RoundedRectangle(cornerRadius: 11).stroke(AC.border, lineWidth: 1))
     }
@@ -221,8 +312,11 @@ public struct MainDashboardView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(AC.stopRed.opacity(0.35), lineWidth: 1))
     }
 
-    private var actionButtonRow: some View {
-        HStack(spacing: 12) {
+    /// Controles logo abaixo da prévia, como a barra de controles dos apps de reunião:
+    /// a ação principal (iniciar/parar) à esquerda e larga o bastante para não errar, a
+    /// pausa ao lado, e à direita o que está indo para a turma e o ajuste de qualidade.
+    private var barraDeControles: some View {
+        HStack(spacing: 10) {
             Button(action: {
                 if viewModel.isStreaming {
                     viewModel.stopStream()
@@ -230,21 +324,19 @@ public struct MainDashboardView: View {
                     viewModel.startStream()
                 }
             }) {
-                HStack(spacing: 11) {
-                    Spacer()
+                HStack(spacing: 9) {
                     Image(systemName: viewModel.isStreaming ? "stop.fill" : "play.fill")
-                        .font(.system(size: 14))
-                    Text(viewModel.isStreaming ? "Parar Transmissão" : "Iniciar Transmissão")
-                    Spacer()
+                        .font(.system(size: 13))
+                    Text(viewModel.isStreaming ? "Parar transmissão" : "Iniciar transmissão")
                 }
+                .frame(minWidth: 210)
             }
             .buttonStyle(.acFilled(
                 viewModel.isStreaming ? AC.stopRed : AC.accent,
-                height: 50,
-                expands: true,
-                cornerRadius: 10,
-                fontSize: 18,
-                horizontalPadding: 0
+                height: 40,
+                cornerRadius: 9,
+                fontSize: 15,
+                horizontalPadding: 18
             ))
             .disabled(viewModel.isStarting)
             .opacity(viewModel.isStarting ? 0.6 : 1)
@@ -255,24 +347,34 @@ public struct MainDashboardView: View {
                 Button(action: { viewModel.stopStream() }) {
                     Image(systemName: "stop.fill")
                 }
-                .buttonStyle(.acIcon(size: 50, cornerRadius: 10, fontSize: 17))
+                .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
                 .help("Encerrar a sessão e desconectar a turma")
             }
 
             Button(action: { viewModel.togglePause() }) {
                 Image(systemName: viewModel.isPaused ? "play.fill" : "pause.fill")
             }
-            .buttonStyle(.acIcon(size: 50, cornerRadius: 10, fontSize: 17))
+            .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
             .disabled(!viewModel.isStreaming)
             .opacity(viewModel.isStreaming ? 1 : 0.4)
-            .help(viewModel.isPaused ? "Retomar transmissão" : "Pausar transmissão")
+            .help(viewModel.isPaused ? "Retomar transmissão" : "Pausar transmissão (a turma vê a imagem congelada)")
+
+            Spacer(minLength: 12)
+
+            // O que está indo para a turma, em texto discreto — antes ficava por cima da
+            // própria prévia, tampando a imagem.
+            Text(resumoDaFonte)
+                .font(.system(size: 12))
+                .foregroundColor(AC.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
             Button(action: { showQualitySettings.toggle() }) {
-                Image(systemName: "gearshape")
+                Image(systemName: "slider.horizontal.3")
             }
-            .buttonStyle(.acIcon(size: 50, cornerRadius: 10, fontSize: 17))
-            .help("Configurações da transmissão")
-            // Popover ancorado na engrenagem: fecha clicando fora ou com Esc. Como cada
+            .buttonStyle(.acIcon(size: 40, cornerRadius: 9, fontSize: 14))
+            .help("Qualidade da transmissão e chat")
+            // Popover ancorado no botão: fecha clicando fora ou com Esc. Como cada
             // ajuste já vale na hora, não há nada a confirmar com um botão.
             .popover(isPresented: $showQualitySettings, arrowEdge: .bottom) {
                 QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
@@ -280,34 +382,9 @@ public struct MainDashboardView: View {
         }
     }
 
-    private var addressCard: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Endereço dos alunos na rede local")
-                    .font(.system(size: 12))
-                    .foregroundColor(AC.textSecondary)
-                Text(viewModel.displayAddress)
-                    .font(.system(size: 23, weight: .semibold, design: .monospaced))
-                    .foregroundColor(AC.textPrimary)
-                    .textSelection(.enabled)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(viewModel.serverURLString, forType: .string)
-            }) {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.acIcon(size: 34, cornerRadius: 8))
-            .help("Copiar link")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(AC.cardBG))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(AC.border, lineWidth: 1))
+    private var resumoDaFonte: String {
+        let fonte = resolvedCaptureService.selectedSource.map(SourceNaming.title) ?? "Nenhuma fonte"
+        return "\(fonte) · \(resolvedCaptureService.resolution.rawValue) · \(resolvedCaptureService.frameRate) fps"
     }
 
     /// Serviço de captura concreto, para os componentes que precisam observá-lo.

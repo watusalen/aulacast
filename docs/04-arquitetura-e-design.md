@@ -254,6 +254,14 @@ Fontes: exemplo "Capturing screen content in macOS" (Apple); WWDC22 10156 e 1015
 do µStreamer (pikvm/ustreamer); bug 36536 do WebKit; bug 987135 do Firefox; "We Mass-Deployed
 15-Year-Old Screen Sharing Technology" (blog da Helix.ml).
 
+### 4.2. Tela do professor: organização e referências
+
+- **Barra superior no lugar da barra de ferramentas do Mac:** marca, estado da aula ("Ao vivo · 12:04", "Pausada", "Fora do ar", "Transmissão interrompida") e endereço da turma com botão de copiar. O botão do painel lateral fica ancorado na ponta direita, para não virar alvo que muda de lugar (Apple HIG; guia de barras de ferramentas de Mario Guzmán). A barra ocupa a faixa dos botões de fechar/minimizar da janela, como nos apps do Mac.
+- **Painel lateral com abas (Alunos, Chat, Arquivos), uma área por vez:** antes eram três painéis empilhados, cada um com um terço da altura. É o padrão do painel do anfitrião nos apps de reunião (Google Meet: pessoas, chat, atividades). O painel abre e fecha pelo botão da barra ou por ⌥⌘I (o atalho de "Mostrar Inspetor" dos apps da Apple) e lembra a escolha.
+- **Contador de não lidas:** mensagens de alunos que chegam com o chat fora de vista aparecem num contador vermelho na aba Chat e, com o painel fechado, no botão do painel — o mesmo contador da página do aluno.
+- **Área principal:** prévia sem textos por cima da imagem (na pausa, um véu diz que a turma vê a imagem congelada); controles logo abaixo, com a ação principal à esquerda e fonte/qualidade à direita; grade de fontes com número de colunas pela largura (2 a 6).
+- **Chat explica quem vê o quê:** "Suas mensagens vão para toda a turma. As dos alunos chegam só para você."
+
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
 O projeto usa **Swift Package Manager** (sem `.xcodeproj`), com o núcleo isolado na biblioteca

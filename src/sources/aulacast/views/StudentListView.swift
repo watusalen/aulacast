@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Painel lateral de alunos conectados e notificações de dúvidas (SRP).
+/// Aba de alunos do painel lateral: quem está conectado e quem está com a aula à vista (SRP).
 public struct StudentListView: View {
     @ObservedObject var clientManager: ClientManagerService
     let serverURLString: String
@@ -12,32 +12,24 @@ public struct StudentListView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Alunos Conectados (\(clientManager.identifiedClients.count))")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(AC.textPrimary)
-
-                // Quantos estão realmente com a aula à vista, e não só conectados.
-                if !clientManager.identifiedClients.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 10))
-                        Text("\(clientManager.watchingCount)")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundColor(AC.liveGreen)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(AC.liveGreen.opacity(0.14)))
-                    .help("Alunos com a transmissão à vista")
+            // O título ("Alunos") fica na aba do painel; aqui, o que importa saber de relance:
+            // quantos estão de fato com a aula à vista.
+            if !clientManager.identifiedClients.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(AC.liveGreen)
+                    Text(resumoDePresenca)
+                        .font(.system(size: 12))
+                        .foregroundColor(AC.textSecondary)
+                    Spacer()
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .help("Olho aberto: com a aula à vista. Olho cortado: conectado, mas em outra janela ou aba.")
 
-                Spacer()
+                Divider()
             }
-            .padding(14)
-            .background(AC.panelBG)
-
-            Divider()
 
             if clientManager.identifiedClients.isEmpty {
                 VStack(spacing: 12) {
@@ -52,7 +44,7 @@ public struct StudentListView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(AC.textPrimary)
 
-                    Text("Peça à turma para abrir o navegador e acessar o endereço exibido no lado esquerdo da tela.")
+                    Text("Peça à turma para digitar no navegador o endereço mostrado no alto da janela.")
                         .font(.system(size: 13))
                         .foregroundColor(AC.textSecondary)
                         .multilineTextAlignment(.center)
@@ -100,5 +92,14 @@ public struct StudentListView: View {
                 .background(AC.panelBG)
             }
         }
+    }
+
+    private var resumoDePresenca: String {
+        let total = clientManager.identifiedClients.count
+        let vendo = clientManager.watchingCount
+        if vendo == total {
+            return total == 1 ? "1 aluno, com a aula à vista" : "Todos os \(total) com a aula à vista"
+        }
+        return "\(vendo) de \(total) com a aula à vista"
     }
 }

@@ -1894,6 +1894,32 @@ struct AulaCastTestRunner {
         assertTest(vmEndereco.serverURLString == "http://192.168.1.10:8080",
                    "O link copiado continua completo, para ser clicável quando colado")
 
+        // TESTE 27: Painel do professor.
+        print("\n--- [27/27] Testes: painel do professor ---")
+        let vmPainel = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: FakeServer(), advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
+        )
+        vmPainel.didReceiveChatMessage(ChatMessage(sender: "Ana", text: "oi", isProf: false))
+        vmPainel.didReceiveChatMessage(ChatMessage(sender: "Carlos", text: "dúvida", isProf: false))
+        vmPainel.sendProfMessage(text: "respondendo")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmPainel.studentMessagesReceived == 2,
+                   "Só as mensagens dos alunos contam para o aviso de não lidas")
+
+        // Mesmo com o histórico cheio (ele guarda só as últimas), a contagem segue subindo.
+        for i in 0..<(ChatManagerService.maxMessages + 5) {
+            vmPainel.didReceiveChatMessage(ChatMessage(sender: "Ana", text: "m\(i)", isProf: false))
+        }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(vmPainel.studentMessagesReceived == ChatManagerService.maxMessages + 7,
+                   "Com o histórico no limite, as mensagens novas continuam contando como não lidas")
+
+        assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 580) == 2, "Janela mínima: 2 colunas de fontes")
+        assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 760) == 3, "Com o painel aberto: 3 colunas")
+        assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 1120) == 5, "Painel fechado: as fontes ganham colunas")
+        assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 3000) == 6, "Nunca passa de 6 colunas")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
