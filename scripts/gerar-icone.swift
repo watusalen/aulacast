@@ -4,11 +4,17 @@ import Foundation
 
 // Gera o ícone do aplicativo (AppIcon.icns) a partir de código, para que ele seja
 // reproduzível a partir do repositório em vez de ser um binário opaco versionado.
+//
+// Uso:  gerar-icone.swift [AppIcon.icns]
+//       gerar-icone.swift --web <pasta>   (ícones da página do aluno: aba e tela inicial)
 
 let argumentos = CommandLine.arguments
 let destino = argumentos.count > 1 ? argumentos[1] : "AppIcon.icns"
 
-func desenhar(tamanho: Int) -> Data? {
+/// `margemRelativa` e `cantoRelativo`: o ícone do macOS tem margem e cantos próprios; o
+/// da aba do navegador ocupa o quadro todo (numa aba de 16 px margem é desperdício), e o
+/// da tela inicial do iPhone vai sem cantos, porque o próprio iOS os arredonda.
+func desenhar(tamanho: Int, margemRelativa: CGFloat = 0.09, cantoRelativo: CGFloat = 0.2237) -> Data? {
     guard let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: tamanho, pixelsHigh: tamanho,
         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -22,9 +28,9 @@ func desenhar(tamanho: Int) -> Data? {
     let rect = NSRect(x: 0, y: 0, width: lado, height: lado)
 
     // Margem e cantos no padrão dos ícones do macOS.
-    let margem = lado * 0.09
+    let margem = lado * margemRelativa
     let corpo = rect.insetBy(dx: margem, dy: margem)
-    let raio = corpo.width * 0.2237
+    let raio = corpo.width * cantoRelativo
     let forma = NSBezierPath(roundedRect: corpo, xRadius: raio, yRadius: raio)
     forma.addClip()
 
@@ -75,6 +81,24 @@ func desenhar(tamanho: Int) -> Data? {
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])
+}
+
+if destino == "--web" {
+    let pasta = URL(fileURLWithPath: argumentos.count > 2 ? argumentos[2] : ".")
+    let arquivos: [(nome: String, tamanho: Int, canto: CGFloat)] = [
+        ("favicon-32.png", 32, 0.2237),
+        ("favicon-192.png", 192, 0.2237),
+        ("apple-touch-icon.png", 180, 0)
+    ]
+    for arquivo in arquivos {
+        guard let png = desenhar(tamanho: arquivo.tamanho, margemRelativa: 0, cantoRelativo: arquivo.canto) else {
+            FileHandle.standardError.write(Data("falha ao desenhar \(arquivo.nome)\n".utf8))
+            exit(1)
+        }
+        try png.write(to: pasta.appendingPathComponent(arquivo.nome))
+        print("gerado: \(arquivo.nome)")
+    }
+    exit(0)
 }
 
 let pastaTemporaria = FileManager.default.temporaryDirectory
