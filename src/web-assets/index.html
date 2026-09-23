@@ -4,8 +4,13 @@
   <meta charset="UTF-8">
   <!-- viewport-fit=cover: aberta pela Tela de Início do iPhone, a página ocupa também a
        faixa do relógio e do entalhe; os recuos `safe-area-inset` do CSS tiram o conteúdo
-       de baixo deles. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+       de baixo deles.
+       interactive-widget=resizes-content: sem isso o teclado do iPhone fica por cima da
+       folha do chat (que é `position: fixed`, com altura em `dvh`) em vez de encolhê-la,
+       e o campo de mensagem e o botão de enviar somem atrás dele. Com isto o teclado
+       conta como parte da viewport, `100dvh` encolhe e a folha (ancorada a `bottom: 0`)
+       sobe sozinha para cima dele, sem precisar ouvir `visualViewport` em JS. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#F8FAFD" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1B1B1B" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
