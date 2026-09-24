@@ -22,6 +22,7 @@ export class ChatManager {
 
     this.chatSendBtn = document.getElementById('chatSendBtn');
     this.chatEnabled = true;
+    this.visibilityText = document.getElementById('chatVisibilityText');
 
     this.fixada = document.getElementById('chatPinned');
     this.fixadaTexto = document.getElementById('chatPinnedText');
@@ -58,6 +59,19 @@ export class ChatManager {
       this.chatMessageInput.value = '';
       this.chatMessageInput.blur();
     }
+  }
+
+  /**
+   * Reflete o aviso fixo no topo do chat conforme o professor liga/desliga "alunos veem
+   * as mensagens uns dos outros" — chega no CONNECTED (valor inicial, ao entrar ou
+   * reconectar) e de novo a cada troca em CHAT_VISIBILITY, então o aviso nunca fica
+   * desatualizado esperando o aluno mandar a próxima mensagem para descobrir.
+   */
+  setVisibleToClass(visible) {
+    if (!this.visibilityText) return;
+    this.visibilityText.textContent = visible
+      ? 'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+      : 'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.';
   }
 
   handleSubmit(e) {

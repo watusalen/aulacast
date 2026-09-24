@@ -49,6 +49,7 @@ const elementos = {
   chatMessageInput: criarElemento('input'),
   chatMessages: criarElemento(),
   chatSendBtn: criarElemento('button'),
+  chatVisibilityText: criarElemento('span'),
   chatPinned: criarElemento(),
   chatPinnedText: criarElemento('p'),
   chatPinnedMore: criarElemento('button')
@@ -258,6 +259,22 @@ test('Chat começa liberado até o servidor dizer o contrário', () => {
   chat.handleSubmit({ preventDefault() {} });
 
   assert.strictEqual(enviadas.length, 1);
+});
+
+test('O aviso fixo do chat muda de texto conforme a visibilidade para a turma', () => {
+  const chat = new ChatManager(() => true, () => 'Ana');
+
+  chat.setVisibleToClass(true);
+  assert.strictEqual(
+    elementos.chatVisibilityText.textContent,
+    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+  );
+
+  chat.setVisibleToClass(false);
+  assert.strictEqual(
+    elementos.chatVisibilityText.textContent,
+    'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.'
+  );
 });
 
 test('Arquivo novo vira um cartão precedido de divisor, com download direto ao tocar', () => {

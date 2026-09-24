@@ -501,7 +501,41 @@ struct AulaCastTestRunner {
                 boasVindasChatLigado.contains("\"chatEnabled\":true"),
                 "Chat ligado: as boas-vindas dizem que o aluno pode escrever"
             )
+            assertTest(
+                boasVindasChatLigado.contains("\"chatVisibleToClass\":false"),
+                "Visibilidade para a turma desligada por padrão: as boas-vindas já dizem isso"
+            )
             socketChatLigado.cancel(with: .goingAway, reason: nil)
+
+            // Quem já está conectado precisa ver o aviso do chat mudar na hora quando o
+            // professor liga a visibilidade no meio da aula — não só na próxima mensagem.
+            let socketAoVivo = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
+            socketAoVivo.resume()
+            _ = try? await socketAoVivo.receive() // descarta o CONNECTED
+
+            servidorE2E.broadcastControlMessage(type: "CHAT_VISIBILITY", payload: ["visible": "true"])
+            var avisoDeVisibilidade = ""
+            if case .string(let texto)? = try? await socketAoVivo.receive() {
+                avisoDeVisibilidade = texto
+            }
+            assertTest(
+                avisoDeVisibilidade.contains("CHAT_VISIBILITY") && avisoDeVisibilidade.contains("\"visible\":\"true\""),
+                "Ligar a visibilidade no meio da aula avisa quem já está conectado"
+            )
+            socketAoVivo.cancel(with: .goingAway, reason: nil)
+
+            servidorE2E.isStudentChatVisibleToClass = true
+            var boasVindasVisivel = ""
+            let socketVisivel = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
+            socketVisivel.resume()
+            if case .string(let texto)? = try? await socketVisivel.receive() {
+                boasVindasVisivel = texto
+            }
+            assertTest(
+                boasVindasVisivel.contains("\"chatVisibleToClass\":true"),
+                "Quem entra depois do professor ligar a visibilidade já chega sabendo"
+            )
+            socketVisivel.cancel(with: .goingAway, reason: nil)
 
             servidorE2E.isChatEnabled = false
 

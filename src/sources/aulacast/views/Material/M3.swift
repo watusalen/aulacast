@@ -403,6 +403,63 @@ struct M3Botao: View {
     }
 }
 
+// MARK: - Linha de alternância
+
+/// Item de lista do M3 com um interruptor à direita: título, legenda e o `Toggle`, mas a
+/// linha inteira é a área de toque — tocar em qualquer parte liga ou desliga, não só o
+/// interruptor. É a recomendação do próprio M3 para itens de lista com controle de
+/// alternância (m3.material.io/components/lists): o alvo mínimo de toque de 48dp vale
+/// para a linha toda, e é assim que o Android trata as próprias telas de Ajustes.
+///
+/// O `Toggle` continua aí só para o desenho (a "pílula" indo de um lado a outro é dele);
+/// quem responde ao toque é o `Button` que envolve a linha — daí o `allowsHitTesting(false)`
+/// nele, senão um toque bem em cima do interruptor alternaria duas vezes (a do `Button` e a
+/// do próprio `Toggle`) e voltaria ao estado de antes.
+struct M3LinhaDeAlternancia: View {
+    let titulo: String
+    let legenda: String
+    @Binding var ligado: Bool
+
+    var body: some View {
+        Button {
+            ligado.toggle()
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(titulo)
+                        .m3(.titleSmall)
+                        .foregroundColor(M3.onSurface)
+                    Text(legenda)
+                        .m3(.bodySmall)
+                        .foregroundColor(M3.onSurfaceVariant)
+                }
+                Spacer()
+                Toggle("", isOn: $ligado)
+                    .toggleStyle(.switch)
+                    .tint(M3.primary)
+                    .labelsHidden()
+                    .allowsHitTesting(false)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(Estilo())
+        .padding(.horizontal, 24)
+        .padding(.vertical, 8)
+    }
+
+    /// Mesma camada de estado (hover/toque) dos outros controles do M3 nesta janela — só
+    /// que sobre a linha inteira, retangular, em vez da forma arredondada de um botão.
+    private struct Estilo: ButtonStyle {
+        @Environment(\.isEnabled) private var ativo
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .modifier(M3CamadaDeEstado(cor: M3.onSurface, formato: AnyShape(Rectangle()), pressionado: configuration.isPressed))
+                .opacity(ativo ? 1 : 0.38)
+        }
+    }
+}
+
 // MARK: - Contador (badge)
 
 struct M3Contador: View {

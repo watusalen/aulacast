@@ -118,6 +118,9 @@ export class AulaCastApp {
         if (data.payload && typeof data.payload.chatEnabled === 'boolean') {
           this.chatManager.setEnabled(data.payload.chatEnabled);
         }
+        if (data.payload && typeof data.payload.chatVisibleToClass === 'boolean') {
+          this.chatManager.setVisibleToClass(data.payload.chatVisibleToClass);
+        }
         this.aplicarEstadoDaTransmissao(data.payload);
         if (data.payload && Array.isArray(data.payload.files)) {
           this.files.render(data.payload.files);
@@ -133,6 +136,12 @@ export class AulaCastApp {
 
       case 'CHAT_STATE':
         this.chatManager.setEnabled(data.payload.enabled === 'true');
+        break;
+
+      // O professor ligou ou desligou "alunos veem as mensagens uns dos outros" no meio
+      // da aula: o aviso fixo do chat muda na hora, sem esperar a próxima mensagem.
+      case 'CHAT_VISIBILITY':
+        this.chatManager.setVisibleToClass(data.payload.visible === 'true');
         break;
 
       // O professor fixou (ou trocou, ou tirou) a mensagem do topo do chat.

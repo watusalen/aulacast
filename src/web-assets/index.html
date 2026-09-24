@@ -147,7 +147,10 @@
           <div id="chatMessages" class="messages" role="log" aria-live="polite">
             <div class="sys-msg">
               <span class="icone" aria-hidden="true">&#xE88E;</span>
-              <span>Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.</span>
+              <!-- Texto trocado por chat-manager.js conforme o professor liga/desliga a
+                   visibilidade para a turma (CONNECTED e CHAT_VISIBILITY) — o que está aqui
+                   é só o valor inicial, antes do primeiro estado chegar do servidor. -->
+              <span id="chatVisibilityText">Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.</span>
             </div>
           </div>
 

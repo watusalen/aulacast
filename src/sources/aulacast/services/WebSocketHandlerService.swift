@@ -141,10 +141,13 @@ public final class WebSocketHandlerService {
 
         // Envia mensagem de boas-vindas CONNECTED com o estado atual do chat. Sem isto, quem
         // entra (ou reconecta) no meio da aula com o chat já desligado veria o campo liberado
-        // e só descobriria o bloqueio ao ver a mensagem sumir.
+        // e só descobriria o bloqueio ao ver a mensagem sumir — e o mesmo vale para
+        // `chatVisibleToClass`: sem ele no CONNECTED, quem entra depois do professor ligar a
+        // visibilidade via o aviso fixo do chat com a versão errada até a próxima mudança.
         lock.lock()
         var boasVindas: [String: Any] = estadoDaTransmissao
         boasVindas["chatEnabled"] = chatLiberado
+        boasVindas["chatVisibleToClass"] = chatVisivelParaTurma
         boasVindas["files"] = arquivos
         // Sem fixada, o campo não vai: o cliente trata ausência como "nada fixado".
         if let mensagemFixada {

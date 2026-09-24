@@ -21,45 +21,23 @@ public struct ChatPanelView: View {
             // No Meet, "Permitir que todos enviem mensagens" fica no topo do chat — é onde
             // o professor procura quando quer silenciar a conversa. Antes ficava escondido
             // no popover de qualidade.
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Alunos podem escrever")
-                        .m3(.titleSmall)
-                        .foregroundColor(M3.onSurface)
-                    Text(viewModel.isChatEnabled ? "O campo de mensagem aparece para a turma" : "O campo fica inativo na tela dos alunos")
-                        .m3(.bodySmall)
-                        .foregroundColor(M3.onSurfaceVariant)
-                }
-                Spacer()
-                Toggle("", isOn: $viewModel.isChatEnabled)
-                    .toggleStyle(.switch)
-                    .tint(M3.primary)
-                    .labelsHidden()
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 8)
+            M3LinhaDeAlternancia(
+                titulo: "Alunos podem escrever",
+                legenda: viewModel.isChatEnabled
+                    ? "O campo de mensagem aparece para a turma"
+                    : "O campo fica inativo na tela dos alunos",
+                ligado: $viewModel.isChatEnabled
+            )
 
             // Segundo toggle, independente do de cima: só faz sentido com o chat ligado —
             // desligado, não há mensagem de aluno nenhuma para circular entre colegas.
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Alunos veem as mensagens uns dos outros")
-                        .m3(.titleSmall)
-                        .foregroundColor(M3.onSurface)
-                    Text(viewModel.isStudentChatVisibleToClass
-                        ? "As mensagens dos alunos vão para toda a turma, além de você"
-                        : "As mensagens dos alunos chegam só para você, como hoje")
-                        .m3(.bodySmall)
-                        .foregroundColor(M3.onSurfaceVariant)
-                }
-                Spacer()
-                Toggle("", isOn: $viewModel.isStudentChatVisibleToClass)
-                    .toggleStyle(.switch)
-                    .tint(M3.primary)
-                    .labelsHidden()
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 8)
+            M3LinhaDeAlternancia(
+                titulo: "Alunos veem as mensagens uns dos outros",
+                legenda: viewModel.isStudentChatVisibleToClass
+                    ? "As mensagens dos alunos vão para toda a turma, além de você"
+                    : "As mensagens dos alunos chegam só para você, como hoje",
+                ligado: $viewModel.isStudentChatVisibleToClass
+            )
             .disabled(!viewModel.isChatEnabled)
 
             // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.

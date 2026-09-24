@@ -56,7 +56,7 @@ const nomes = [
   'chatToggleBtn', 'filesToggleBtn', 'chatBadge', 'filesBadge', 'chatArea', 'filesArea',
   'filesList', 'filesEmpty',
   'chatForm', 'chatMessageInput', 'chatMessages', 'chatSendBtn', 'raiseHandBtn',
-  'chatPinned', 'chatPinnedText', 'chatPinnedMore',
+  'chatVisibilityText', 'chatPinned', 'chatPinnedText', 'chatPinnedMore',
   'entryGate', 'entryForm', 'entryName', 'entryError', 'entrySubmit'
 ];
 for (const nome of nomes) elementos[nome] = criarElemento();
@@ -138,6 +138,32 @@ test('STREAM_STARTED devolve o vídeo a quem já estava conectado', () => {
 test('CONNECTED sem payload não derruba o cliente', () => {
   const { app } = novoApp();
   assert.doesNotThrow(() => app.handleServerMessage({ type: 'CONNECTED' }));
+});
+
+test('CONNECTED leva o estado atual da visibilidade para a turma ao aviso do chat', () => {
+  const { app } = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { chatVisibleToClass: true, stream: 'live' } });
+  assert.strictEqual(
+    elementos.chatVisibilityText.textContent,
+    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+  );
+});
+
+test('O professor liga/desliga a visibilidade no meio da aula: o aviso do chat muda na hora', () => {
+  const { app } = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { chatVisibleToClass: false, stream: 'live' } });
+
+  app.handleServerMessage({ type: 'CHAT_VISIBILITY', payload: { visible: 'true' } });
+  assert.strictEqual(
+    elementos.chatVisibilityText.textContent,
+    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+  );
+
+  app.handleServerMessage({ type: 'CHAT_VISIBILITY', payload: { visible: 'false' } });
+  assert.strictEqual(
+    elementos.chatVisibilityText.textContent,
+    'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.'
+  );
 });
 
 test('Quem conecta com a aula pausada vê o aviso de pausa', () => {

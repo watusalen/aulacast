@@ -101,13 +101,17 @@ public final class MainViewModel: ObservableObject {
         }
     }
 
-    /// Desligado por padrão: mensagem de aluno continua só com o professor. Diferente de
-    /// `isChatEnabled`, não há nada visual para mudar no cliente do aluno — o campo de
-    /// escrever continua igual dos dois lados, só muda quem recebe depois. Por isso, sem
-    /// `broadcastControlMessage`: nenhum cliente web reage a esse aviso hoje.
+    /// Desligado por padrão: mensagem de aluno continua só com o professor. O campo de
+    /// escrever continua igual dos dois lados — o que muda é quem recebe depois, e é
+    /// exatamente isso que o aviso fixo no topo do chat do aluno precisa refletir na hora,
+    /// não só quando ele mandar a próxima mensagem (ou pior, nunca, se não mandar nenhuma).
     @Published public var isStudentChatVisibleToClass: Bool = false {
         didSet {
             serverService.isStudentChatVisibleToClass = isStudentChatVisibleToClass
+            serverService.broadcastControlMessage(
+                type: "CHAT_VISIBILITY",
+                payload: ["visible": isStudentChatVisibleToClass ? "true" : "false"]
+            )
         }
     }
 
