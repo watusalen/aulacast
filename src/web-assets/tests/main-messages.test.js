@@ -234,8 +234,13 @@ test('Arquivo novo aparece na lista e soma no contador de Arquivos', () => {
   assert.strictEqual(elementos.filesList.hidden, false);
   assert.strictEqual(elementos.filesBadge.hidden, false, 'o botão de Arquivos mostra o contador');
   assert.strictEqual(elementos.filesBadge.textContent, '1');
-  assert.strictEqual(elementos.chatMessages.filhos.at(-1).filhos[0].textContent, 'Novo arquivo: Lista 1.pdf',
-    'e o chat ganha a linha de sistema');
+
+  // E o chat ganha um cartão baixável (redundância com a aba Arquivos), não só um aviso.
+  const cartao = elementos.chatMessages.filhos.at(-1);
+  assert.strictEqual(cartao.className, 'chat-arquivo');
+  const [, link] = cartao.filhos;
+  assert.strictEqual(link.href, '/arquivos/f1');
+  assert.strictEqual(link.filhos[1].filhos[0].textContent, 'Lista 1.pdf');
 });
 
 test('Resposta do professor com o chat fechado soma no contador do Chat', () => {

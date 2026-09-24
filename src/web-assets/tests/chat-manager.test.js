@@ -33,7 +33,13 @@ function criarElemento(tag = 'div') {
     removeChild(filho) { el.filhos.splice(el.filhos.indexOf(filho), 1); },
     addEventListener(evt, fn) { (el.listeners[evt] ||= []).push(fn); },
     dispatch(evt) { (el.listeners[evt] || []).forEach((fn) => fn()); },
-    blur() {}
+    blur() {},
+    querySelector(sel) {
+      const classe = sel.replace('.', '');
+      const bate = (n) => (n.className || '').split(' ').includes(classe);
+      const achar = (n) => (bate(n) ? n : (n.filhos || []).map(achar).find(Boolean));
+      return el.filhos.map(achar).find(Boolean) || null;
+    }
   };
   return el;
 }
@@ -254,35 +260,60 @@ test('Chat começa liberado até o servidor dizer o contrário', () => {
   assert.strictEqual(enviadas.length, 1);
 });
 
-test('Arquivo novo vira uma linha de sistema, sem nada para clicar', () => {
-  const chat = new ChatManager(() => true, () => 'Ana');
+test('Arquivo novo vira um cartão precedido de divisor, com download direto ao tocar', () => {
+  const baixados = [];
+  const chat = new ChatManager(() => true, () => 'Ana', (id) => baixados.push(id));
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([{ id: 'x1', name: 'Lista 3.pdf', size: 184000 }]);
 
-  const linha = elementos.chatMessages.filhos[antes];
-  assert.strictEqual(linha.className, 'chat-event');
-  assert.strictEqual(linha.attrs.role, 'status');
-  assert.strictEqual(linha.filhos[0].textContent, 'Novo arquivo: Lista 3.pdf');
-  assert.strictEqual(linha.filhos[0].attrs.title, 'Lista 3.pdf', 'o nome inteiro fica na dica');
-  assert.match(linha.filhos[1].textContent, /^\d{2}:\d{2}$/);
-  const temLink = (el) => el.href || (el.filhos || []).some(temLink);
-  assert.ok(!temLink(linha), 'o download fica só na lista de Arquivos');
+  const [divisor, cartao] = elementos.chatMessages.filhos.slice(antes);
+  assert.strictEqual(divisor.className, 'divisor', 'abre a seção de conteúdo diferente da conversa');
+  assert.strictEqual(divisor.attrs['aria-hidden'], 'true');
+
+  assert.strictEqual(cartao.className, 'chat-arquivo');
+  const [cabeca, link] = cartao.filhos;
+  assert.strictEqual(cabeca.filhos[0].textContent, 'Novo arquivo');
+  assert.match(cabeca.filhos[1].textContent, /^\d{2}:\d{2}$/);
+
+  assert.strictEqual(link.className, 'file-link');
+  assert.strictEqual(link.href, '/arquivos/x1');
+  assert.strictEqual(link.attrs.download, 'Lista 3.pdf');
+  assert.strictEqual(link.attrs['data-file-id'], 'x1');
+
+  // O cartão inteiro é o seletor: tocar nele baixa, igual na aba Arquivos.
+  link.dispatch('click');
+  assert.deepStrictEqual(baixados, ['x1']);
 });
 
-test('Vários arquivos: a linha diz quantos, sem listar nomes', () => {
-  const chat = new ChatManager(() => true, () => 'Ana');
+test('Vários arquivos: cada um vira o próprio cartão, todos baixáveis por aqui', () => {
+  const baixados = [];
+  const chat = new ChatManager(() => true, () => 'Ana', (id) => baixados.push(id));
+  const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([
     { id: 'a', name: 'a.zip', size: 10 },
-    { id: 'b', name: '<b>c</b>.txt', size: 5 },
-    { id: 'c', name: 'c.pdf', size: 5 }
+    { id: 'b', name: 'b.txt', size: 5 }
   ]);
-  assert.strictEqual(ultima().filhos[0].textContent, '3 arquivos novos');
+
+  const cartoes = elementos.chatMessages.filhos.slice(antes).filter((el) => el.className === 'chat-arquivo');
+  assert.strictEqual(cartoes.length, 2, 'um cartão por arquivo, não um resumo só');
+  const [linkA] = cartoes[0].filhos.slice(1);
+  const [linkB] = cartoes[1].filhos.slice(1);
+  assert.strictEqual(linkA.href, '/arquivos/a');
+  assert.strictEqual(linkB.href, '/arquivos/b');
+
+  linkB.dispatch('click');
+  assert.deepStrictEqual(baixados, ['b'], 'cada cartão baixa só o seu arquivo');
 });
 
-test('Nome com HTML aparece como texto na linha de sistema', () => {
+test('Nome com HTML aparece como texto no cartão do chat, igual na aba Arquivos', () => {
   const chat = new ChatManager(() => true, () => 'Ana');
+  const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([{ id: 'h', name: '<img src=x onerror=alert(1)>', size: 1 }]);
-  assert.strictEqual(ultima().filhos[0].textContent, 'Novo arquivo: <img src=x onerror=alert(1)>');
+
+  const [, cartao] = elementos.chatMessages.filhos.slice(antes);
+  const [, link] = cartao.filhos;
+  const nome = link.querySelector ? link.querySelector('.file-name') : null;
+  assert.strictEqual(nome.textContent, '<img src=x onerror=alert(1)>');
 });
 
 test('Lista vazia não cria aviso', () => {

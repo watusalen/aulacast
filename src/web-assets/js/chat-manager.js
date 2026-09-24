@@ -1,14 +1,21 @@
 import { escreverComLinks } from './links.js';
+import { criarLinkDeArquivo } from './files-list.js';
 
 function horaAgora() {
   return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
 export class ChatManager {
-  /** O nome vem da identificação feita na entrada, não de um campo separado no chat. */
-  constructor(onSendMessage, getStudentName) {
+  /**
+   * O nome vem da identificação feita na entrada, não de um campo separado no chat.
+   * `onFileDownload(id)` é chamado quando o aluno baixa um arquivo pelo aviso no chat —
+   * quem chama (`main.js`) repassa para a mesma `FilesList` da aba Arquivos, para a
+   * etiqueta "Novo" sumir dos dois lugares juntos, não só de onde o clique aconteceu.
+   */
+  constructor(onSendMessage, getStudentName, onFileDownload) {
     this.onSendMessage = onSendMessage;
     this.getStudentName = getStudentName;
+    this.onFileDownload = onFileDownload || (() => {});
     this.chatForm = document.getElementById('chatForm');
     this.chatMessageInput = document.getElementById('chatMessageInput');
     this.chatMessages = document.getElementById('chatMessages');
@@ -80,23 +87,53 @@ export class ChatManager {
   }
 
   /**
-   * Linha de sistema no chat avisando que chegou arquivo: só informa, não baixa.
+   * Aviso de arquivo novo no chat — com download direto ao tocar, redundante com a aba
+   * Arquivos (que continua sendo o lugar de conferir tudo que já chegou na aula). Cada
+   * arquivo reaproveita o mesmo item de lista do Material da aba Arquivos
+   * (`criarLinkDeArquivo`, em `files-list.js`): o cartão inteiro é o link, exatamente
+   * como um seletor do M3 — não um texto com um botãozinho dentro.
    *
-   * O download fica num lugar só, a lista de Arquivos (onde o arquivo novo ganha a
-   * etiqueta "Novo"). Um cartão com links aqui criava um segundo caminho para a mesma
-   * coisa. Como mensagem de sistema, segue o padrão dos chats: uma linha, centralizada,
-   * em tom neutro, diferente das mensagens de verdade.
+   * Vem precedido de um divisor: é outro tipo de conteúdo dentro da conversa, um cartão
+   * de sistema, não uma fala — o divisor abre essa seção, o mesmo raciocínio de separar
+   * grupos de controles que fazem coisas diferentes.
    */
   mostrarArquivosNovos(arquivos) {
     const lista = Array.isArray(arquivos) ? arquivos : [];
     if (lista.length === 0) return;
 
-    if (lista.length === 1) {
-      // O nome inteiro fica na dica: a linha corta nomes compridos com reticências.
-      this.mostrarEvento(`Novo arquivo: ${lista[0].name}`, '', lista[0].name);
-    } else {
-      this.mostrarEvento(`${lista.length} arquivos novos`);
+    this.mostrarDivisor();
+
+    for (const arquivo of lista) {
+      const linha = document.createElement('div');
+      linha.className = 'chat-arquivo';
+
+      const cabeca = document.createElement('div');
+      cabeca.className = 'chat-arquivo-cabeca';
+      const rotulo = document.createElement('span');
+      rotulo.textContent = 'Novo arquivo';
+      const hora = document.createElement('span');
+      hora.textContent = horaAgora();
+      cabeca.appendChild(rotulo);
+      cabeca.appendChild(hora);
+
+      linha.appendChild(cabeca);
+      linha.appendChild(criarLinkDeArquivo(arquivo, { novo: true, onBaixar: (id) => this.onFileDownload(id) }));
+      this.chatMessages.appendChild(linha);
     }
+
+    this.rolarParaOFim();
+  }
+
+  /**
+   * Divisor do Material: linha fina que abre uma seção de conteúdo diferente da que
+   * vinha antes. Aqui, marca a entrada de um cartão de sistema (arquivo pra baixar) em
+   * meio à conversa — as duas coisas são diferentes, e o divisor é como o M3 diz isso.
+   */
+  mostrarDivisor() {
+    const divisor = document.createElement('hr');
+    divisor.className = 'divisor';
+    divisor.setAttribute('aria-hidden', 'true');
+    this.chatMessages.appendChild(divisor);
   }
 
   /** O professor abaixou a mão do aluno: uma linha curta, no mesmo tom das de sistema. */

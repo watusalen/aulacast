@@ -27,12 +27,57 @@ function icone(nome, codigo) {
 }
 
 /**
- * Lista de arquivos que o professor compartilhou, no desenho de lista do Material: ícone
- * num quadrado tonal, nome e tamanho. O item inteiro é o link de download: é o único
- * jeito de baixar, e um alvo grande é mais fácil de acertar no celular.
+ * Item de lista do Material para um arquivo: ícone num quadrado tonal, nome e tamanho.
+ * O elemento inteiro é o link de download — como um seletor do M3, qualquer área dele
+ * ativa a mesma ação, não só o ícone ou o texto. Reaproveitado aqui e pelo aviso de
+ * arquivo novo no chat (`chat-manager.js`): os dois lugares mostram o mesmo componente
+ * do sistema de design, não uma cópia reestilizada.
  *
  * O nome do arquivo vem do Mac do professor e vai para a tela só como texto — nunca
  * como HTML —, então um nome esquisito não vira código na página do aluno.
+ */
+export function criarLinkDeArquivo(arquivo, { novo = false, onBaixar } = {}) {
+  const link = document.createElement('a');
+  link.className = 'file-link';
+  link.href = `/arquivos/${encodeURIComponent(arquivo.id)}`;
+  link.setAttribute('download', arquivo.name);
+  link.setAttribute('data-file-id', arquivo.id);
+  if (onBaixar) link.addEventListener('click', () => onBaixar(arquivo.id));
+
+  const quadrado = document.createElement('span');
+  quadrado.className = 'file-icone';
+  quadrado.appendChild(icone('', 0xE873));
+
+  const texto = document.createElement('span');
+  texto.className = 'file-texto';
+
+  const nome = document.createElement('span');
+  nome.className = 'file-name';
+  nome.textContent = arquivo.name;
+  nome.setAttribute('title', arquivo.name);
+
+  const tamanho = document.createElement('span');
+  tamanho.className = 'file-size';
+  tamanho.textContent = formatarTamanho(arquivo.size);
+
+  texto.appendChild(nome);
+  texto.appendChild(tamanho);
+  link.appendChild(quadrado);
+  link.appendChild(texto);
+  if (novo) {
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'file-new';
+    etiqueta.textContent = 'Novo';
+    link.appendChild(etiqueta);
+  }
+  link.appendChild(icone('file-baixar', 0xF090));
+  return link;
+}
+
+/**
+ * Lista de arquivos que o professor compartilhou, no desenho de lista do Material. O
+ * item inteiro é o link de download: é o único jeito de baixar por aqui, e um alvo
+ * grande é mais fácil de acertar no celular.
  */
 export class FilesList {
   constructor({ onNovidade } = {}) {
@@ -63,41 +108,10 @@ export class FilesList {
     for (const arquivo of lista) {
       const item = document.createElement('li');
       item.className = 'file-item';
-
-      const link = document.createElement('a');
-      link.className = 'file-link';
-      link.href = `/arquivos/${encodeURIComponent(arquivo.id)}`;
-      link.setAttribute('download', arquivo.name);
-      link.addEventListener('click', () => this.marcarComoBaixado(arquivo.id, item));
-
-      const quadrado = document.createElement('span');
-      quadrado.className = 'file-icone';
-      quadrado.appendChild(icone('', 0xE873));
-
-      const texto = document.createElement('span');
-      texto.className = 'file-texto';
-
-      const nome = document.createElement('span');
-      nome.className = 'file-name';
-      nome.textContent = arquivo.name;
-      nome.setAttribute('title', arquivo.name);
-
-      const tamanho = document.createElement('span');
-      tamanho.className = 'file-size';
-      tamanho.textContent = formatarTamanho(arquivo.size);
-
-      texto.appendChild(nome);
-      texto.appendChild(tamanho);
-      link.appendChild(quadrado);
-      link.appendChild(texto);
-      if (this.naoBaixados.has(arquivo.id)) {
-        const etiqueta = document.createElement('span');
-        etiqueta.className = 'file-new';
-        etiqueta.textContent = 'Novo';
-        link.appendChild(etiqueta);
-      }
-      link.appendChild(icone('file-baixar', 0xF090));
-      item.appendChild(link);
+      item.appendChild(criarLinkDeArquivo(arquivo, {
+        novo: this.naoBaixados.has(arquivo.id),
+        onBaixar: (id) => this.marcarBaixado(id)
+      }));
       this.list.appendChild(item);
     }
 
@@ -108,10 +122,17 @@ export class FilesList {
     }
   }
 
-  /** A etiqueta "Novo" sai quando o aluno baixa o arquivo: cumpriu o papel dela. */
-  marcarComoBaixado(id, item) {
+  /**
+   * A etiqueta "Novo" sai quando o aluno baixa o arquivo — por aqui ou pelo aviso no
+   * chat (`chat-manager.js`, mesmo componente): os dois caminhos levam ao mesmo estado,
+   * então um não pode deixar o outro com a etiqueta pendurada.
+   */
+  marcarBaixado(id) {
+    if (!this.naoBaixados.has(id)) return;
     this.naoBaixados.delete(id);
-    const etiqueta = item.querySelector ? item.querySelector('.file-new') : null;
+    const seletor = `[data-file-id="${typeof CSS !== 'undefined' ? CSS.escape(id) : id}"]`;
+    const link = this.list.querySelector ? this.list.querySelector(seletor) : null;
+    const etiqueta = link && link.querySelector ? link.querySelector('.file-new') : null;
     if (etiqueta && etiqueta.parentNode) etiqueta.parentNode.removeChild(etiqueta);
   }
 }

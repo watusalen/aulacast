@@ -1314,6 +1314,44 @@ input {
   opacity: .8;
 }
 
+/* Divisor do Material (M3): linha fina separando grupos de conteúdo diferentes — aqui,
+   uma mensagem de texto de um cartão de sistema (arquivo pra baixar), do mesmo jeito
+   que a lista de Arquivos separaria dois grupos de controles que fazem coisas
+   diferentes. Cor e espessura do token padrão do M3 para divisores. */
+.divisor {
+  flex: none;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: var(--outline-variant);
+}
+
+/* Aviso de arquivo novo dentro da conversa: mesma gramática visual das mensagens (uma
+   cabeça com metadado, o conteúdo embaixo), mas com fundo — é um cartão de sistema, não
+   uma fala. O link em si é o mesmo item de lista da aba Arquivos (`.file-link`, ver
+   `criarLinkDeArquivo` em files-list.js): clicar em qualquer parte dele baixa. */
+.chat-arquivo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-arquivo-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--on-surface-variant);
+}
+
+.chat-arquivo .file-link {
+  background: var(--surface-container);
+}
+
 /* Campo de mensagem em pílula, com a mão ao lado. */
 .chat-form {
   flex: none;

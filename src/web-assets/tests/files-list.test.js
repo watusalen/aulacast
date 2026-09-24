@@ -12,8 +12,11 @@ function criarElemento(tag = 'div') {
     addEventListener(evt, fn) { (el.listeners[evt] ||= []).push(fn); },
     dispatch(evt) { (el.listeners[evt] || []).forEach((fn) => fn()); },
     querySelector(sel) {
-      const classe = sel.replace('.', '');
-      const achar = (n) => (n.className.split(' ').includes(classe) ? n : n.filhos.map(achar).find(Boolean));
+      const atributo = sel.match(/^\[([\w-]+)="([^"]*)"\]$/);
+      const bate = atributo
+        ? (n) => n.attrs && n.attrs[atributo[1]] === atributo[2]
+        : (n) => n.className.split(' ').includes(sel.replace('.', ''));
+      const achar = (n) => (bate(n) ? n : n.filhos.map(achar).find(Boolean));
       return el.filhos.map(achar).find(Boolean) || null;
     }
   };
@@ -107,6 +110,17 @@ test('Tamanhos legíveis em português', () => {
   assert.strictEqual(formatarTamanho(3_400_000), '3,4 MB');
   assert.strictEqual(formatarTamanho(250_000_000), '250 MB');
   assert.strictEqual(formatarTamanho(1_200_000_000), '1,2 GB');
+});
+
+test('marcarBaixado tira a etiqueta Novo sem precisar do <li> (chamado de fora, pelo aviso no chat)', () => {
+  const lista = new FilesList();
+  lista.render([]);
+  lista.render([{ id: 'n', name: 'n.pdf', size: 1 }]);
+
+  lista.marcarBaixado('n');
+
+  const item = elementos.filesList.filhos[0];
+  assert.strictEqual(item.querySelector('.file-new'), null);
 });
 
 test('Arquivo que chega durante a aula ganha a etiqueta Novo; os da entrada não', () => {

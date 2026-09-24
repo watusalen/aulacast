@@ -20,7 +20,11 @@ export class AulaCastApp {
 
     this.chatManager = new ChatManager(
       (data) => this.socket.send(data),
-      () => (this.identidade ? this.identidade.name : 'Aluno')
+      () => (this.identidade ? this.identidade.name : 'Aluno'),
+      // this.files só existe depois desta linha — a seta só lê a referência quando o
+      // aluno de fato clica no aviso, já com a FilesList criada (mesmo padrão do nome
+      // acima, lido só na hora de enviar).
+      (id) => this.files.marcarBaixado(id)
     );
     // O chat escondido não rola: ao aparecer, vai para a mensagem mais recente.
     this.ui.aoMostrarArea = (area) => {
