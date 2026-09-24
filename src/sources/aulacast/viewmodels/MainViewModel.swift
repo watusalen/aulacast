@@ -323,6 +323,13 @@ public final class MainViewModel: ObservableObject {
                 return
             }
 
+            // Sessão nova de verdade — não uma retomada depois da captura cair sozinha, que
+            // mantém `isSessionOpen` true com o servidor de pé enquanto o professor clica em
+            // "Iniciar Transmissão" de novo (ver `serverService.start()`). Só numa sessão nova
+            // o histórico permanente de "quantos alunos passaram pela aula" deve zerar; numa
+            // retomada, quem já baixou ou já entrou continua contando.
+            let éSessãoNova = !isSessionOpen
+
             do {
                 try serverService.start()
                 advertiserService.startAdvertising()
@@ -332,6 +339,9 @@ public final class MainViewModel: ObservableObject {
                 )
                 self.isStreaming = true
                 self.isSessionOpen = true
+                if éSessãoNova {
+                    clientManager.reiniciarHistoricoDaAula()
+                }
                 self.isPaused = false
                 self.pausadoPorqueAJanelaSumiu = false
                 self.streamState.reset()

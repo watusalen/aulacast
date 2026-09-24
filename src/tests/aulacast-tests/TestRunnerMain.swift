@@ -82,6 +82,35 @@ struct AulaCastTestRunner {
             assertTest(clientManager.clients.count == 1, "Desconexão de um aluno remove o cliente específico mantendo os demais")
         }
 
+        // Histórico permanente de alunos (por IP): base do "X de Y baixaram" do painel de
+        // Arquivos. Precisa sobreviver a quem desconecta, e não duplicar quem volta com o
+        // mesmo IP.
+        let turmaHistorico = ClientManagerService()
+        turmaHistorico.addOrUpdateClient(name: "Beto", ip: "192.168.1.10")
+        turmaHistorico.addOrUpdateClient(name: "Carla", ip: "192.168.1.11")
+        turmaHistorico.addOrUpdateClient(name: "Dudu", ip: "192.168.1.12")
+        assertTest(turmaHistorico.totalIdentificadosNaAula == 3, "Três alunos identificados entram no histórico permanente")
+
+        if let saiu = turmaHistorico.clients.first(where: { $0.name == "Beto" }) {
+            turmaHistorico.removeClient(id: saiu.id)
+        }
+        assertTest(
+            turmaHistorico.totalIdentificadosNaAula == 3,
+            "Desconectar não tira ninguém do histórico permanente (3 de 3 continua 3 de 3)"
+        )
+        assertTest(turmaHistorico.identifiedClients.count == 2, "Mas a lista de quem está na aula agora reflete a saída")
+
+        // Reconectar com o mesmo IP (wifi caiu e voltou) não infla o histórico.
+        turmaHistorico.addOrUpdateClient(name: "Beto", ip: "192.168.1.10")
+        assertTest(
+            turmaHistorico.totalIdentificadosNaAula == 3,
+            "Reconexão com o mesmo IP não conta como um aluno novo no histórico"
+        )
+
+        turmaHistorico.reiniciarHistoricoDaAula()
+        assertTest(turmaHistorico.totalIdentificadosNaAula == 0, "Reiniciar o histórico zera para a próxima aula")
+        assertTest(turmaHistorico.clients.count == 3, "Reiniciar o histórico não mexe em quem está conectado agora")
+
         // Emenda real: WebSocket -> MainViewModel -> ClientManagerService.
         // Testar só o gerenciador não pega o defeito; ele morava na tradução entre camadas.
         let servidorFalso = FakeServer()
@@ -1199,6 +1228,28 @@ struct AulaCastTestRunner {
         } else {
             assertTest(false, "O aviso de volta vem depois do aviso de queda")
         }
+
+        // Histórico permanente de alunos: uma retomada depois da captura cair (servidor
+        // nunca desceu, mesma sessão) não pode zerar quem já entrou — só encerrar a
+        // sessão de vez e começar outra aula zera.
+        let alunoDaRetomada = ConnectedClient(name: "Aluno-9.9", ipAddress: "192.168.9.9")
+        vmRetomada.didClientConnect(alunoDaRetomada)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        vmRetomada.didIdentifyStudent(clientId: alunoDaRetomada.id, name: "Fábio")
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        assertTest(
+            vmRetomada.clientManager.totalIdentificadosNaAula == 1,
+            "Aluno identificado depois da retomada entra no histórico da aula"
+        )
+
+        vmRetomada.stopStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        vmRetomada.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(
+            vmRetomada.clientManager.totalIdentificadosNaAula == 0,
+            "Encerrar a sessão de vez e começar outra aula zera o histórico permanente"
+        )
 
         // Miniatura das fontes: guardar o quadro em resolução nativa não melhora nada na
         // tela e cobra caro — uma varredura com dez janelas num monitor 5K são dez imagens

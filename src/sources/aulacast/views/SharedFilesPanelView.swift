@@ -128,12 +128,21 @@ public struct SharedFilesPanelView: View {
     /// ninguém baixou ainda → para quantos está disponível; já baixaram → "3 de 4
     /// baixaram". Downloads em andamento não aparecem: o que interessa ao professor é
     /// quem já tem o arquivo.
+    ///
+    /// `alunos` é o histórico permanente da aula (`totalIdentificadosNaAula`), não quem
+    /// está conectado agora: um aluno que baixa e sai não pode fazer o "de Y" encolher e
+    /// esconder que ele passou por ali — antes, com a contagem ao vivo, "3 de 3 baixaram"
+    /// virava "2 de 2" assim que alguém saía.
     private func situacao(_ estatisticas: FileDownloadStats?) -> some View {
-        let alunos = viewModel.clientManager.identifiedClients.count
+        let alunos = viewModel.clientManager.totalIdentificadosNaAula
         let concluidos = estatisticas?.concluidos ?? 0
         let frase: String
         if concluidos > 0 {
-            frase = alunos > 0 ? "\(min(concluidos, max(alunos, concluidos))) de \(max(alunos, concluidos)) baixaram"
+            // `max` é defensivo: em tese um download pode vir de um IP que nunca passou
+            // pelo IDENTIFY (a contagem de concluídos é por IP na conexão HTTP, à parte
+            // da lista de alunos identificados) — sem ele, "5 de 3 baixaram" seria possível.
+            let total = max(alunos, concluidos)
+            frase = alunos > 0 ? "\(concluidos) de \(total) baixaram"
                                : (concluidos == 1 ? "1 baixou" : "\(concluidos) baixaram")
         } else {
             switch alunos {

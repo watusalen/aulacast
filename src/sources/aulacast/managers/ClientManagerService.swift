@@ -5,6 +5,14 @@ import Foundation
 public final class ClientManagerService: ObservableObject {
     @Published public private(set) var clients: [ConnectedClient] = []
 
+    /// IPs de alunos que já se identificaram nesta aula, permanente: quem sai da lista
+    /// (`removeClient`) não sai daqui. É a base de "quantos alunos passaram pela aula",
+    /// usada para o denominador de "X de Y baixaram" (`SharedFilesPanelView`) não encolher
+    /// só porque alguém desconectou — antes o denominador era `identifiedClients.count`,
+    /// que caía junto com quem saía, fazendo um aluno que nunca baixou "desaparecer" da
+    /// conta em vez de continuar contando contra o professor.
+    private var ipsIdentificadosNaAula: Set<String> = []
+
     public init() {}
 
     /// Registra o aluno preservando o id da conexão. É esse id que o servidor usa depois
@@ -27,6 +35,7 @@ public final class ClientManagerService: ObservableObject {
         } else {
             // Quem chega por aqui já vem com nome de verdade, então já conta como identificado.
             addOrUpdateClient(ConnectedClient(name: name, ipAddress: ip, hasIdentified: true))
+            ipsIdentificadosNaAula.insert(ip)
         }
     }
 
@@ -48,6 +57,7 @@ public final class ClientManagerService: ObservableObject {
         guard !name.isEmpty else { return }
         clients[index].name = name
         clients[index].hasIdentified = true
+        ipsIdentificadosNaAula.insert(clients[index].ipAddress)
     }
 
     /// Levanta ou abaixa a mão de um aluno já conectado, identificado pela conexão.
@@ -103,5 +113,18 @@ public final class ClientManagerService: ObservableObject {
     /// Quantos alunos estão de fato com a transmissão à vista.
     public var watchingCount: Int {
         identifiedClients.filter { $0.isWatching }.count
+    }
+
+    /// Quantos alunos (por IP único) passaram pela aula até agora — permanente: não cai
+    /// quando alguém desconecta. Denominador de "X de Y baixaram" (`SharedFilesPanelView`).
+    public var totalIdentificadosNaAula: Int {
+        ipsIdentificadosNaAula.count
+    }
+
+    /// Zera o histórico permanente para uma aula nova. Chamado por `MainViewModel.
+    /// startStream()`: sem isto, a contagem de uma aula vazaria para a próxima transmitida
+    /// na mesma execução do app.
+    public func reiniciarHistoricoDaAula() {
+        ipsIdentificadosNaAula.removeAll()
     }
 }
