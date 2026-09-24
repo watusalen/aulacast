@@ -207,13 +207,12 @@ struct SourceCard: View {
                                 .transition(.scale.combined(with: .opacity))
                         }
                     }
-                    .overlay(alignment: .topLeading) {
+                    .overlay {
                         if isHidden {
-                            M3Icone(nome: "visibility_off", tamanho: 16)
+                            M3Icone(nome: "visibility_off", tamanho: 32)
                                 .foregroundColor(M3.onSurface)
-                                .padding(5)
+                                .padding(14)
                                 .background(Circle().fill(M3.surface))
-                                .padding(8)
                                 .transition(.scale.combined(with: .opacity))
                         }
                     }
