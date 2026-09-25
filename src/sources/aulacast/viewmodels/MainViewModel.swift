@@ -123,6 +123,13 @@ public final class MainViewModel: ObservableObject {
     nonisolated(unsafe) public let encoderService: VideoEncoderProtocol
     nonisolated(unsafe) public let serverService: NetworkServerProtocol
 
+    /// Caminho H.264/fMP4 em paralelo ao MJPEG (`encoderService`), enquanto o cliente não
+    /// decide sozinho qual dos dois usar — ver PLANO-COMPRESSAO-DE-VIDEO.md. Os dois recebem o
+    /// mesmo `CMSampleBuffer`; o aluno é quem escolhe a rota (`/stream` ou `/stream.mp4`), então
+    /// o servidor mantém as duas alimentadas o tempo todo.
+    nonisolated(unsafe) private let h264EncoderService = H264FrameEncoder()
+    nonisolated(unsafe) private let fmp4Packager = FMP4Packager()
+
     /// Mantém a transmissão viva quando o professor troca de Mesa ou muda de aplicativo.
     public let systemActivity: SystemActivityProtocol
 
@@ -182,6 +189,11 @@ public final class MainViewModel: ObservableObject {
         self.captureService.frameReceiver = self
         self.captureService.lifecycleObserver = self
         self.encoderService.outputReceiver = self
+        self.h264EncoderService.h264OutputReceiver = self.fmp4Packager
+        self.fmp4Packager.outputReceiver = self
+        self.serverService.onVideoViewerNeedsKeyFrame = { [weak self] in
+            self?.h264EncoderService.forceNextKeyFrame()
+        }
         self.serverService.chatObserver = self
         self.serverService.presenceObserver = self
         self.serverService.clientObserver = self
@@ -419,6 +431,7 @@ extension MainViewModel: FrameReceiverProtocol {
     /// adiciona latência e ainda segura os buffers do pool da captura.
     public nonisolated func didReceiveSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         encoderService.encode(sampleBuffer: sampleBuffer)
+        h264EncoderService.encode(sampleBuffer: sampleBuffer)
     }
 }
 
@@ -434,6 +447,16 @@ extension MainViewModel: EncodedFrameReceiverProtocol {
         Task { @MainActor in
             self.latestPreviewImage = NSImage(data: data)
         }
+    }
+}
+
+// MARK: - FMP4FragmentReceiverProtocol
+extension MainViewModel: FMP4FragmentReceiverProtocol {
+    public nonisolated func didReceiveFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool) {
+        // Mesmo portão do MJPEG: com a aula pausada, ninguém recebe atualização nova em
+        // nenhuma das duas rotas — é o que sustenta o "modo pausado" sem tratamento especial.
+        guard !streamState.isPaused else { return }
+        serverService.broadcastVideoFragment(data, isInitSegment: isInitSegment, isKeyFrame: isKeyFrame)
     }
 }
 

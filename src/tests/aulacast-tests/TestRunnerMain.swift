@@ -2311,7 +2311,7 @@ struct AulaCastTestRunner {
         // Desligado (comportamento atual): mensagem de aluno só chega ao próprio autor e ao
         // professor. Ligado: chega a toda a turma, sem duplicar o eco de quem escreveu
         // (broadcastChatMessage já inclui o remetente).
-        print("\n--- [30/30] Testes E2E: chat visível entre alunos ---")
+        print("\n--- [30/31] Testes E2E: chat visível entre alunos ---")
 
         let coletorChatTurma = ColetorDeChat()
         let servidorChatTurma = NetworkListenerService(port: 8122, webAssetsPath: FileManager.default.temporaryDirectory)
@@ -2443,6 +2443,219 @@ struct AulaCastTestRunner {
         } catch {
             assertTest(false, "Falha no teste E2E do chat visível entre alunos: \(error.localizedDescription)")
         }
+
+        // TESTE 31: pipeline H.264 + fMP4 (H264FrameEncoder, FMP4Packager, MP4StreamerService).
+        // Ver PLANO-COMPRESSAO-DE-VIDEO.md na raiz do repositório para o porquê de cada peça.
+        print("\n--- [31/31] Testes: codificação H.264 e empacotamento fMP4 ---")
+
+        final class ColetorDeAccessUnits: H264AccessUnitReceiverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _unidades: [H264AccessUnit] = []
+            var unidades: [H264AccessUnit] { trava.lock(); defer { trava.unlock() }; return _unidades }
+            func didReceiveAccessUnit(_ unit: H264AccessUnit) { trava.lock(); _unidades.append(unit); trava.unlock() }
+        }
+
+        // Tempo de parede de verdade, não um relógio sintético de 30fps: o encoder está em
+        // modo `RealTime`, e alimentá-lo com PTS que não batem com o intervalo real entre
+        // chamadas (o teste espera de propósito entre cada quadro) faz o controle de taxa
+        // interno tratar o quadro como fora de ordem/atrasado — e descartá-lo, sem erro.
+        let inicioDoTesteH264 = CFAbsoluteTimeGetCurrent()
+        func criarAmostraH264(indice: Int) -> CMSampleBuffer? {
+            let tempoSegundos = CFAbsoluteTimeGetCurrent() - inicioDoTesteH264
+            var buffer: CVPixelBuffer?
+            CVPixelBufferCreate(nil, 640, 480, kCVPixelFormatType_32BGRA,
+                                [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+            guard let buffer else { return nil }
+            // Conteúdo tem que MUDAR de um quadro para o outro: um encoder com predição entre
+            // quadros pode legitimamente não gerar saída nenhuma para um quadro idêntico ao
+            // anterior (é exatamente o ganho de banda que justifica trocar o MJPEG por isto —
+            // ver PLANO-COMPRESSAO-DE-VIDEO.md) — quadros em branco repetidos testariam esse
+            // comportamento, não a entrega de "vários quadros".
+            CVPixelBufferLockBaseAddress(buffer, [])
+            if let base = CVPixelBufferGetBaseAddress(buffer) {
+                let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+                memset(base, Int32((indice * 40 + 10) % 256), bytesPerRow * CVPixelBufferGetHeight(buffer))
+            }
+            CVPixelBufferUnlockBaseAddress(buffer, [])
+            var formato: CMVideoFormatDescription?
+            CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: buffer, formatDescriptionOut: &formato)
+            guard let formato else { return nil }
+            var tempo = CMSampleTimingInfo(
+                duration: CMTime(value: 1, timescale: 30),
+                presentationTimeStamp: CMTime(seconds: tempoSegundos, preferredTimescale: 600),
+                decodeTimeStamp: .invalid
+            )
+            var amostra: CMSampleBuffer?
+            CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: buffer, formatDescription: formato,
+                                                     sampleTiming: &tempo, sampleBufferOut: &amostra)
+            return amostra
+        }
+
+        let coletorAU = ColetorDeAccessUnits()
+        let encoderH264 = H264FrameEncoder()
+        encoderH264.h264OutputReceiver = coletorAU
+
+        // 15 quadros, não 5: o encoder de baixa latência segura um pequeno buffer de partida
+        // (poucos quadros sem devolver nada) antes de entrar em regime — um teste curto demais
+        // mediria só esse aquecimento, não a entrega em regime permanente.
+        for indice in 0..<15 {
+            if let amostra = criarAmostraH264(indice: indice) {
+                encoderH264.encode(sampleBuffer: amostra)
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+
+        let unidades = coletorAU.unidades
+        assertTest(unidades.count >= 8, "O encoder H.264 entrega vários quadros em regime (recebidos: \(unidades.count) de 15)")
+        assertTest(unidades.first?.isKeyFrame == true, "O primeiro quadro do encoder H.264 é sempre quadro-chave")
+
+        func contemNAL(_ dados: Data, tipo: UInt8) -> Bool {
+            let startCode = Data([0, 0, 0, 1])
+            var indice = dados.startIndex
+            while let intervalo = dados.range(of: startCode, in: indice..<dados.endIndex) {
+                if intervalo.upperBound < dados.endIndex, dados[intervalo.upperBound] & 0x1F == tipo { return true }
+                indice = intervalo.upperBound
+            }
+            return false
+        }
+        if let primeira = unidades.first {
+            assertTest(contemNAL(primeira.data, tipo: 7), "O quadro-chave inclui o SPS em Annex-B")
+            assertTest(contemNAL(primeira.data, tipo: 8), "O quadro-chave inclui o PPS em Annex-B")
+        }
+
+        // O empacotador fMP4 encadeado no mesmo encoder: init segment primeiro, fragmentos depois.
+        final class ColetorDeFragmentos: FMP4FragmentReceiverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _fragmentos: [(data: Data, isInitSegment: Bool, isKeyFrame: Bool)] = []
+            var fragmentos: [(data: Data, isInitSegment: Bool, isKeyFrame: Bool)] {
+                trava.lock(); defer { trava.unlock() }; return _fragmentos
+            }
+            func didReceiveFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool) {
+                trava.lock(); _fragmentos.append((data, isInitSegment, isKeyFrame)); trava.unlock()
+            }
+        }
+
+        let coletorFrag = ColetorDeFragmentos()
+        let empacotador = FMP4Packager()
+        empacotador.outputReceiver = coletorFrag
+        for unidade in unidades { empacotador.didReceiveAccessUnit(unidade) }
+
+        let fragmentos = coletorFrag.fragmentos
+        assertTest(fragmentos.first?.isInitSegment == true, "O primeiro fragmento entregue é o init segment")
+        if let initSegment = fragmentos.first?.data, initSegment.count > 8 {
+            assertTest(initSegment.subdata(in: 4..<8) == Data("ftyp".utf8),
+                       "O init segment começa com uma caixa ftyp válida")
+            assertTest(initSegment.range(of: Data("moov".utf8)) != nil, "O init segment contém uma caixa moov")
+        }
+        let fragmentosDeQuadro = fragmentos.drop(while: { $0.isInitSegment })
+        assertTest(fragmentosDeQuadro.count >= 1, "Pelo menos um fragmento moof+mdat foi entregue")
+        if let primeiroFragmento = fragmentosDeQuadro.first?.data, primeiroFragmento.count > 8 {
+            assertTest(primeiroFragmento.subdata(in: 4..<8) == Data("moof".utf8), "O fragmento começa com uma caixa moof")
+            assertTest(primeiroFragmento.range(of: Data("mdat".utf8)) != nil, "O fragmento contém uma caixa mdat")
+        }
+
+        // A rota /stream.mp4 entrega o init segment e os fragmentos publicados, na ordem — mesmo
+        // padrão de teste usado para /stream (ver TESTE 22).
+        let servidorMP4 = NetworkListenerService(port: 8130, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorMP4.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(UInt16(8130).bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            var espera = timeval(tv_sec: 1, tv_usec: 0)
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &espera, socklen_t(MemoryLayout<timeval>.size))
+            _ = "GET /stream.mp4 HTTP/1.1\r\nHost: x\r\n\r\n".withCString { send(fd, $0, strlen($0), 0) }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+
+            let initSegmentDeTeste = Data("ftyp-fake-init".utf8)
+            servidorMP4.broadcastVideoFragment(initSegmentDeTeste, isInitSegment: true, isKeyFrame: true)
+            let fragmentoDeTeste = Data("moof-fake-fragment".utf8)
+            servidorMP4.broadcastVideoFragment(fragmentoDeTeste, isInitSegment: false, isKeyFrame: true)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            var recebido = Data()
+            var pedaco = [UInt8](repeating: 0, count: 65536)
+            while true {
+                let n = recv(fd, &pedaco, pedaco.count, MSG_DONTWAIT)
+                if n <= 0 { break }
+                recebido.append(contentsOf: pedaco[0..<n])
+            }
+            let texto = String(data: recebido, encoding: .isoLatin1) ?? ""
+            assertTest(texto.contains("Content-Type: video/mp4"), "/stream.mp4 responde com Content-Type: video/mp4")
+            assertTest(recebido.range(of: initSegmentDeTeste) != nil, "/stream.mp4 entrega o init segment publicado")
+            assertTest(recebido.range(of: fragmentoDeTeste) != nil, "/stream.mp4 entrega o fragmento publicado")
+            if let intervaloInit = recebido.range(of: initSegmentDeTeste),
+               let intervaloFrag = recebido.range(of: fragmentoDeTeste) {
+                assertTest(intervaloInit.lowerBound < intervaloFrag.lowerBound, "O init segment chega antes do fragmento")
+            }
+
+            close(fd)
+            servidorMP4.stop()
+        } catch {
+            assertTest(false, "Falha no teste da rota /stream.mp4: \(error.localizedDescription)")
+        }
+
+        // Uma conexão nova chegando pede um quadro-chave ao encoder ativo, para o aluno não
+        // ficar sem imagem até o próximo quadro-chave "de rotina".
+        final class ContadorDePedidos: @unchecked Sendable {
+            private let trava = NSLock()
+            private var _pedidos = 0
+            func pedir() { trava.lock(); _pedidos += 1; trava.unlock() }
+            var pedidos: Int { trava.lock(); defer { trava.unlock() }; return _pedidos }
+        }
+        let servidorKeyFrame = NetworkListenerService(port: 8131, webAssetsPath: FileManager.default.temporaryDirectory)
+        let contadorPedidos = ContadorDePedidos()
+        servidorKeyFrame.onVideoViewerNeedsKeyFrame = { contadorPedidos.pedir() }
+        do {
+            try servidorKeyFrame.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd2 = socket(AF_INET, SOCK_STREAM, 0)
+            var destino2 = sockaddr_in()
+            destino2.sin_family = sa_family_t(AF_INET)
+            destino2.sin_port = in_port_t(UInt16(8131).bigEndian)
+            destino2.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino2) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd2, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            _ = "GET /stream.mp4 HTTP/1.1\r\nHost: x\r\n\r\n".withCString { send(fd2, $0, strlen($0), 0) }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            assertTest(contadorPedidos.pedidos >= 1, "Conexão nova em /stream.mp4 pede quadro-chave ao encoder")
+            close(fd2)
+            servidorKeyFrame.stop()
+        } catch {
+            assertTest(false, "Falha no teste de pedido de quadro-chave: \(error.localizedDescription)")
+        }
+
+        // Pausa: nenhum fragmento novo sai para a turma, no mesmo portão que já protege o
+        // MJPEG (ver TESTE 10, "prévia da transmissão").
+        let servidorDaPausaMP4 = FakeServer()
+        let vmPausaMP4 = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: servidorDaPausaMP4,
+            advertiserService: FakeAdvertiser()
+        )
+        let fragmentoDePausa = Data("fragmento-de-teste".utf8)
+        vmPausaMP4.didReceiveFragment(fragmentoDePausa, isInitSegment: false, isKeyFrame: true)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(servidorDaPausaMP4.fragmentosEnviados.count == 1, "Sem pausa, o fragmento chega à turma")
+
+        vmPausaMP4.togglePause()
+        vmPausaMP4.didReceiveFragment(fragmentoDePausa, isInitSegment: false, isKeyFrame: true)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(
+            servidorDaPausaMP4.fragmentosEnviados.count == 1,
+            "Em pausa, nenhum fragmento novo de vídeo H.264 chega à turma"
+        )
+        vmPausaMP4.togglePause()
 
         // SUMÁRIO FINAL
         print("\n==========================================")

@@ -75,6 +75,13 @@
           <!-- O vigia do vídeo insere aqui, logo depois da imagem, o `.stream-congelado`
                que segura o último quadro quando a conexão cai. -->
 
+          <!-- H.264/fMP4 (ver PLANO-COMPRESSAO-DE-VIDEO.md): mesma classe `.stream` do <img>
+               acima, então mesma caixa e o mesmo mecanismo de mostrar (`.active`). Fica depois
+               do <img> no HTML de propósito — com os dois marcados `.active`, este cobre o
+               MJPEG por trás, sem precisar escondê-lo. Sem áudio (a transmissão é só tela),
+               daí `muted` para o autoplay funcionar sem gesto do aluno. -->
+          <video id="videoStreamMP4" class="stream" muted playsinline autoplay></video>
+
           <div id="placeholder" class="placeholder">
             <span class="icone placeholder-icon" aria-hidden="true">&#xE0DF;</span>
             <p class="placeholder-title">Aguardando transmissão</p>
