@@ -142,6 +142,11 @@ public final class MainViewModel: ObservableObject {
 
     public let chatManager: ChatManagerService
     public let clientManager: ClientManagerService
+    /// Tempo de cada aluno na aula (RF-20).
+    public let ledger: AttendanceLedger
+
+    /// Aluno cujo painel de tempo está aberto (id da conexão); `nil` com o painel fechado.
+    @Published public var alunoAberto: String?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -169,7 +174,8 @@ public final class MainViewModel: ObservableObject {
         permission: ScreenRecordingPermissionProtocol = ScreenRecordingPermissionService(),
         hostnameService: HostnameAdvertisingProtocol = MDNSHostnameService(),
         chatManager: ChatManagerService = ChatManagerService(),
-        clientManager: ClientManagerService = ClientManagerService()
+        clientManager: ClientManagerService = ClientManagerService(),
+        ledger: AttendanceLedger = AttendanceLedger()
     ) {
         self.captureService = captureService
         self.encoderService = encoderService
@@ -182,6 +188,7 @@ public final class MainViewModel: ObservableObject {
         self.mdnsService = hostnameService
         self.chatManager = chatManager
         self.clientManager = clientManager
+        self.ledger = ledger
 
         // Encadeia objectWillChange dos sub-managers para que a UI reaja a mudancas internas
         chatManager.objectWillChange
@@ -376,6 +383,8 @@ public final class MainViewModel: ObservableObject {
                 }
                 self.isPaused = false
                 self.pausadoPorqueAJanelaSumiu = false
+                ledger.reset()
+                ledger.setAccruing(true)
                 self.streamState.reset()
                 self.streamStartedAt = Date()
                 self.updateServerURL()
@@ -418,6 +427,7 @@ public final class MainViewModel: ObservableObject {
             // Sessão seguinte começa do zero (o empacotador já foi zerado acima).
             self.h264EncoderService.forceNextKeyFrame()
             self.systemActivity.endTransmission()
+            self.ledger.setAccruing(false)
             self.isStreaming = false
             self.isSessionOpen = false
             self.isPaused = false
@@ -439,6 +449,7 @@ public final class MainViewModel: ObservableObject {
     private func alternarPausa() {
         isPaused.toggle()
         streamState.setPaused(isPaused)
+        ledger.setAccruing(!isPaused)
         // Ao retomar, o primeiro quadro tem de ser um quadro-chave: a referência dos alunos é a
         // de antes da pausa, e a tela pode ser outra.
         if !isPaused { h264EncoderService.forceNextKeyFrame() }
@@ -564,6 +575,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // minuto depois da queda, o Mac dormia, todas as conexões caíam e os alunos iam
         // para "Reconectando" enquanto o professor ainda estava lendo o aviso do erro.
         // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
+        ledger.setAccruing(false)
         isStreaming = false
         isPaused = false
         pausadoPorqueAJanelaSumiu = false
@@ -623,12 +635,14 @@ extension MainViewModel: StudentPresenceObserverProtocol {
     public nonisolated func didIdentifyStudent(clientId: String, name: String) {
         Task { @MainActor in
             self.clientManager.identify(clientId: clientId, name: name)
+            self.ledger.identified(clientId: clientId, name: name)
         }
     }
 
     public nonisolated func didChangeWatching(clientId: String, isWatching: Bool) {
         Task { @MainActor in
             self.clientManager.setWatching(clientId: clientId, isWatching: isWatching)
+            self.ledger.visibility(clientId: clientId, visible: isWatching)
         }
     }
 }
@@ -640,12 +654,15 @@ extension MainViewModel: ClientObserverProtocol {
             // Preserva o id vindo do handshake: é a chave usada para identificar o aluno e
             // levantar a mão depois.
             self.clientManager.addOrUpdateClient(client)
+            self.ledger.connected(clientId: client.id, ip: client.ipAddress, visible: client.isWatching)
         }
     }
 
     public nonisolated func didClientDisconnect(clientId: String) {
         Task { @MainActor in
             self.clientManager.removeClient(id: clientId)
+            self.ledger.disconnected(clientId: clientId)
+            if self.alunoAberto == clientId { self.alunoAberto = nil }
         }
     }
 }

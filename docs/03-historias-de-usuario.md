@@ -251,3 +251,15 @@ Cenário: Aluno com sinal fraco
   Então a imagem dele pode ficar com menos qualidade ou fps
   Mas os outros 39 alunos não devem ser prejudicados.
 ```
+
+---
+
+### US-14: Tempo do aluno na aula (Proposto)
+Como professor, quero ver quanto tempo cada aluno ficou na aula e com ela à vista, para saber quem acompanhou. Liga a RF-20 e UC-10.
+```gherkin
+Cenário: Painel do aluno
+  Dado que o aluno Ana está conectada e a transmissão corre
+  Quando o professor clica na linha dela
+  Então vê "Na aula", "Com a aula à vista", a porcentagem, as saídas, o maior trecho sem sair e as desconexões e voltas
+  E durante uma pausa os tempos não avançam.
+```

@@ -160,3 +160,14 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
 - **Fluxos Alternativos:**
   - *FA-01 (Mostrar de novo):* O mesmo menu oferece **Mostrar na transmissão**.
 - **Regra de negócio:** só vale com o monitor como fonte (com uma janela como fonte não há o que ocultar). A escolha não é guardada entre execuções (RF-19, **Proposto — já implementado na main**).
+
+---
+
+### UC-10: Ver o tempo de um aluno na aula (Proposto)
+- **Ator Principal:** Professor
+- **Pré-condição:** Aluno conectado e identificado (RF-20).
+- **Fluxo Principal:**
+  1. O professor clica em qualquer parte da linha do aluno na aba **Alunos**.
+  2. O sistema abre um painel centrado na janela, atualizado a cada segundo.
+  3. O professor fecha com Esc, clicando fora ou no botão de fechar.
+- **Regra de negócio:** o painel fecha sozinho se o aluno desconectar. Regras de contagem e identidade: ADR-005.

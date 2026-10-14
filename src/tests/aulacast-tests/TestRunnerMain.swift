@@ -3425,6 +3425,118 @@ struct AulaCastTestRunner {
         assertTest(soltoCand.first?.path == "/Users/prof/AulaCast/src/web-assets",
                    "Rodando solto (swift run), a pasta de trabalho continua sendo a primeira")
 
+        print("\n--- [37/37] Testes de Domínio: tempo de cada aluno na aula (RF-20) ---")
+
+        let base0 = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        func emp(_ s: TimeInterval) -> Date { base0.addingTimeInterval(s) }
+        func resumoDe(_ l: AttendanceLedger, _ id: String, _ s: TimeInterval) -> AttendanceSummary? {
+            l.resumo(clientId: id, agora: emp(s))
+        }
+
+        // Só conta com a aula correndo.
+        let lAntes = AttendanceLedger(clock: { base0 })
+        lAntes.connected(clientId: "a", ip: "10.0.0.1", at: emp(0))
+        assertTest(resumoDe(lAntes, "a", 30)?.naAula == 0, "Antes de transmitir nada é contado")
+        lAntes.setAccruing(true, at: emp(30))
+        assertTest(resumoDe(lAntes, "a", 40)?.naAula == 10, "Quem já estava conectado começa a contar quando a transmissão começa")
+
+        // Totais, pausa, visível/oculto, saídas e maior trecho.
+        let l = AttendanceLedger(clock: { base0 })
+        l.setAccruing(true, at: emp(0))
+        l.connected(clientId: "a", ip: "10.0.0.1", at: emp(0))
+        l.identified(clientId: "a", name: "Ana", at: emp(0))
+        l.visibility(clientId: "a", visible: false, at: emp(10))
+        l.visibility(clientId: "a", visible: true, at: emp(20))
+        var r = resumoDe(l, "a", 50)
+        assertTest(r?.naAula == 50 && r?.aVista == 40, "Na aula 50 s, à vista 40 s (10 s em outra aba)")
+        assertTest(r?.saidas == 1, "Uma saída: visível para oculto")
+        assertTest(r?.maiorTrecho == 30, "Maior trecho = 30 s (o trecho atual, ainda aberto)")
+        l.setAccruing(false, at: emp(50))
+        assertTest(resumoDe(l, "a", 500)?.naAula == 50, "Em pausa o relógio congela nos dois totais")
+        l.setAccruing(true, at: emp(500))
+        r = resumoDe(l, "a", 510)
+        assertTest(r?.naAula == 60 && r?.aVista == 50, "Depois da pausa volta a somar do ponto em que parou")
+        assertTest(r?.maiorTrecho == 40, "A pausa não quebra o trecho contínuo (30 + 10 = 40 s)")
+        assertTest(formatarDuracao(0) == "0 s" && formatarDuracao(59) == "59 s", "formatarDuracao: 0 s e 59 s")
+        assertTest(formatarDuracao(61) == "1 min 01 s", "formatarDuracao: 61 s")
+        assertTest(formatarDuracao(42 * 60 + 10) == "42 min 10 s", "formatarDuracao: 42 min 10 s")
+        assertTest(formatarDuracao(3720) == "1 h 02 min", "formatarDuracao: 1 h 02 min")
+        assertTest(resumoDe(l, "a", 510)?.fracaoAVista == 50.0 / 60.0, "Fração à vista / na aula")
+        assertTest(AttendanceLedger(clock: { base0 }).resumo(clientId: "x") == nil, "Aluno desconhecido não tem resumo")
+
+        // Saída ao desconectar visível; mesmo IP com outro nome é a mesma pessoa (1 desconexão).
+        let lIP = AttendanceLedger(clock: { base0 })
+        lIP.setAccruing(true, at: emp(0))
+        lIP.connected(clientId: "c1", ip: "10.0.0.5", at: emp(0))
+        lIP.identified(clientId: "c1", name: "Ana", at: emp(0))
+        lIP.disconnected(clientId: "c1", at: emp(10))
+        lIP.connected(clientId: "c2", ip: "10.0.0.5", at: emp(20))
+        lIP.identified(clientId: "c2", name: "Aninha", at: emp(20))
+        let rIP = resumoDe(lIP, "c2", 30)
+        assertTest(rIP?.desconexoes == 1 && rIP?.saidas == 1, "Mesmo IP, outro nome: mesma pessoa, 1 desconexão e 1 saída")
+        assertTest(rIP?.naAula == 20 && rIP?.nome == "Aninha", "Soma os dois períodos (10 + 10 s) e mostra o nome mais recente")
+
+        // Nome igual com outro IP, sem conexão aberta: junta. Com conexão aberta: homônimos.
+        let lNome = AttendanceLedger(clock: { base0 })
+        lNome.setAccruing(true, at: emp(0))
+        lNome.connected(clientId: "n1", ip: "10.0.0.7", at: emp(0))
+        lNome.identified(clientId: "n1", name: "José Álvares", at: emp(0))
+        lNome.disconnected(clientId: "n1", at: emp(10))
+        lNome.connected(clientId: "n2", ip: "10.0.0.8", at: emp(20))
+        lNome.identified(clientId: "n2", name: "  jose   ALVARES ", at: emp(20))
+        let rNome = resumoDe(lNome, "n2", 25)
+        assertTest(rNome?.desconexoes == 1 && rNome?.naAula == 15, "Mesmo nome (sem acento/caixa/espaços), outro IP: junta (10 + 5 s)")
+
+        let lHom = AttendanceLedger(clock: { base0 })
+        lHom.setAccruing(true, at: emp(0))
+        lHom.connected(clientId: "h1", ip: "10.0.0.1", at: emp(0))
+        lHom.identified(clientId: "h1", name: "Maria", at: emp(0))
+        lHom.connected(clientId: "h2", ip: "10.0.0.2", at: emp(5))
+        lHom.identified(clientId: "h2", name: "maria", at: emp(5))
+        assertTest(resumoDe(lHom, "h1", 10)?.naAula == 10 && resumoDe(lHom, "h2", 10)?.naAula == 5,
+                   "Homônimos em IPs diferentes ao mesmo tempo são duas pessoas")
+
+        // Duas abas da mesma pessoa não contam em dobro.
+        let lAbas = AttendanceLedger(clock: { base0 })
+        lAbas.setAccruing(true, at: emp(0))
+        lAbas.connected(clientId: "t1", ip: "10.0.0.9", at: emp(0))
+        lAbas.connected(clientId: "t2", ip: "10.0.0.9", at: emp(0))
+        lAbas.visibility(clientId: "t2", visible: false, at: emp(5))
+        let rAbas = resumoDe(lAbas, "t1", 10)
+        assertTest(rAbas?.naAula == 10 && rAbas?.aVista == 10, "Duas abas contam uma vez; uma visível basta para estar à vista")
+        assertTest(rAbas?.saidas == 0 && rAbas?.desconexoes == 0, "Esconder uma de duas abas não é saída nem desconexão")
+
+        // reset: mantém conectados, zera números, esquece quem saiu.
+        let lRes = AttendanceLedger(clock: { base0 })
+        lRes.setAccruing(true, at: emp(0))
+        lRes.connected(clientId: "r1", ip: "10.0.0.1", at: emp(0))
+        lRes.connected(clientId: "r2", ip: "10.0.0.2", at: emp(0))
+        lRes.disconnected(clientId: "r2", at: emp(5))
+        lRes.reset(at: emp(10))
+        assertTest(resumoDe(lRes, "r1", 10)?.naAula == 0, "reset zera os números de quem segue conectado")
+        assertTest(resumoDe(lRes, "r1", 14)?.naAula == 4, "reset mantém quem estava conectado e continua contando")
+        lRes.connected(clientId: "r3", ip: "10.0.0.2", at: emp(20))
+        assertTest(resumoDe(lRes, "r3", 20)?.desconexoes == 0, "reset esquece quem tinha saído (volta como pessoa nova)")
+
+        // alunoAberto: abre e fecha sozinho quando o aluno desconecta.
+        let vmLedger = MainViewModel(
+            captureService: FakeCaptureService(),
+            encoderService: FakeEncoder(),
+            serverService: FakeServer(),
+            advertiserService: FakeAdvertiser(),
+            systemActivity: FakeSystemActivity(),
+            permission: FakePermission(concedida: true),
+            hostnameService: FakeHostname()
+        )
+        let alunoPainel = ConnectedClient(id: "painel-1", name: "Aluno", ipAddress: "10.0.0.50")
+        vmLedger.didClientConnect(alunoPainel)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        vmLedger.alunoAberto = "painel-1"
+        assertTest(vmLedger.ledger.resumo(clientId: "painel-1")?.ip == "10.0.0.50", "O ledger do ViewModel recebe a conexão")
+        vmLedger.didClientDisconnect(clientId: "painel-1")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmLedger.alunoAberto == nil, "Quando o aluno desconecta, o painel dele fecha")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
