@@ -112,6 +112,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
             }
         }
         ultimoPedidoDeKeyFrame = agora
+        pedidosAtendidos += 1
         keyFrameLock.unlock()
         onNeedsKeyFrame?()
     }
@@ -120,8 +121,24 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         keyFrameLock.lock()
         pedidoAdiado = false
         ultimoPedidoDeKeyFrame = DispatchTime.now()
+        pedidosAtendidos += 1
         keyFrameLock.unlock()
         onNeedsKeyFrame?()
+    }
+
+    private var pedidosAtendidos = 0
+    private var estourosDaFila = 0
+
+    /// Pedidos de quadro-chave efetivamente repassados ao encoder, desde o início (só cresce).
+    public var pedidosDeQuadroChave: Int {
+        keyFrameLock.lock(); defer { keyFrameLock.unlock() }
+        return pedidosAtendidos
+    }
+
+    /// Vezes em que a fila de um aluno lento foi descartada, desde o início (só cresce).
+    public var estourosDeFila: Int {
+        keyFrameLock.lock(); defer { keyFrameLock.unlock() }
+        return estourosDaFila
     }
 
     // MARK: - Contadores
@@ -348,6 +365,9 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
                     // Aluno que não acompanha: descarta tudo. Um quadro-chave já serve de ponto
                     // de ressincronização; um P-frame não, então espera o próximo.
                     estado.descartarMidia()
+                    keyFrameLock.lock()
+                    estourosDaFila += 1
+                    keyFrameLock.unlock()
                     if !isKeyFrame {
                         estado.aguardandoKeyFrame = true
                         precisaDeKeyFrame = true

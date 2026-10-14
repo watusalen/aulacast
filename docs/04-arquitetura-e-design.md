@@ -226,6 +226,18 @@ mensagem do aluno a toda a turma, sem duplicar para o autor (`WebSocketHandlerSe
 { "type": "CHAT_VISIBILITY", "payload": { "visible": "true" } }
 ```
 
+#### 3.13. Métricas (`METRICS` / `METRICS_TABLE`)
+**Só existe em build de depuração ou com `-DMETRICAS_DEBUG`** (`AULACAST_DEBUG_METRICS=1 scripts/build-app.sh`; `MetricasDebug.ativo`). Num build normal o `CONNECTED` não traz `metricas: "true"`, o navegador fica totalmente ocioso e o servidor ignora `METRICS`.
+
+Cada 5 s o navegador manda a própria medição; o servidor (só de aluno já identificado) valida, guarda a última por conexão e, no mesmo relógio de 5 s do `[Métricas]`, manda a tabela a todos. **Todos veem os números e os nomes de todos, por decisão do usuário**; aparecem só no console (DevTools), nunca na página.
+```json
+{ "type": "METRICS", "payload": { "rota": "H.264", "fps": 29.5, "mbps": 2.25, "dropped": 2, "lagMs": 150 } }
+{ "type": "METRICS_TABLE", "payload": { "alunos": 2, "alunosH264": 1, "alunosMJPEG": 1, "telaFps": 30, "mediaFps": 28, "minimoFps": 25, "mbps": 4.2,
+  "rows": [ { "nome": "Ana", "rota": "H.264", "fps": 29.5, "mbps": 2.25, "dropped": 2, "lagMs": 150, "reportadoHa": 1.2 } ] } }
+```
+Validação: chaves conhecidas, `rota` em {`H.264`,`MJPEG`}, números finitos limitados (fps 0-240, mbps 0-1000, dropped >= 0, lagMs 0-3600000), 1 mensagem aceita por segundo por cliente, até 100 linhas; a linha some na desconexão. Na rota MJPEG o navegador não mede por quadro: manda só a rota e os números vão `null`.
+Arquivo da sessão (também só no modo de depuração): `~/AulaCast-metricas/sessao-AAAAMMDD-HHmmss.jsonl`, um JSON por linha (`inicio`, `amostra` a cada 5 s com alunos conectados, `entrada`, `saida`, `fim`), limitado a ~20 MB (`truncado`).
+
 ---
 
 ### 4. Diagrama de Sequência: Fluxo de Transmissão & Interação

@@ -121,7 +121,23 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         listener.start(queue: .global(qos: .userInteractive))
         self.isRunning = true
         iniciarMedicao()
+        iniciarArquivoDeMetricas()
     }
+
+    /// Pasta do arquivo da sessão (só com `MetricasDebug.ativo`); os testes trocam por uma temporária.
+    public var diretorioDeMetricas: URL = MetricsFileLogger.diretorioPadrao
+    private var arquivoDeMetricas: MetricsFileLogger?
+
+    private func iniciarArquivoDeMetricas() {
+        guard MetricasDebug.ativo else { return }
+        let arquivo = MetricsFileLogger(diretorio: diretorioDeMetricas)
+        arquivo.iniciar(porta: port)
+        arquivoDeMetricas = arquivo
+        webSocketHandler.onEventoDeAluno = { [weak arquivo] tipo, nome in arquivo?.registrarEvento(tipo, nome: nome) }
+    }
+
+    /// Caminho do arquivo `.jsonl` da sessão atual (`nil` fora do modo de depuração ou sem acesso ao disco).
+    public var caminhoDoArquivoDeMetricas: URL? { arquivoDeMetricas?.arquivo }
 
     // MARK: - Medição do vídeo
 
@@ -168,14 +184,40 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             // que passou de verdade, e não pelos 5 s nominais, mantém a taxa honesta.
             let segundos = Double(agora.uptimeNanoseconds - instanteAnterior.uptimeNanoseconds) / 1_000_000_000
             defer { anterior = atual; instanteAnterior = agora }
-            guard let taxa = StreamRates.entre(anterior, e: atual, segundos: segundos),
-                  taxa.alunos > 0 else { return }
-            print(String(format: "[Métricas] %d alunos (H.264 %d / MJPEG %d) | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
-                         taxa.alunos, self.mp4StreamerService.activeStreamCount, self.streamerService.activeStreamCount,
-                         taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
+            guard let taxa = StreamRates.entre(anterior, e: atual, segundos: segundos) else { return }
+            self.publicarMetricas(taxa)
         }
         timer.resume()
         medidor = timer
+    }
+
+    /// Manda `METRICS_TABLE` aos navegadores e escreve no log a linha `[Métricas]` seguida das
+    /// linhas por aluno. O log fica quieto sem alunos com vídeo.
+    public func publicarMetricas(_ taxa: StreamRates) {
+        let resumo: [String: Any] = [
+            "alunos": taxa.alunos,
+            "alunosH264": mp4StreamerService.activeStreamCount,
+            "alunosMJPEG": streamerService.activeStreamCount,
+            "telaFps": taxa.fpsDaTela,
+            "mediaFps": taxa.fpsMedioPorAluno,
+            "minimoFps": taxa.fpsMinimoPorAluno,
+            "mbps": taxa.megabitsPorSegundo
+        ]
+        let linhas = webSocketHandler.broadcastMetricsTable(resumo: resumo)
+        if !linhas.isEmpty || taxa.alunos > 0 {
+            arquivoDeMetricas?.registrarAmostra(
+                alunos: taxa.alunos, h264: mp4StreamerService.activeStreamCount, mjpeg: streamerService.activeStreamCount,
+                telaFps: taxa.fpsDaTela, mediaFps: taxa.fpsMedioPorAluno, minFps: taxa.fpsMinimoPorAluno,
+                mbpsTotal: taxa.megabitsPorSegundo, estourosDeFila: mp4StreamerService.estourosDeFila,
+                pedidosDeQuadroChave: mp4StreamerService.pedidosDeQuadroChave, detalhe: linhas)
+        }
+        guard taxa.alunos > 0 else { return }
+        print(String(format: "[Métricas] %d alunos (H.264 %d / MJPEG %d) | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
+                     taxa.alunos, mp4StreamerService.activeStreamCount, streamerService.activeStreamCount,
+                     taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
+        for l in linhas {
+            print("[Métricas]   \(l["nome"] ?? "?") | \(l["rota"] ?? "?") | fps \(l["fps"] ?? "-") | Mbps \(l["mbps"] ?? "-") | perdidos \(l["dropped"] ?? "-") | atraso \(l["lagMs"] ?? "-") ms")
+        }
     }
 
     public func definirAnuncio(_ servico: NWListener.Service?) {
@@ -186,6 +228,9 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     public func stop() {
         medidor?.cancel()
         medidor = nil
+        arquivoDeMetricas?.encerrar()
+        arquivoDeMetricas = nil
+        webSocketHandler.onEventoDeAluno = nil
         self.listener?.cancel()
         self.listener = nil
 

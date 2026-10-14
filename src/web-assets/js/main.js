@@ -3,6 +3,7 @@ import { UIController } from './ui-controller.js';
 import { ChatManager } from './chat-manager.js';
 import { EntryGate } from './entry-gate.js';
 import { PresenceReporter } from './presence-reporter.js';
+import { MetricsReporter } from './metrics-reporter.js';
 import { FilesList } from './files-list.js';
 import { MaoLevantada } from './raise-hand.js';
 import { ManterTelaAcesa } from './manter-tela-acesa.js';
@@ -68,6 +69,17 @@ export class AulaCastApp {
 
     this.presence = new PresenceReporter((mensagem) => this.socket.send(mensagem));
 
+    /** 'live' | 'paused' | 'ended': as métricas só correm com a aula ao vivo. */
+    this.estadoDaTransmissao = 'live';
+    this.metricas = new MetricsReporter({
+      enviar: (mensagem) => this.socket.send(mensagem),
+      ativo: () => Boolean(this.identidade) && this.socket.isConnected() && this.estadoDaTransmissao === 'live',
+      // Depois do fallback a rota é MJPEG, em que o navegador não mede nada.
+      lerEstatisticas: () => (this.videoPlayer && !this.h264Desistiu
+        ? this.videoPlayer.estatisticas()
+        : { rota: 'MJPEG' })
+    });
+
     this.mao = new MaoLevantada(
       document.getElementById('raiseHandBtn'),
       (mensagem) => this.socket.send(mensagem)
@@ -91,6 +103,7 @@ export class AulaCastApp {
 
   entrarNaAula(identidade, { porGesto = false } = {}) {
     this.identidade = identidade;
+    this.metricas.iniciar();
     this.ui.setStudentName(identidade.name);
 
     // O navegador só deixa manter a tela acesa a partir de um gesto do usuário. No envio
@@ -145,6 +158,9 @@ export class AulaCastApp {
       // Quem entra no meio da aula precisa saber como o chat está agora, e não só
       // quando o professor mexer no botão da próxima vez.
       case 'CONNECTED':
+        // Métricas só existem em build de depuração do servidor: sem o aviso, o módulo fica ocioso.
+        this.metricas.definirHabilitado(Boolean(data.payload) && data.payload.metricas === 'true');
+        if (this.identidade) this.metricas.iniciar();
         if (data.payload && typeof data.payload.chatEnabled === 'boolean') {
           this.chatManager.setEnabled(data.payload.chatEnabled);
         }
@@ -189,6 +205,11 @@ export class AulaCastApp {
         if (this.mao.abaixadaPeloProfessor()) this.chatManager.mostrarMaoAbaixada();
         break;
 
+      // Tabela da turma (servidor + todos os alunos): só vai para o console do navegador.
+      case 'METRICS_TABLE':
+        this.metricas.aoReceberTabela(data.payload);
+        break;
+
       case 'IDENTIFY_REJECTED':
         this.entryGate.reabrirComErro(data.payload && data.payload.reason);
         break;
@@ -207,6 +228,7 @@ export class AulaCastApp {
       // Sem tratar isto, quem recebeu um STREAM_ENDED antes ficava preso no aviso de
       // aula encerrada até recarregar a página.
       case 'STREAM_STARTED':
+        this.estadoDaTransmissao = 'live';
         this.ui.showStreaming();
         this.videoPlayer?.definirPausado?.(false);
         this.iniciarH264();
@@ -214,11 +236,13 @@ export class AulaCastApp {
 
       // Pausada, o servidor não manda nada: o player não pode ler isso como queda.
       case 'STREAM_PAUSED':
+        this.estadoDaTransmissao = 'paused';
         this.ui.showPaused();
         this.videoPlayer?.definirPausado?.(true);
         break;
 
       case 'STREAM_RESUMED':
+        this.estadoDaTransmissao = 'live';
         this.ui.hidePaused();
         this.videoPlayer?.definirPausado?.(false);
         break;
@@ -226,6 +250,7 @@ export class AulaCastApp {
       // A captura do professor caiu (monitor desconectado, permissão revogada, erro do
       // sistema). Sem este aviso o aluno ficaria olhando o último quadro congelado.
       case 'STREAM_ENDED':
+        this.estadoDaTransmissao = 'ended';
         this.ui.showStreamEnded(data.payload && data.payload.reason);
         this.videoPlayer?.stop();
         break;
@@ -253,6 +278,7 @@ export class AulaCastApp {
    */
   aplicarEstadoDaTransmissao(payload) {
     if (!payload || !payload.stream) return;
+    this.estadoDaTransmissao = payload.stream;
     switch (payload.stream) {
       case 'paused':
         this.ui.showStreaming();

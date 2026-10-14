@@ -44,6 +44,11 @@ public final class WebSocketHandlerService {
     /// dos arquivos: quem entra no meio da aula precisa ver o link que o professor fixou.
     private var mensagemFixada: String?
     private let lock = NSLock()
+    /// Medições que cada aluno faz do próprio vídeo (`METRICS`), mostradas à turma no `METRICS_TABLE`.
+    let metricas: StudentMetricsBook
+    /// Avisado quando um aluno identificado entra ("entrada") ou sai ("saida"), com o nome.
+    /// Só usado no modo de depuração das métricas (arquivo da sessão).
+    public var onEventoDeAluno: ((_ tipo: String, _ nome: String) -> Void)?
 
     /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
     ///
@@ -66,7 +71,8 @@ public final class WebSocketHandlerService {
     public static let maxNameLength = 40
     public static let maxChatLength = 1000
 
-    public init() {
+    public init(metricas: StudentMetricsBook = StudentMetricsBook()) {
+        self.metricas = metricas
         let vigia = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         vigia.schedule(deadline: .now() + 10, repeating: 10)
         vigia.setEventHandler { [weak self] in self?.derrubarOciosas() }
@@ -149,6 +155,8 @@ public final class WebSocketHandlerService {
         boasVindas["chatEnabled"] = chatLiberado
         boasVindas["chatVisibleToClass"] = chatVisivelParaTurma
         boasVindas["files"] = arquivos
+        // Sem este campo o navegador não mede nem escreve nada: o recurso só existe em build de depuração.
+        if MetricasDebug.ativo { boasVindas["metricas"] = "true" }
         // Sem fixada, o campo não vai: o cliente trata ausência como "nada fixado".
         if let mensagemFixada {
             boasVindas["pinned"] = mensagemFixada
@@ -308,6 +316,27 @@ public final class WebSocketHandlerService {
         lock.lock()
         estadoDaTransmissao = ["stream": "live"]
         lock.unlock()
+        metricas.removerTudo()
+    }
+
+    /// Manda `METRICS_TABLE` à turma: o resumo do servidor e uma linha por aluno. Devolve as
+    /// linhas (para o log do professor). Não envia sem clientes, nem quando não há o que mostrar.
+    @discardableResult
+    public func broadcastMetricsTable(resumo: [String: Any]) -> [[String: Any]] {
+        lock.lock()
+        let conexoes = Array(activeConnections.values)
+        let copiaNomes = nomes
+        lock.unlock()
+        guard MetricasDebug.ativo else { return [] }
+        let linhas = metricas.linhas(nomes: copiaNomes)
+        let alunosComVideo = resumo["alunos"] as? Int ?? 0
+        guard !conexoes.isEmpty, !(linhas.isEmpty && alunosComVideo == 0) else { return linhas }
+
+        var payload = resumo
+        payload["rows"] = linhas
+        guard let json = Self.serializar(["type": "METRICS_TABLE", "payload": payload]) else { return linhas }
+        conexoes.forEach { sendTextFrame(connection: $0, text: json) }
+        return linhas
     }
 
     /// O nome aceito no IDENTIFY, ou `nil` se a conexão ainda não se identificou.
@@ -392,14 +421,17 @@ public final class WebSocketHandlerService {
     private func removeConnection(id: ObjectIdentifier, clientId: String) {
         lock.lock()
         let estavaAtiva = activeConnections.removeValue(forKey: id) != nil
+        let nomeQueSaiu = nomes[clientId]
         // Sem isto, o buffer de recepção da conexão ficaria retido até o app fechar.
         decoders.removeValue(forKey: id)
         nomes.removeValue(forKey: clientId)
+        metricas.remover(clientId: clientId)
         ultimaAtividade.removeValue(forKey: id)
         alunoDaConexao.removeValue(forKey: id)
         lock.unlock()
 
         guard estavaAtiva else { return }
+        if MetricasDebug.ativo, let nomeQueSaiu { onEventoDeAluno?("saida", nomeQueSaiu) }
         clientObserver?.didClientDisconnect(clientId: clientId)
     }
 
@@ -553,11 +585,17 @@ public final class WebSocketHandlerService {
             lock.unlock()
 
             presenceObserver?.didIdentifyStudent(clientId: clientId, name: nome)
+            if MetricasDebug.ativo { onEventoDeAluno?("entrada", nome) }
             sendTextFrame(connection: connection, text: "{\"type\":\"IDENTIFY_ACCEPTED\"}")
 
         case "PRESENCE":
             let visivel = (payloadDict?["visible"] as? Bool) ?? true
             presenceObserver?.didChangeWatching(clientId: clientId, isWatching: visivel)
+
+        case "METRICS":
+            // Só de quem tem nome validado: a linha aparece com o nome para a turma toda.
+            guard MetricasDebug.ativo, nomeValidado(clientId) != nil else { return }
+            metricas.registrar(clientId: clientId, payload: payloadDict)
 
         case "PING":
             sendPong(connection: connection)

@@ -129,6 +129,8 @@ export class VideoStreamPlayer {
     this.pausado = false;
     /** Última posição vista do vídeo e quando: base da detecção de reprodução parada. */
     this.retentouQuota = false;
+    /** Bytes de vídeo lidos da conexão, desde que a página abriu (só cresce). */
+    this.bytesRecebidos = 0;
 
     // Muted + playsinline é o que permite o autoplay sem gesto (iOS inclusive).
     this.video.muted = true;
@@ -180,6 +182,28 @@ export class VideoStreamPlayer {
    */
   definirPausado(pausado) {
     this.pausado = Boolean(pausado);
+  }
+
+  /**
+   * Contadores para as métricas do aluno. `bytes`, `quadros` e `perdidos` só crescem (quem
+   * mede tira a diferença entre duas leituras); `lagMs` é a distância até a borda ao vivo
+   * agora. O que o navegador não informa vem `null`: nada é inventado.
+   */
+  estatisticas() {
+    const qualidade = typeof this.video.getVideoPlaybackQuality === 'function'
+      ? this.video.getVideoPlaybackQuality()
+      : null;
+    const faixas = this.sourceBuffer && this.sourceBuffer.buffered;
+    const lagMs = faixas && faixas.length
+      ? Math.max(0, (faixas.end(faixas.length - 1) - this.video.currentTime) * 1000)
+      : null;
+    return {
+      rota: 'H.264',
+      bytes: this.bytesRecebidos,
+      quadros: qualidade ? qualidade.totalVideoFrames : null,
+      perdidos: qualidade ? qualidade.droppedVideoFrames : null,
+      lagMs
+    };
   }
 
   conectar() {
@@ -294,7 +318,10 @@ export class VideoStreamPlayer {
           this.aoQuedaDeConexao('conexão encerrada pelo servidor');
           return;
         }
-        if (value && value.byteLength) this.receberPedaco(value);
+        if (value && value.byteLength) {
+          this.bytesRecebidos += value.byteLength;
+          this.receberPedaco(value);
+        }
       }
     } catch (erro) {
       if (!this.querTransmitir || this.leitor !== leitor) return;

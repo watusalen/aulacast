@@ -24,9 +24,17 @@ IDENTIFICADOR="com.aulacast"
 VERSAO="1.0.0"
 MACOS_MINIMO="13.0"
 
+# Opt-in: métricas por aluno (console do navegador + arquivo ~/AulaCast-metricas). Fora disso o
+# app distribuído não contém esse comportamento.
+EXTRA_SWIFT=()
+if [ "${AULACAST_DEBUG_METRICS:-}" = "1" ]; then
+  echo "==> AULACAST_DEBUG_METRICS=1: compilando COM as métricas por aluno (-DMETRICAS_DEBUG)"
+  EXTRA_SWIFT=(-Xswiftc -DMETRICAS_DEBUG)
+fi
+
 echo "==> Compilando em modo release"
 cd "$RAIZ/src"
-swift build -c release
+swift build -c release ${EXTRA_SWIFT[@]+"${EXTRA_SWIFT[@]}"}
 BINARIO="$(swift build -c release --show-bin-path)/AulaCast"
 
 if [ ! -x "$BINARIO" ]; then
@@ -57,7 +65,7 @@ echo "==> Compilando a outra arquitetura ($TRIPLA_OUTRA)"
 # "command ... not registered".
 CRUZADO="$RAIZ/src/.build-cruzado"
 UNIVERSAL=""
-if swift build -c release --triple "$TRIPLA_OUTRA" --scratch-path "$CRUZADO" >/dev/null 2>&1; then
+if swift build -c release ${EXTRA_SWIFT[@]+"${EXTRA_SWIFT[@]}"} --triple "$TRIPLA_OUTRA" --scratch-path "$CRUZADO" >/dev/null 2>&1; then
   OUTRO_BINARIO="$(swift build -c release --triple "$TRIPLA_OUTRA" --scratch-path "$CRUZADO" --show-bin-path)/AulaCast"
   if [ -x "$OUTRO_BINARIO" ]; then
     UNIVERSAL="$SAIDA/AulaCast-universal"

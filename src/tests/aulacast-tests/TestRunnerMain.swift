@@ -3232,6 +3232,145 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste de limite de conexões: \(error.localizedDescription)")
         }
 
+        // (14) Métricas por aluno: METRICS validado, guardado e devolvido no METRICS_TABLE.
+        print("\n--- Métricas: METRICS e METRICS_TABLE ---")
+        do {
+            // Unidade: validação estrita e limite de 1 mensagem por segundo (relógio injetado).
+            var relogio = Date(timeIntervalSince1970: 1_000)
+            let livro = StudentMetricsBook(agora: { relogio })
+            let valido: [String: Any] = ["rota": "H.264", "fps": 30, "mbps": "2.5", "dropped": 3, "lagMs": 200]
+            assertTest(livro.registrar(clientId: "a", payload: valido), "METRICS válido é aceito")
+            assertTest(livro.relatorio(clientId: "a") == StudentMetricsReport(rota: "H.264", fps: 30, mbps: 2.5, dropped: 3, lagMs: 200),
+                       "METRICS aceito guarda os números")
+            relogio = relogio.addingTimeInterval(0.5)
+            assertTest(!livro.registrar(clientId: "a", payload: ["rota": "MJPEG"]), "Limite: 2ª mensagem em menos de 1 s é ignorada")
+            relogio = relogio.addingTimeInterval(1)
+            assertTest(livro.registrar(clientId: "a", payload: ["rota": "MJPEG", "fps": NSNull()]), "Passado 1 s, volta a aceitar (MJPEG com nulos)")
+            assertTest(livro.relatorio(clientId: "a")?.fps == nil, "MJPEG fica sem números")
+            relogio = relogio.addingTimeInterval(2)
+            assertTest(!livro.registrar(clientId: "b", payload: ["rota": "VP9"]), "Rota desconhecida é ignorada")
+            assertTest(!livro.registrar(clientId: "b", payload: ["rota": "H.264", "extra": 1]), "Chave desconhecida invalida a mensagem")
+            assertTest(!livro.registrar(clientId: "b", payload: ["rota": "H.264", "fps": "abc"]), "Número inválido é ignorado")
+            assertTest(!livro.registrar(clientId: "b", payload: ["rota": "H.264", "fps": true]), "Booleano no lugar de número é ignorado")
+            assertTest(!livro.registrar(clientId: "b", payload: ["rota": "H.264", "fps": "inf"]), "Valor infinito é ignorado")
+            assertTest(!livro.registrar(clientId: "b", payload: nil), "Sem payload é ignorado")
+            assertTest(livro.registrar(clientId: "b", payload: ["rota": "H.264", "fps": 99999, "mbps": -5, "dropped": -1, "lagMs": 1e12]),
+                       "Valores fora da faixa são aceitos, mas limitados")
+            assertTest(livro.relatorio(clientId: "b") == StudentMetricsReport(rota: "H.264", fps: 240, mbps: 0, dropped: 0, lagMs: 3_600_000),
+                       "Faixas: fps 0-240, mbps 0-1000, dropped >= 0, lagMs 0-3600000")
+            livro.remover(clientId: "a")
+            assertTest(livro.relatorio(clientId: "a") == nil, "Remover na desconexão apaga a linha")
+            let muitos = StudentMetricsBook(agora: { relogio })
+            var nomesMuitos: [String: String] = [:]
+            for i in 0..<(StudentMetricsBook.maxLinhas + 20) {
+                muitos.registrar(clientId: "c\(i)", payload: ["rota": "MJPEG"])
+                nomesMuitos["c\(i)"] = "Aluno \(i)"
+            }
+            assertTest(muitos.linhas(nomes: nomesMuitos).count == StudentMetricsBook.maxLinhas, "Tabela limitada a \(StudentMetricsBook.maxLinhas) linhas")
+
+            // Ponta a ponta com WebSocket real.
+            let pastaMetricas = FileManager.default.temporaryDirectory.appendingPathComponent("aulacast-metricas-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: pastaMetricas) }
+            let servidorMetricas = NetworkListenerService(port: 8160, webAssetsPath: FileManager.default.temporaryDirectory)
+            servidorMetricas.diretorioDeMetricas = pastaMetricas
+            try servidorMetricas.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let zero = StreamSnapshot()
+            let taxaVazia = StreamRates.entre(zero, e: zero, segundos: 5)!
+
+            var boasVindasMetricas = ""
+            func abrir() async -> URLSessionWebSocketTask {
+                let s = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8160/ws")!)
+                s.resume()
+                if case .string(let t)? = try? await s.receive() { boasVindasMetricas = t } // CONNECTED
+                return s
+            }
+            func esperarTabela(_ s: URLSessionWebSocketTask) async -> [String: Any]? {
+                for _ in 0..<8 {
+                    guard case .string(let t)? = try? await s.receive() else { return nil }
+                    if let d = t.data(using: .utf8), let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                       j["type"] as? String == "METRICS_TABLE" { return j["payload"] as? [String: Any] }
+                }
+                return nil
+            }
+            let ana = await abrir()
+            assertTest(MetricasDebug.ativo, "Build de depuração (o do runner): MetricasDebug.ativo é verdadeiro")
+            assertTest(boasVindasMetricas.contains("\"metricas\":\"true\""), "CONNECTED avisa o navegador de que as métricas estão ligadas")
+            let intruso = await abrir()
+            let saida = await abrir()
+            try? await ana.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Ana \\\"A\\\"\\nB\"}}"))
+            try? await saida.send(.string("{\"type\":\"IDENTIFY\",\"payload\":{\"name\":\"Saiu\"}}"))
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await ana.send(.string("{\"type\":\"METRICS\",\"payload\":{\"rota\":\"H.264\",\"fps\":29.5,\"mbps\":2.25,\"dropped\":2,\"lagMs\":150}}"))
+            try? await ana.send(.string("{\"type\":\"METRICS\",\"payload\":{\"rota\":\"H.264\",\"fps\":1,\"mbps\":1,\"dropped\":1,\"lagMs\":1}}"))
+            try? await saida.send(.string("{\"type\":\"METRICS\",\"payload\":{\"rota\":\"H.264\",\"fps\":10}}"))
+            try? await intruso.send(.string("{\"type\":\"METRICS\",\"payload\":{\"rota\":\"H.264\",\"fps\":60}}"))
+            try? await Task.sleep(nanoseconds: 400_000_000)
+
+            servidorMetricas.publicarMetricas(taxaVazia)
+            let tabela = await esperarTabela(ana)
+            let linhas = tabela?["rows"] as? [[String: Any]] ?? []
+            let linhaAna = linhas.first { ($0["nome"] as? String) == "Ana \"A\"\nB" }
+            assertTest(tabela != nil, "Aluno recebe METRICS_TABLE")
+            assertTest(linhaAna != nil, "Nome com aspas e quebra de linha volta íntegro no JSON da tabela")
+            assertTest(linhaAna?["fps"] as? Double == 29.5 && linhaAna?["lagMs"] as? Int == 150,
+                       "A tabela traz a 1ª medição; a 2ª, colada, foi ignorada pelo limite de 1/s")
+            assertTest(linhas.count == 2, "Só alunos identificados aparecem (linhas: \(linhas.count))")
+            assertTest(tabela?["alunosH264"] != nil && tabela?["telaFps"] != nil && tabela?["mbps"] != nil,
+                       "A tabela traz o resumo do servidor")
+
+            saida.cancel(with: .goingAway, reason: nil)
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            servidorMetricas.publicarMetricas(taxaVazia)
+            let depois = await esperarTabela(ana)
+            let nomesDepois = (depois?["rows"] as? [[String: Any]] ?? []).compactMap { $0["nome"] as? String }
+            assertTest(nomesDepois == ["Ana \"A\"\nB"], "Quem desconecta sai da tabela (\(nomesDepois))")
+            ana.cancel(with: .goingAway, reason: nil)
+            intruso.cancel(with: .goingAway, reason: nil)
+            let caminhoSessao = servidorMetricas.caminhoDoArquivoDeMetricas
+            servidorMetricas.stop()
+
+            // Arquivo da sessão (JSONL) escrito pelo servidor.
+            let nomeArquivo = caminhoSessao?.lastPathComponent ?? ""
+            assertTest(nomeArquivo.range(of: #"^sessao-\d{8}-\d{6}\.jsonl$"#, options: .regularExpression) != nil,
+                       "Arquivo da sessão: sessao-AAAAMMDD-HHmmss.jsonl (\(nomeArquivo))")
+            let objetos: [[String: Any]] = ((try? String(contentsOf: caminhoSessao ?? pastaMetricas, encoding: .utf8)) ?? "")
+                .split(separator: "\n").compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+            let tipos = objetos.compactMap { $0["tipo"] as? String }
+            assertTest(tipos.first == "inicio" && objetos.first?["porta"] as? Int == 8160, "Arquivo: 1ª linha é 'inicio' com a porta")
+            assertTest(tipos.last == "fim", "Arquivo: última linha é 'fim'")
+            assertTest(tipos.filter { $0 == "entrada" }.count == 2 && tipos.contains("saida"), "Arquivo: entrada e saída de alunos identificados")
+            let amostra = objetos.first { $0["tipo"] as? String == "amostra" }
+            let detalhe = amostra?["alunosDetalhe"] as? [[String: Any]]
+            assertTest(amostra != nil && amostra?["estourosDeFila"] != nil && amostra?["pedidosDeQuadroChave"] != nil
+                       && detalhe?.contains { $0["nome"] as? String == "Ana \"A\"\nB" && $0["reportadoHa"] != nil } == true,
+                       "Arquivo: amostra traz contadores e o detalhe por aluno com reportadoHa")
+            assertTest(objetos.last?["picoAlunos"] as? Int == 2, "Arquivo: 'fim' traz o pico de alunos")
+
+            // Unidade do logger: perda estimada, truncamento e erro de disco.
+            assertTest(abs((MetricsFileLogger.perdaEstimadaPct(telaFps: 30, mediaFps: 24) ?? -1) - 20) < 1e-9, "perdaEstimadaPct: 30 vs 24 fps = 20%")
+            assertTest(MetricsFileLogger.perdaEstimadaPct(telaFps: 0, mediaFps: 0) == nil, "perdaEstimadaPct: tela parada = null")
+            assertTest(MetricsFileLogger.perdaEstimadaPct(telaFps: 30, mediaFps: 45) == 0, "perdaEstimadaPct: limitada a 0")
+            assertTest(MetricsFileLogger.perdaEstimadaPct(telaFps: 30, mediaFps: -30) == 100, "perdaEstimadaPct: limitada a 100")
+
+            let pastaTrunc = pastaMetricas.appendingPathComponent("trunc")
+            let curto = MetricsFileLogger(diretorio: pastaTrunc, limiteBytes: 300)
+            curto.iniciar(porta: 1)
+            for i in 0..<20 { curto.registrarEvento("entrada", nome: "Aluno \(i)") }
+            curto.encerrar()
+            let linhasTrunc = ((try? String(contentsOf: curto.arquivo!, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+            assertTest(linhasTrunc.filter { $0.contains("truncado") }.count == 1, "Limite de tamanho: uma única linha 'truncado'")
+            assertTest(linhasTrunc.filter { $0.contains("entrada") }.count < 20, "Limite de tamanho: para de anexar")
+
+            let semAcesso = MetricsFileLogger(diretorio: URL(fileURLWithPath: "/proc-inexistente/x/y"))
+            semAcesso.iniciar(porta: 1)
+            semAcesso.registrarEvento("entrada", nome: "Ana")
+            semAcesso.encerrar()
+            assertTest(semAcesso.arquivo == nil, "Erro de disco: não derruba nem cria arquivo")
+        } catch {
+            assertTest(false, "Falha no teste de métricas: \(error.localizedDescription)")
+        }
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
