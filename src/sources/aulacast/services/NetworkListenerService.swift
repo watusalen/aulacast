@@ -115,6 +115,41 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         self.listener = listener
         listener.start(queue: .global(qos: .userInteractive))
         self.isRunning = true
+        iniciarMedicao()
+    }
+
+    // MARK: - Medição do vídeo
+
+    /// Fotografia dos contadores de quadros e bytes enviados aos alunos.
+    public func streamSnapshot() -> StreamSnapshot { streamerService.snapshot() }
+
+    /// Intervalo entre as linhas `[Métricas]` no log.
+    static let intervaloDasMetricas: TimeInterval = 5
+    private var medidor: DispatchSourceTimer?
+
+    /// Escreve no log, a cada `intervaloDasMetricas`, o que saiu para a turma. Fica quieto
+    /// sem alunos com o vídeo aberto. Custo por amostra: O(n) nos alunos conectados.
+    private func iniciarMedicao() {
+        medidor?.cancel()
+        var anterior = streamerService.snapshot()
+        var instanteAnterior = DispatchTime.now()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + Self.intervaloDasMetricas, repeating: Self.intervaloDasMetricas)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            let atual = self.streamerService.snapshot()
+            let agora = DispatchTime.now()
+            // O timer pode atrasar (fila `.utility`, economia de energia): dividir pelo tempo
+            // que passou de verdade, e não pelos 5 s nominais, mantém a taxa honesta.
+            let segundos = Double(agora.uptimeNanoseconds - instanteAnterior.uptimeNanoseconds) / 1_000_000_000
+            defer { anterior = atual; instanteAnterior = agora }
+            guard let taxa = StreamRates.entre(anterior, e: atual, segundos: segundos),
+                  taxa.alunos > 0 else { return }
+            print(String(format: "[Métricas] %d alunos | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
+                         taxa.alunos, taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
+        }
+        timer.resume()
+        medidor = timer
     }
 
     public func definirAnuncio(_ servico: NWListener.Service?) {
@@ -123,6 +158,8 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     }
 
     public func stop() {
+        medidor?.cancel()
+        medidor = nil
         self.listener?.cancel()
         self.listener = nil
 

@@ -1,7 +1,8 @@
 import Foundation
 import Network
 
-/// Servico responsavel exclusivamente pelo streaming de video MJPEG em malha aberta (SRP).
+/// Servico responsavel pelo streaming de video MJPEG em malha aberta (SRP) e pelos contadores
+/// do que ele envia: eles só podem ser somados onde o evento acontece (SRP).
 public final class MJPEGStreamerService {
     private var latestFrameData: Data?
     private var frameSequence: UInt64 = 0
@@ -22,6 +23,23 @@ public final class MJPEGStreamerService {
         return streamsAtivos
     }
 
+    /// Contadores de quadros e bytes, para medir o que sai para a turma (`snapshot()`).
+    /// Trava própria: são tocados a cada quadro por todos os alunos, e não devem disputar
+    /// o `frameLock` com o laço de envio.
+    private var contadores = StreamSnapshot()
+    /// Número de série do vídeo de cada conexão aberta, e o próximo a sair. Só existem para
+    /// que a chave dos contadores nunca se repita; ver `StreamSnapshot.quadrosPorAluno`.
+    private var serieDaConexao: [ObjectIdentifier: UInt64] = [:]
+    private var proximaSerie: UInt64 = 0
+    private let contadoresLock = NSLock()
+
+    /// Fotografia dos contadores. A diferença entre duas delas dá as taxas (`StreamRates`).
+    public func snapshot() -> StreamSnapshot {
+        contadoresLock.lock()
+        defer { contadoresLock.unlock() }
+        return contadores
+    }
+
     public init() {}
 
     /// Conexões paradas esperando o próximo quadro.
@@ -36,6 +54,10 @@ public final class MJPEGStreamerService {
     private var esperandoQuadro: [UUID: () -> Void] = [:]
 
     public func updateFrame(_ data: Data) {
+        contadoresLock.lock()
+        contadores.quadrosPublicados &+= 1
+        contadoresLock.unlock()
+
         frameLock.lock()
         self.latestFrameData = data
         self.frameSequence &+= 1
@@ -83,6 +105,12 @@ public final class MJPEGStreamerService {
         streamsAtivos += 1
         streamsLock.unlock()
 
+        contadoresLock.lock()
+        proximaSerie &+= 1
+        serieDaConexao[ObjectIdentifier(connection)] = proximaSerie
+        contadores.quadrosPorAluno[proximaSerie] = 0
+        contadoresLock.unlock()
+
         connection.send(content: Data(headers.utf8), completion: .contentProcessed({ [weak self] erro in
             guard erro == nil else {
                 self?.encerrar(connection)
@@ -118,6 +146,12 @@ public final class MJPEGStreamerService {
         streamsLock.lock()
         streamsAtivos = max(0, streamsAtivos - 1)
         streamsLock.unlock()
+
+        contadoresLock.lock()
+        if let serie = serieDaConexao.removeValue(forKey: ObjectIdentifier(connection)) {
+            contadores.quadrosPorAluno.removeValue(forKey: serie)
+        }
+        contadoresLock.unlock()
     }
 
     /// Quanto esperar por um quadro novo antes de repetir o último, uma vez.
@@ -190,6 +224,19 @@ public final class MJPEGStreamerService {
         enviar(jpeg, sequencia: currentSequence, por: connection, confirmarDepois: true)
     }
 
+    /// Soma um envio concluído. `quadroNovo` é falso na repetição do último quadro (Safari):
+    /// os bytes saíram, mas o aluno não ganhou um quadro novo. Só conta quem ainda está na
+    /// lista: um envio que termina depois da saída do aluno não o traz de volta.
+    private func contar(bytes: Int, quadroNovo: Bool, de connection: NWConnection) {
+        contadoresLock.lock()
+        defer { contadoresLock.unlock() }
+        contadores.bytesEnviados &+= UInt64(bytes)
+        if quadroNovo, let serie = serieDaConexao[ObjectIdentifier(connection)],
+           let quadros = contadores.quadrosPorAluno[serie] {
+            contadores.quadrosPorAluno[serie] = quadros &+ 1
+        }
+    }
+
     private func enviar(_ jpeg: Data, sequencia: UInt64, por connection: NWConnection, confirmarDepois: Bool) {
         let frameHeader = "--frame\r\n" +
                           "Content-Type: image/jpeg\r\n" +
@@ -209,6 +256,7 @@ public final class MJPEGStreamerService {
                 self.encerrar(connection)
                 return
             }
+            self.contar(bytes: packet.count, quadroNovo: confirmarDepois, de: connection)
             self.streamLoop(connection: connection, lastSentSequence: sequencia, confirmarUltimo: confirmarDepois)
         }))
     }
