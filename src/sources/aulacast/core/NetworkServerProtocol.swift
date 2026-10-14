@@ -23,6 +23,8 @@ public protocol NetworkServerProtocol: AnyObject {
     func start() throws
     func stop()
     func broadcastFrame(_ jpegData: Data)
+    /// Encaminha um fragmento fMP4 (H.264) para a rota `/stream.mp4` — ver `MP4StreamerService`.
+    func broadcastVideoFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool)
     func broadcastChatMessage(_ message: ChatMessage)
     func broadcastControlMessage(type: String, payload: [String: String]?)
     /// Troca a lista de arquivos que a turma pode baixar e avisa quem está conectado.
@@ -34,6 +36,10 @@ public protocol NetworkServerProtocol: AnyObject {
     func updatePinnedMessage(_ text: String?)
     /// Avisado quando um download de arquivo compartilhado começa ou termina.
     var onFileDownloadUpdate: ((FileDownloadStats) -> Void)? { get set }
+    /// Um aluno novo abriu `/stream.mp4` (ou uma conexão precisou re-sincronizar): quem
+    /// codifica H.264 deve forçar um quadro-chave no próximo quadro, para ele não ficar sem
+    /// imagem até o próximo quadro-chave "de rotina".
+    var onVideoViewerNeedsKeyFrame: (() -> Void)? { get set }
 }
 
 /// Servidor capaz de anunciar a si mesmo via Bonjour, na própria porta.

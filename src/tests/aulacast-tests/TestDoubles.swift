@@ -88,9 +88,13 @@ final class FakeServer: NetworkServerProtocol {
     weak var presenceObserver: StudentPresenceObserverProtocol?
     weak var handRaiseObserver: HandRaiseObserverProtocol?
     var onFailure: ((String) -> Void)?
+    var onVideoViewerNeedsKeyFrame: (() -> Void)?
 
     /// Quadros entregues aos alunos, para conferir que a pausa de fato os segura.
     private(set) var quadrosEnviados = 0
+
+    /// Fragmentos fMP4 entregues aos alunos, para conferir o mesmo portão de pausa do MJPEG.
+    private(set) var fragmentosEnviados: [(data: Data, isInitSegment: Bool, isKeyFrame: Bool)] = []
 
     /// Reproduz a queda assíncrona do servidor real (porta ocupada, por exemplo).
     func simularFalha(_ mensagem: String) {
@@ -104,6 +108,9 @@ final class FakeServer: NetworkServerProtocol {
     func start() throws { isRunning = true }
     func stop() { isRunning = false }
     func broadcastFrame(_ jpegData: Data) { quadrosEnviados += 1 }
+    func broadcastVideoFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool) {
+        fragmentosEnviados.append((data: data, isInitSegment: isInitSegment, isKeyFrame: isKeyFrame))
+    }
 
     /// Última lista de arquivos entregue ao servidor.
     private(set) var arquivosCompartilhados: [SharedFile] = []

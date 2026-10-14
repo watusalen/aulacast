@@ -47,6 +47,10 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         didSet { downloads.onEstatisticas = onFileDownloadUpdate }
     }
 
+    public var onVideoViewerNeedsKeyFrame: (() -> Void)? {
+        didSet { mp4StreamerService.onNeedsKeyFrame = onVideoViewerNeedsKeyFrame }
+    }
+
     private var listener: NWListener?
     /// Anúncio Bonjour pedido para este servidor, aplicado também quando ele (re)sobe.
     private var anuncio: NWListener.Service?
@@ -58,6 +62,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
 
     private let staticFileProvider: StaticFileProviderService
     private let streamerService: MJPEGStreamerService
+    private let mp4StreamerService = MP4StreamerService()
     private let webSocketHandler: WebSocketHandlerService
     private let downloads = FileDownloadService()
 
@@ -171,6 +176,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         // Sessão nova começa sem o quadro nem o estado da anterior: senão quem abrisse a
         // página na próxima aula veria por um instante a última tela da aula passada.
         streamerService.reset()
+        mp4StreamerService.reset()
         webSocketHandler.reset()
 
         self.isRunning = false
@@ -181,6 +187,10 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
 
     public func broadcastFrame(_ jpegData: Data) {
         streamerService.updateFrame(jpegData)
+    }
+
+    public func broadcastVideoFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool) {
+        mp4StreamerService.didReceiveFragment(data, isInitSegment: isInitSegment, isKeyFrame: isKeyFrame)
     }
 
     public func broadcastChatMessage(_ message: ChatMessage) {
@@ -278,6 +288,8 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
                 }
             } else if metodo == "GET" && caminho == "/stream" {
                 self.streamerService.serveStream(connection: connection)
+            } else if metodo == "GET" && caminho == "/stream.mp4" {
+                self.mp4StreamerService.serveStream(connection: connection)
             } else if metodo == "GET" && caminho.hasPrefix(FileDownloadService.prefixoDaRota) {
                 self.downloads.serve(connection: connection, caminho: caminho)
             } else {

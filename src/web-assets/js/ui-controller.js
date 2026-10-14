@@ -67,10 +67,15 @@ export function ehModoApp(janela = typeof window !== 'undefined' ? window : null
 
 export class UIController {
   /**
-   * @param {{ criarVigia?: (img: HTMLImageElement, opcoes: object) => object }} opcoes
+   * @param {{ criarVigia?: (img: HTMLImageElement, opcoes: object) => object,
+   *           mjpegSuprimido?: boolean }} opcoes
    *   `criarVigia` existe para os testes trocarem o vigia do vídeo por um dublê.
+   *   `mjpegSuprimido`: true quando o `VideoStreamPlayer` (H.264/fMP4) vai ser tentado primeiro
+   *   — nesse caso `iniciarVideo()` não liga o MJPEG, para as duas conexões não rodarem em
+   *   paralelo gastando banda à toa. Ver `ativarFallbackMJPEG()`, chamado só se o H.264 desistir.
    */
-  constructor({ criarVigia } = {}) {
+  constructor({ criarVigia, mjpegSuprimido = false } = {}) {
+    this.mjpegSuprimido = mjpegSuprimido;
     this.statusBadge = document.getElementById('connectionStatus');
     this.statusText = this.statusBadge.querySelector('.status-text');
     this.videoStream = document.getElementById('videoStream');
@@ -212,9 +217,25 @@ export class UIController {
 
   /** Pede o vídeo; enquanto não chega o primeiro quadro, o palco diz que está aguardando. */
   iniciarVideo() {
+    if (!this.mjpegSuprimido) {
+      this.videoStream.classList.add('active');
+      this.streamWatchdog.start();
+    }
+    if (!this.teveQuadro) this.mostrarAguardando();
+  }
+
+  /**
+   * O `VideoStreamPlayer` (H.264/fMP4) desistiu — sem suporte no navegador, ou a conexão de
+   * `/stream.mp4` caiu demais seguidas (ver `MAX_TENTATIVAS_DE_RECONEXAO`). Liga o MJPEG que
+   * `iniciarVideo()` vinha propositalmente deixando desligado.
+   *
+   * Idempotente: `StreamWatchdog.start()` já não faz nada com um pedido de stream de pé, e
+   * pode ser chamado aqui mesmo quando o MJPEG já estava ligado (H.264 nunca foi suprimido).
+   */
+  ativarFallbackMJPEG() {
+    this.mjpegSuprimido = false;
     this.videoStream.classList.add('active');
     this.streamWatchdog.start();
-    if (!this.teveQuadro) this.mostrarAguardando();
   }
 
   aoChegarQuadro() {

@@ -6,15 +6,41 @@ import { PresenceReporter } from './presence-reporter.js';
 import { FilesList } from './files-list.js';
 import { MaoLevantada } from './raise-hand.js';
 import { ManterTelaAcesa } from './manter-tela-acesa.js';
+import { VideoStreamPlayer, mediaSourceSuportado } from './video-stream-player.js';
 
 /** Exportada para que o despachante de mensagens possa ser exercitado pelos testes. */
 export class AulaCastApp {
   /**
    * @param {{ criarVigia?: Function, telaAcesa?: object }} opcoes dublês para os testes
    */
-  constructor({ criarVigia, telaAcesa } = {}) {
-    this.ui = new UIController({ criarVigia });
+  constructor({ criarVigia, telaAcesa, criarVideoPlayer } = {}) {
+    // H.264/fMP4 em cima do MJPEG existente (ver PLANO-COMPRESSAO-DE-VIDEO.md): decidido uma
+    // vez, aqui, com a mesma checagem que `VideoStreamPlayer.start()` vai fazer sozinho — para
+    // as duas nunca discordarem sobre qual caminho está de pé.
+    //
+    // Enquanto o suporte a H.264 for a aposta, o MJPEG fica DESLIGADO desde o início
+    // (`mjpegSuprimido`), não só escondido atrás do vídeo: as duas conexões rodando ao mesmo
+    // tempo gastariam o dobro da banda que a troca inteira existe para economizar. Só liga o
+    // MJPEG de volta se o H.264 desistir de verdade — ver `onFallback` abaixo.
+    const videoElementoMP4 = document.getElementById('videoStreamMP4');
+    const suporteAH264 = Boolean(videoElementoMP4)
+      && mediaSourceSuportado(typeof window !== 'undefined' ? window : undefined);
+
+    this.ui = new UIController({ criarVigia, mjpegSuprimido: suporteAH264 });
     this.identidade = null;
+
+    const criarPlayer = criarVideoPlayer || ((el, opcoes) => new VideoStreamPlayer(el, opcoes));
+    this.videoPlayer = videoElementoMP4
+      ? criarPlayer(videoElementoMP4, {
+          // Mesmo mecanismo que já liga/desliga o "aguardando" e o aviso de reconexão para o
+          // MJPEG (`aoMudarEstadoDoVideo`) — o H.264 é só outra fonte do mesmo estado.
+          onEstado: (estado) => this.ui.aoMudarEstadoDoVideo(estado),
+          onFallback: (motivo) => {
+            console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
+            this.ui.ativarFallbackMJPEG();
+          }
+        })
+      : null;
 
     this.retryConnectionBtn = document.getElementById('retryConnectionBtn');
 
@@ -178,6 +204,7 @@ export class AulaCastApp {
       // aula encerrada até recarregar a página.
       case 'STREAM_STARTED':
         this.ui.showStreaming();
+        this.videoPlayer?.start();
         break;
 
       case 'STREAM_PAUSED':
@@ -192,6 +219,7 @@ export class AulaCastApp {
       // sistema). Sem este aviso o aluno ficaria olhando o último quadro congelado.
       case 'STREAM_ENDED':
         this.ui.showStreamEnded(data.payload && data.payload.reason);
+        this.videoPlayer?.stop();
         break;
     }
   }
@@ -215,12 +243,15 @@ export class AulaCastApp {
       case 'paused':
         this.ui.showStreaming();
         this.ui.showPaused();
+        this.videoPlayer?.start();
         break;
       case 'ended':
         this.ui.showStreamEnded(payload.reason);
+        this.videoPlayer?.stop();
         break;
       case 'live':
         this.ui.showStreaming();
+        this.videoPlayer?.start();
         break;
     }
   }
