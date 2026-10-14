@@ -15,8 +15,9 @@ Cenário: Iniciar transmissão com sucesso
   E as permissões de Gravação de Tela do macOS estão ativadas
   Quando eu selecionar a fonte "Monitor Principal" e clicar em "Iniciar Transmissão"
   Então o status do aplicativo deve mudar para "Transmitindo" em verde
-  E o endereço IP/URL da sala deve ser exibido com destaque na tela (ex: 192.168.1.15:8080)
+  E o endereço IP/URL da sala deve ser exibido com destaque na tela (durante a sessão, aulacast.local:8080; antes dela, o IP, ex: 192.168.1.15:8080)
   E a captura de tela deve consumir menos de 15% de CPU.
+  # Nota: a medição atual é ~16% de um núcleo (monitor 1470x956, 30 fps; docs/04). Meta em aberto (docs/01, RNF-03).
 ```
 
 ---
@@ -32,7 +33,7 @@ Cenário: Acesso ao player web pelo aluno em rede com firewall restrito
   Dado que o professor iniciou a transmissão na rede local da sala
   E a rede de internet da instituição está instável ou com firewall bloqueando serviços de chamadas externas
   Quando eu abrir o navegador Chrome ou Firefox no Linux do laboratório
-  E digitar o endereço local "192.168.1.15:8080"
+  E digitar o endereço local "aulacast.local:8080" (ou o IP, "192.168.1.15:8080")
   Então a página web do AulaCast deve carregar em menos de 2 segundos via tráfego exclusivamente local
   E a transmissão de tela do professor deve ser exibida no player central sem bloqueios.
 ```
@@ -103,7 +104,7 @@ Cenário: Envio de mensagem no chat local
   Quando eu digitar "Professor, qual a diferença entre let e var?" e pressionar Enter
   Então a mensagem deve aparecer no meu próprio histórico
   E o professor deve recebê-la no aplicativo dele
-  E nenhum colega deve ver essa mensagem.
+  E, com a opção de chat entre alunos desligada (padrão), nenhum colega deve ver essa mensagem.
 
 Cenário: Resposta do professor
   Dado que o professor respondeu no chat do aplicativo
@@ -162,7 +163,7 @@ Cenário: Aluno retorna à aula
 
 ---
 
-### US-10: Receber Arquivos do Professor
+### US-10: Receber Arquivos do Professor (RF-17)
 - **Como** Aluno,
 - **Eu quero** baixar pela página da aula os arquivos que o professor compartilhar,
 - **Para que** eu tenha o material (lista de exercícios, projeto inicial, slides) sem depender de internet, e-mail ou pendrive.
@@ -180,4 +181,73 @@ Cenário: Professor para de compartilhar
   Quando o professor remover o arquivo
   Então ele deve sumir da minha página
   E o link antigo não deve mais baixar nada.
+```
+
+---
+
+### US-11: Conversa Aberta entre Alunos (RF-18)
+**Status: Proposto (já implementado na main).**
+- **Como** Professor,
+- **Eu quero** liberar, quando eu decidir, que os alunos vejam as mensagens uns dos outros,
+- **Para que** a turma possa tirar dúvidas entre si sem eu ter de repetir cada resposta.
+
+#### Critérios de Aceite (Gherkin):
+```gherkin
+Cenário: Opção desligada por padrão
+  Dado que acabei de abrir o AulaCast
+  Então a conversa entre alunos deve estar desligada
+  E as mensagens dos alunos só chegam a mim.
+
+Cenário: Professor liga a conversa entre alunos
+  Dado que há alunos conectados e o chat está ligado
+  Quando eu ligar "chat entre alunos"
+  Então os alunos devem ser avisados na hora
+  E a mensagem de um aluno deve aparecer para toda a turma, sem duplicar para quem a escreveu.
+```
+
+---
+
+### US-12: Ocultar Apps da Transmissão (RF-19)
+**Status: Proposto (já implementado na main).**
+- **Como** Professor transmitindo o monitor inteiro,
+- **Eu quero** tirar da transmissão apps que não devem aparecer (e-mail, mensagens),
+- **Para que** eu possa compartilhar a tela sem expor o que é pessoal, mesmo em tela cheia.
+
+#### Critérios de Aceite (Gherkin):
+```gherkin
+Cenário: Ocultar um app
+  Dado que transmito o monitor
+  Quando eu clicar com o botão direito no cartão de um app e escolher "Ocultar da transmissão"
+  Então o app deve sumir da imagem dos alunos, inclusive em tela cheia
+  E a transmissão não deve ser interrompida.
+
+Cenário: Escolha não persiste
+  Dado que ocultei um app
+  Quando eu fechar e reabrir o AulaCast
+  # Comportamento atual; ver pergunta em aberto em docs/01
+  Então o app volta a aparecer na transmissão
+```
+
+---
+
+### US-13: Vídeo Fluido numa Turma de 40 (RNF-10)
+**Status: Proposto.** Objetivo: o máximo possível (fps alto, latência baixa, banda por aluno baixa); sem número fixo, medido com as linhas `[Métricas]` (`docs/01`, RNF-10).
+- **Como** Aluno numa sala com 40 colegas no mesmo Wi-Fi,
+- **Eu quero** ver a tela do professor sem travar nem picotar,
+- **Para que** eu consiga acompanhar o código e os slides, sem perder o que foi digitado.
+
+#### Critérios de Aceite (Gherkin):
+```gherkin
+Cenário: Turma cheia
+  Dado que 40 alunos estão conectados à mesma transmissão pelo Wi-Fi da sala
+  Quando o professor transmitir
+  Então cada aluno deve receber o máximo de quadros por segundo que a rede permitir (fps médio e mínimo no log `[Métricas]`)
+  E a latência deve ser a menor possível
+  E a banda por aluno deve ser menor que a do MJPEG nas mesmas condições
+  E o texto na tela deve continuar legível.
+
+Cenário: Aluno com sinal fraco
+  Dado que um aluno tem Wi-Fi ruim
+  Então a imagem dele pode ficar com menos qualidade ou fps
+  Mas os outros 39 alunos não devem ser prejudicados.
 ```

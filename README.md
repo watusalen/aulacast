@@ -29,7 +29,7 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
 ```
 
 - **Professor:** app nativo macOS em Swift/SwiftUI.
-- **Alunos:** página web servida pelo próprio Mac do professor — basta digitar `<ip-do-professor>:8080` no navegador (o `http://` é opcional).
+- **Alunos:** página web servida pelo próprio Mac do professor — basta digitar `aulacast.local:8080` no navegador (o `http://` é opcional). Durante a sessão o painel mostra só esse nome; o IP (`<ip-do-professor>:8080`), para quem não resolve `.local`, sai pelo botão "Copiar link".
 
 ## Funcionalidades
 
@@ -163,12 +163,13 @@ src/
   sources/aulacast-app/     # Ponto de entrada do app
   tests/aulacast-tests/     # Suíte de testes
   web-assets/               # Cliente web do aluno (HTML/CSS/JS, sem framework) e as fontes
-docs/                       # Especificação, casos de uso, histórias de usuário, arquitetura
+scripts/                    # build-app.sh, gerar-dmg.sh, gerar-icone.swift
+docs/                       # Índice (docs/README.md), requisitos, casos de uso, histórias, arquitetura, ADRs e padrões
 ```
 
 ## Decisões de projeto
 
-- **MJPEG em vez de H.264** — sem negociação nem dependência de codec no cliente; qualquer navegador exibe com uma tag `<img>`, o que sustenta o requisito de zero instalação.
+- **MJPEG em vez de H.264** — sem negociação nem dependência de codec no cliente; qualquer navegador exibe com uma tag `<img>`, o que sustenta o requisito de zero instalação. Com turmas grandes no Wi-Fi o custo é uma cópia por aluno (RNF-10, ainda sem metas); H.264/fMP4 está em estudo (`docs/04`, seção 4.1.1).
 - **Sem framework no cliente** — os computadores do laboratório são modestos; JavaScript puro carrega rápido e não exige build.
 - **Servidor HTTP/WebSocket próprio** (`Network.framework`) — mantém o projeto sem dependências externas, alinhado ao uso offline.
 - **JPEG direto do buffer da captura** (`CIContext.jpegRepresentation`) — 6x menos CPU por quadro que o caminho via `NSBitmapImageRep`; o app transmitindo caiu de ~31% para ~16% de um núcleo. Números e fontes em `docs/04-arquitetura-e-design.md`, seção 4.1.

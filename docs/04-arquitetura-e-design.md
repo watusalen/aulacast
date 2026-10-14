@@ -36,23 +36,27 @@ flowchart TB
 
 ### 2. Componentes Principais do App macOS (Swift)
 
-#### 2.1. `CaptureEngine` (`ScreenCaptureKit`)
+#### 2.1. `ScreenCaptureService` (`ScreenCaptureKit`)
 - **Responsabilidade:** Capturar o conteúdo dos monitores ou janelas selecionadas com alta taxa de quadros e baixo overhead de memória.
 - **Implementação:** Utiliza `SCStream` e `SCStreamOutput`. Envia amostras de vídeo (`CMSampleBuffer`) para o codificador.
+- **Parâmetros:** formato `32BGRA`, `queueDepth = 5` (`ScreenCaptureService.swift:228`), fps padrão 30 (opções 15/30/45) e resolução 1080p ou 720p, na proporção da fonte e sem ampliar.
+- **Ocultar apps (RF-19):** o menu de botão direito aparece nos cartões de janela (`SourcePickerView`) e marca o app inteiro (`hiddenBundleIDs`). A marcação só tem efeito quando o monitor é a fonte: `filtroDeMonitor` exclui esses apps da captura, mesmo em tela cheia. A escolha não é guardada entre execuções.
 
 #### 2.2. `MJPEGFrameEncoder` (`CoreImage`)
 - **Responsabilidade:** Converter `CMSampleBuffer` em quadros JPEG.
 - **Decisões relevantes:**
   - O `CIContext` é criado **uma única vez** e reaproveitado. Recriá-lo por quadro compila shaders e aloca recursos de GPU repetidamente, inviabilizando o tempo real.
   - Quadros novos são **descartados enquanto o anterior ainda está sendo codificado**. Sem isso, uma codificação mais lenta que a captura enfileira quadros e o atraso cresce indefinidamente.
+- **Qualidade:** JPEG fixo em 0,6 (`MJPEGFrameEncoder.swift:26`), sem ajuste conforme a rede.
 - **Saída:** `Data` com o JPEG pronto para envio.
 
-#### 2.3. `HTTPServer` & `WebSocketServer` (`Network.framework`)
+#### 2.3. `NetworkListenerService` & `WebSocketHandlerService` (`Network.framework`)
 - **Responsabilidade:** Subir o ouvinte (`NWListener`) na porta 8080.
 - **Rotas HTTP:**
   - `GET /`: Entrega o arquivo `index.html` (Player do Aluno).
   - `GET /styles.css` e `GET /js/*`: Recursos estáticos do cliente.
-  - `GET /stream`: Fluxo de vídeo em `multipart/x-mixed-replace` (MJPEG), consumido por uma tag `<img>`.
+  - `GET /stream`: Fluxo de vídeo em `multipart/x-mixed-replace` (MJPEG), consumido por uma tag `<img>`. Servido por `MJPEGStreamerService`: um laço por aluno, que só envia o próximo quadro depois de o anterior sair **do app para o buffer de envio do sistema**, não até o aluno (ver 4.1.1).
+  - `GET /arquivos/<id>`: download de arquivo compartilhado (`FileDownloadService`).
 - **Rota WebSocket (`/ws`):** Gerencia conexões ativas e a troca de mensagens JSON (identificação, presença, chat e lista de arquivos).
 
 > **O vídeo não trafega pelo WebSocket.** São duas conexões independentes: MJPEG sobre HTTP para a imagem e WebSocket para as mensagens. Por isso o cliente vigia as duas separadamente — uma pode cair enquanto a outra segue viva.
@@ -61,8 +65,16 @@ flowchart TB
 - **Responsabilidade:** Decodificar frames RFC 6455, isoladamente do gerenciamento de conexões.
 - **Motivo de existir separado:** o TCP não respeita fronteira de mensagem. Uma leitura pode trazer dois frames colados ou metade de um, então o decodificador mantém um buffer próprio por conexão. Tratar cada leitura como exatamente um frame descartava mensagens em silêncio.
 
-#### 2.5. `BonjourAdvertiser`
+#### 2.5. `BonjourAdvertiserService` e `MDNSHostnameService`
 - **Responsabilidade:** Anunciar o serviço `_aulacast._tcp` usando `NWListener.service` no **próprio listener do servidor**, na porta fixa 8080. Antes o anúncio saía de um segundo listener, em porta sorteada a cada execução: quem achava a sala pelo Bonjour recebia uma porta que recusava conexão, e a porta mudava de aula para aula (ruim para liberar o app no firewall). Um nome repetido na rede é renomeado pelo sistema ("AulaCast - IFPI (2)") sem derrubar o servidor.
+- **Nome `aulacast.local`:** `MDNSHostnameService` registra o nome por mDNS e o painel passa a mostrar `aulacast.local:8080` com a sessão aberta (`MainViewModel.swift:14-30`); antes disso mostra o IP. Redirecionar a porta 80 para esconder o `:8080` foi tentado e revertido (commit `0d38433`; `MainViewModel.swift:21-24`). Ver ADR-002.
+- **Duas transmissões na rede:** o registro é único e o sistema avisa o conflito (`NameConflict`); `MDNSHostnameService` tenta `aulacast-2.local`, `-3` etc. (`proximoPasso`, até `maxAttempts` = 20). O nome só é divulgado depois de confirmado e é retirado ao se perder (conflito tardio, queda do `mDNSResponder`, troca de IP: `MainViewModel.updateServerURL`); sem nome confirmado ou sem rede (loopback), o painel mostra o IP. O `MainViewModel` recebe o serviço pelo protocolo `HostnameAdvertisingProtocol`, o que permite testá-lo com um dublê.
+
+#### 2.6. Serviços de apoio
+- `SystemActivityService`: evita o App Nap durante a transmissão.
+- `SourceThumbnailProvider`: miniaturas da grade de fontes.
+- `WebSocketFrameEncoder`: monta frames RFC 6455 de saída (par do `WebSocketFrameDecoder`).
+- `FileDownloadService` e `SharedFile`: arquivos compartilhados (RF-17).
 
 ---
 
@@ -75,13 +87,15 @@ Enviada pelo servidor assim que o aluno conecta. Carrega o estado atual do chat 
 transmissão: sem isso, quem entra (ou reconecta) no meio da aula veria o campo de mensagem
 liberado com o chat desligado, ou o último quadro congelado como se a aula estivesse ao vivo
 quando ela está pausada ou encerrada. `stream` é `live`, `paused` ou `ended` (este com
-`reason`). `pinned` só vem quando há mensagem fixada (seção 3.11).
+`reason`). `chatVisibleToClass` diz se a conversa entre alunos está aberta (seção 3.12). `files` é a lista de arquivos compartilhados (seção 3.4). `pinned` só vem quando há mensagem fixada (seção 3.11).
 ```json
 {
   "type": "CONNECTED",
   "payload": {
     "chatEnabled": true,
+    "chatVisibleToClass": false,
     "stream": "paused",
+    "files": [],
     "pinned": "Portal do Aluno: https://portal.exemplo.edu.br"
   }
 }
@@ -203,6 +217,15 @@ desafixa. Quem entra depois recebe a fixada no `CONNECTED`.
 { "type": "CHAT_PINNED", "payload": { "text": null } }
 ```
 
+#### 3.12. Chat entre alunos (`CHAT_VISIBILITY`)
+Opção do professor (RF-18), **desligada por padrão**. Enviada a todos os alunos quando muda,
+e o valor atual vai no `CONNECTED` (`chatVisibleToClass`). Com ela ligada, o servidor entrega a
+mensagem do aluno a toda a turma, sem duplicar para o autor (`WebSocketHandlerService.swift:527-531`).
+`visible` vai como string, como em `CHAT_STATE`. Ver ADR-003.
+```json
+{ "type": "CHAT_VISIBILITY", "payload": { "visible": "true" } }
+```
+
 ---
 
 ### 4. Diagrama de Sequência: Fluxo de Transmissão & Interação
@@ -220,7 +243,7 @@ sequenceDiagram
     App->>Net: Sobe NWListener HTTP/WebSocket na porta 8080
     App->>Net: Ativa Anúncio Bonjour (_aulacast._tcp)
 
-    Aluno->>Net: Digita 192.168.1.15:8080 no navegador
+    Aluno->>Net: Digita aulacast.local:8080 (ou o IP) no navegador
     Net-->>Aluno: Retorna index.html, styles.css e os módulos JS
     Aluno->>Aluno: Preenche o nome na tela de entrada
     Aluno->>Net: Conecta ao WebSocket /ws
@@ -265,12 +288,39 @@ Medições feitas num MacBook Air (Apple Silicon), monitor 1470x956 pontos (Reti
 Protocolo: MJPEG sobre HTTP continua sendo a escolha certa para o requisito de zero
 instalação e rede local. WebRTC (usado pelo Deskreen) exige negociação e UDP; H.264 sobre
 WebSocket com WebCodecs acumula atraso quando a rede congestiona, porque o TCP entrega tudo
-em ordem — foi o motivo de a Helix.ml voltar a JPEG sequencial. O AulaCast já faz o que eles
-fizeram: cada aluno só recebe o próximo quadro quando o anterior terminou de sair.
+em ordem — foi o motivo de a Helix.ml voltar a JPEG sequencial. O AulaCast faz algo parecido: cada aluno só recebe o próximo quadro quando o anterior terminou de sair
+do app. Isso vale até o buffer de envio do sistema, não até o aluno, e a escolha do MJPEG foi
+reavaliada para turmas grandes (4.1.1).
 
 Fontes: exemplo "Capturing screen content in macOS" (Apple); WWDC22 10156 e 10155; README
 do µStreamer (pikvm/ustreamer); bug 36536 do WebKit; bug 987135 do Firefox; "We Mass-Deployed
 15-Year-Old Screen Sharing Technology" (blog da Helix.ml).
+
+### 4.1.1. Limite de escala conhecido (RNF-10, Proposto)
+
+O quadro é codificado **uma vez** e guardado em `latestFrameData`, mas cada aluno recebe uma
+**cópia própria** por uma conexão TCP própria (`MJPEGStreamerService`). Com n alunos e quadro
+de S bytes, o custo por quadro é O(n·S) de rede e de cópias de memória; só a codificação é O(1).
+
+- **Banda (estimativa de pior caso, não medida):** com a tela mudando a 30 fps, 1080p e JPEG 0,6,
+  ~150–250 KB por quadro dão ~36–60 Mbps por aluno e ~1,4–2,4 Gbps para 40 alunos. Com um Wi-Fi
+  **suposto** de 100–300 Mbps úteis, seriam ~2–5 fps por aluno. Com a tela parada o servidor não envia
+  quadros novos, então o número real depende do conteúdo. Falta medir (Fase 0).
+- **Sem adaptação:** qualidade e fps não mudam com a rede, e o app não limita o buffer de envio (o atraso cresce até o tamanho do buffer do sistema).
+  `.contentProcessed` indica que o dado entrou no buffer do sistema, não que o aluno o recebeu;
+  um aluno lento acumula quadros velhos e vê atraso e rajadas.
+- **Repetição por causa do Safari:** o último quadro é repetido uma vez (bug 36536 do WebKit) para
+  **todos** os alunos, não só os do Safari: é uma rajada extra de n×S a cada pausa da tela.
+- **Como medir:** o servidor escreve no log, a cada 5 s e só com alunos com o vídeo aberto, uma
+  linha `[Métricas] N alunos | tela X fps | por aluno: média Y fps, mínimo Z fps | W Mbps`.
+  Vem de contadores no `MJPEGStreamerService` (quadros publicados, bytes e quadros distintos por
+  aluno) e de `StreamRates.entre` (diferença entre duas fotografias, dividida pelo tempo real do
+  intervalo). É o que chegou ao buffer de envio do sistema, **um teto** do que o aluno vê; a
+  repetição do Safari conta bytes, mas não quadros. O fps por aluno no navegador não é medido.
+- **Direção em estudo:** codec com predição entre quadros (H.264 em fMP4, via MSE no navegador,
+  sem app no aluno), mantendo o MJPEG como compatibilidade. Há uma implementação de referência
+  na branch local `compressao-video-h264` (commit `c63592b`), fora da main. Ver ADR-001; decidir por ele pede um ADR novo.
+  As metas numéricas dependem de medição (RNF-10).
 
 ### 4.2. Tela do professor: Material 3 Expressive no desenho do Google Meet
 
@@ -373,8 +423,13 @@ AulaCast/
 │   ├── 01-especificacao-requisitos.md
 │   ├── 02-casos-de-uso.md
 │   ├── 03-historias-de-usuario.md
-│   └── 04-arquitetura-e-design.md
+│   ├── 04-arquitetura-e-design.md
+│   ├── feedback-tela-do-aluno.md
+│   ├── README.md                          # Índice (RF, RNF, UC, US, ADR)
+│   ├── padroes.md
+│   └── adr/                               # Decisões de arquitetura
 ├── README.md
+├── scripts/                               # build-app.sh, gerar-dmg.sh, gerar-icone.swift
 └── src/
     ├── Package.swift
     ├── sources/
@@ -391,6 +446,7 @@ AulaCast/
     │       │   ├── ConnectedClient.swift      # Identificação e presença
     │       │   ├── ChatMessage.swift
     │       │   ├── DisplaySource.swift
+    │       │   ├── SharedFile.swift
     │       │   └── VideoResolution.swift
     │       ├── managers/
     │       │   ├── ClientManagerService.swift
@@ -404,6 +460,11 @@ AulaCast/
     │       │   ├── NetworkListenerService.swift
     │       │   ├── WebSocketHandlerService.swift
     │       │   ├── WebSocketFrameDecoder.swift
+    │       │   ├── WebSocketFrameEncoder.swift
+    │       │   ├── FileDownloadService.swift
+    │       │   ├── MDNSHostnameService.swift
+    │       │   ├── SystemActivityService.swift
+    │       │   ├── SourceThumbnailProvider.swift
     │       │   ├── StaticFileProviderService.swift
     │       │   ├── BonjourAdvertiserService.swift
     │       │   └── WebAssetsPathResolver.swift
@@ -427,6 +488,7 @@ AulaCast/
         ├── styles.css                         # Tokens do Material 3 (claro e escuro)
         ├── manifest.webmanifest               # "Adicionar à Tela de Início" em tela cheia
         ├── apple-touch-icon.png
+        ├── favicon-32.png, favicon-192.png     # Ícone na aba do navegador
         ├── fonts/                             # Google Sans Flex e Material Symbols (+ licenças),
         │                                      #   usadas também pela tela do professor
         ├── js/
@@ -456,7 +518,7 @@ Duas suítes, ambas **sem dependências externas** — coerente com o requisito 
 | Suíte | Como executar | Cobre |
 | :--- | :--- | :--- |
 | Swift | `swift run AulaCastTestRunner` | Domínio (turma, chat, identificação, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
-| Cliente Web | `node --test "tests/*.test.js"` | Identificação do aluno, política de reconexão, watchdog do vídeo e relato de presença |
+| Cliente Web | `node --test "tests/*.test.js"` | 12 arquivos: identificação do aluno, reconexão (`socket-client`, `config`), watchdog do vídeo, presença, chat (`chat-manager`), mensagens do servidor (`main-messages`), interface (`ui-controller`), lista de arquivos, links, mão levantada e manter a tela acesa |
 
 Os testes de integração sobem um `NetworkListenerService` real numa porta de teste e se
 conectam como um aluno de verdade, em vez de simular as camadas — vários defeitos deste

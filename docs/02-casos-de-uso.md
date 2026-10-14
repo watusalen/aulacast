@@ -20,11 +20,12 @@
   4. O professor clica no botão **"Iniciar Transmissão"**.
   5. O sistema inicia a captura via `ScreenCaptureKit` e o servidor HTTP/WebSocket na porta 8080.
   6. O sistema ativa o anúncio de rede via Bonjour (`_aulacast._tcp`).
-  7. O sistema atualiza o status para *"Transmitindo"* e exibe a URL local de acesso (ex: `192.168.1.15:8080`; o `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local).
+  7. O sistema atualiza o status para *"Transmitindo"* e exibe a URL local de acesso: com a sessão aberta, só `aulacast.local:8080` (nome registrado por mDNS); antes disso, o IP (ex: `192.168.1.15:8080`). O IP também sai pelo botão **Copiar link**. O `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local.
 - **Fluxos Alternativos:**
   - *FA-01 (Mudar resolução/FPS):* O professor altera a resolução ou a taxa de quadros nas configurações, antes ou durante a transmissão; a mudança vale imediatamente, sem reiniciar a sessão.
   - *FA-02 (Trocar a fonte durante a aula):* O professor seleciona outro monitor ou janela na grade de fontes. O sistema troca o conteúdo transmitido sem encerrar a sessão nem desconectar os alunos.
   - *FA-03 (Pausar):* O professor congela a imagem para a turma sem encerrar a transmissão, e retoma depois.
+  - *FA-04 (Ocultar apps):* Com o monitor como fonte, o professor tira apps da transmissão (ver UC-09).
 - **Exceções:**
   - *EX-01 (Permissão de Captura Negada):* Se a permissão de Gravação de Tela do macOS não tiver sido autorizada, o app **não inicia a transmissão** — nem a captura, nem o servidor — e exibe a tela explicativa com um botão que solicita a permissão e abre os Ajustes do Sistema na seção correta. A tela reaparece a cada tentativa de transmitir, e não apenas na abertura do app. Como o macOS só aplica a permissão a partir da próxima execução, a mesma tela oferece **Reabrir o AulaCast**, que fecha e reabre o aplicativo.
   - *EX-02 (Captura interrompida pelo sistema):* Se a captura cair sozinha (monitor desconectado, permissão revogada), o app exibe o motivo ao professor e avisa os alunos com `STREAM_ENDED`, em vez de deixar a imagem congelada sem explicação. O servidor continua no ar, para a turma seguir conectada: o professor pode iniciar a transmissão de novo ou encerrar a sessão pelo botão de parada ao lado de "Iniciar Transmissão".
@@ -38,13 +39,14 @@
 - **Pré-condição:** O computador do aluno está conectado à mesma rede local (Wi-Fi/Ethernet) que o Mac do professor, e o UC-01 foi executado.
 - **Fluxo Principal:**
   1. O aluno abre qualquer navegador web (Chrome, Firefox, Safari, Edge).
-  2. O aluno digita a URL da sala fornecida pelo professor (ex: `192.168.1.15:8080`; o `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local).
+  2. O aluno digita a URL da sala fornecida pelo professor (`aulacast.local:8080` ou o IP, ex: `192.168.1.15:8080`; o `http://` é opcional — o navegador completa, e o Chrome não mostra aviso de HTTP para IP de rede local).
   3. O navegador carrega a interface Web do AulaCast servida pelo app macOS.
   4. O sistema apresenta a tela de entrada e **só libera a aula após a identificação** (ver UC-06).
   5. O JavaScript do cliente estabelece uma conexão WebSocket com o servidor local.
   6. O servidor adiciona o novo cliente à lista de conexões ativas.
   7. O cliente abre o fluxo de vídeo em `GET /stream` e a tela do professor passa a ser exibida no player.
 - **Exceções:**
+  - *EX-00 (Nome `.local` não resolve):* Em redes que bloqueiam mDNS, o aluno usa o endereço IP, que o professor copia com **Copiar link** (o painel mostra só `aulacast.local:8080` durante a sessão).
   - *EX-01 (Servidor Indisponível):* Se o professor não tiver iniciado a transmissão, a página exibe "Reconectando à aula" e continua tentando sozinha, sem exigir recarregamento.
   - *EX-02 (Queda apenas do vídeo):* Como o vídeo trafega numa conexão separada do WebSocket, o cliente vigia o fluxo e o restabelece quando o navegador acusa erro nele, e sempre que o WebSocket reconecta. Limitação conhecida: Chrome e Safari não avisam quando uma resposta MJPEG já iniciada é cortada, então a queda só do vídeo, com o WebSocket de pé, pode deixar a imagem parada até a próxima reconexão.
 - **Pós-condição:** O aluno, já identificado, assiste à transmissão em tempo real.
@@ -74,7 +76,8 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
 - **Fluxo Principal (professor responde):**
   1. O professor escreve no painel de chat do aplicativo.
   2. O servidor retransmite a mensagem para **todos** os alunos conectados.
-- **Regra de negócio:** a conversa do aluno é **reservada com o professor**. Mensagens de aluno
+- **Fluxo Alternativo (FA-01, RF-18):** com a opção "chat entre alunos" ligada pelo professor (desligada por padrão), a mensagem do aluno vai para **toda a turma**, sem duplicar para quem escreveu. Os alunos conectados são avisados na hora quando a opção muda (`CHAT_VISIBILITY`).
+- **Regra de negócio:** **por padrão**, a conversa do aluno é **reservada com o professor**. Mensagens de aluno
   não circulam pela turma; só as do professor são vistas por todos. Retransmiti-las a todos
   transformava o chat em conversa paralela durante a aula.
 
@@ -126,7 +129,7 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
 
 ---
 
-### UC-08: Compartilhar Arquivos com a Turma
+### UC-08: Compartilhar Arquivos com a Turma (RF-17)
 - **Ator Principal:** Professor
 - **Atores Secundários:** Aluno, Sistema
 - **Pré-condição:** O app está aberto; para os alunos baixarem, o servidor precisa estar no ar (UC-01).
@@ -143,3 +146,17 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
   - *EX-01 (Pasta):* Pastas não são compartilhadas; o painel pede para compactá-las antes.
   - *EX-02 (Arquivo apagado ou movido do disco):* O download responde 404, sem afetar a transmissão.
 - **Regra de negócio:** O aluno só alcança os arquivos da lista, pelo identificador; não há como chegar a outro arquivo do Mac pela URL.
+
+---
+
+### UC-09: Ocultar Apps da Transmissão
+- **Ator Principal:** Professor
+- **Atores Secundários:** Sistema
+- **Pré-condição:** Transmissão ativa (UC-01). A marcação vale quando o **monitor** é a fonte.
+- **Fluxo Principal:**
+  1. O professor clica com o botão direito no cartão de um app (janela) na grade de fontes. A marcação vale para o app inteiro (todas as janelas dele).
+  2. Escolhe **Ocultar da transmissão**.
+  3. O sistema tira esse app da captura (`ScreenCaptureService`, `hiddenBundleIDs` e `filtroDeMonitor`), mesmo em tela cheia, sem interromper a sessão.
+- **Fluxos Alternativos:**
+  - *FA-01 (Mostrar de novo):* O mesmo menu oferece **Mostrar na transmissão**.
+- **Regra de negócio:** só vale com o monitor como fonte (com uma janela como fonte não há o que ocultar). A escolha não é guardada entre execuções (RF-19, **Proposto — já implementado na main**).
