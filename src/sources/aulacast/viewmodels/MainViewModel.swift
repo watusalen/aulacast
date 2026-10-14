@@ -13,18 +13,20 @@ public final class MainViewModel: ObservableObject {
 
     /// O endereço como a turma digita.
     ///
-    /// Enquanto a transmissão está no ar, mostra `aulacast.local:<porta>` — o nome
-    /// mDNS registrado pelo `MDNSHostnameService` — que funciona em Chrome/Edge/Safari
-    /// sem nenhuma configuração. Antes da sessão abrir, mostra o IP numérico para o
-    /// professor saber a qual rede está conectado.
+    /// Enquanto a transmissão está no ar, mostra `<nome>:<porta>` com o nome mDNS que o
+    /// `MDNSHostnameService` registrou e o sistema **confirmou** (`aulacast.local` ou, se
+    /// outro professor já o usa na rede, `aulacast-2.local` etc.) — funciona em
+    /// Chrome/Edge/Safari sem nenhuma configuração. Antes da sessão abrir, ou enquanto
+    /// nenhum nome estiver confirmado, mostra o IP numérico: ele nunca leva a turma à aula
+    /// de outro professor.
     ///
     /// Sem a porta (`aulacast.local` puro) exigiria o servidor escutar na porta 80, que só
     /// root abre no macOS — chegou a ser tentado via `pf`, mas a única forma de fazer valer
     /// de verdade é substituir o conjunto de regras de firewall do sistema inteiro, o que
     /// não vale o risco para este app.
     public var displayAddress: String {
-        if isSessionOpen {
-            return "aulacast.local:\(serverService.port)"
+        if isSessionOpen, let nome = mdnsHostname {
+            return "\(nome):\(serverService.port)"
         }
         return serverURLString.replacingOccurrences(of: "http://", with: "")
     }
@@ -39,6 +41,9 @@ public final class MainViewModel: ObservableObject {
     /// oferecia "Iniciar", e não havia como encerrar a sessão: o Mac nunca mais dormia e a
     /// porta seguia aberta até o app fechar.
     @Published public private(set) var isSessionOpen: Bool = false
+
+    /// Nome `.local` confirmado pelo mDNS para esta aula, sem a porta; `nil` até confirmar.
+    @Published public private(set) var mdnsHostname: String?
 
     /// Arquivos que a turma pode baixar agora, na ordem em que foram compartilhados.
     @Published public private(set) var sharedFiles: [SharedFile] = []
@@ -134,7 +139,9 @@ public final class MainViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     /// Registra `aulacast.local` na rede enquanto a transmissão está no ar.
-    private let mdnsService = MDNSHostnameService()
+    private let mdnsService: HostnameAdvertisingProtocol
+    /// IP para o qual o nome `.local` foi registrado; `nil` fora da sessão.
+    private var ipDoNome: String?
 
 
     /// Avisa quando a rede muda (trocar de Wi-Fi, plugar cabo, o roteador renovar o IP).
@@ -153,6 +160,7 @@ public final class MainViewModel: ObservableObject {
         advertiserService: ServiceAdvertiserProtocol? = nil,
         systemActivity: SystemActivityProtocol = SystemActivityService(),
         permission: ScreenRecordingPermissionProtocol = ScreenRecordingPermissionService(),
+        hostnameService: HostnameAdvertisingProtocol = MDNSHostnameService(),
         chatManager: ChatManagerService = ChatManagerService(),
         clientManager: ClientManagerService = ClientManagerService()
     ) {
@@ -164,6 +172,7 @@ public final class MainViewModel: ObservableObject {
             ?? SemAnuncioService()
         self.systemActivity = systemActivity
         self.permission = permission
+        self.mdnsService = hostnameService
         self.chatManager = chatManager
         self.clientManager = clientManager
 
@@ -188,6 +197,9 @@ public final class MainViewModel: ObservableObject {
         self.serverService.handRaiseObserver = self
         self.serverService.isChatEnabled = self.isChatEnabled
         self.serverService.isStudentChatVisibleToClass = self.isStudentChatVisibleToClass
+        self.mdnsService.onHostnameChange = { [weak self] nome in
+            Task { @MainActor in self?.mdnsHostname = nome }
+        }
         self.serverService.onFailure = { [weak self] mensagem in
             Task { @MainActor in self?.serverDidFail(mensagem) }
         }
@@ -337,7 +349,9 @@ public final class MainViewModel: ObservableObject {
             do {
                 try serverService.start()
                 advertiserService.startAdvertising()
-                mdnsService.start(ip: serverService.localIPAddress)
+                let ipAtual = serverService.localIPAddress
+                mdnsService.start(ip: ipAtual)
+                ipDoNome = ipAtual
                 self.systemActivity.beginTransmission(
                     reason: "Transmitindo a aula para os alunos na rede local"
                 )
@@ -382,6 +396,8 @@ public final class MainViewModel: ObservableObject {
             serverService.stop()
             advertiserService.stopAdvertising()
             mdnsService.stop()
+            self.mdnsHostname = nil
+            self.ipDoNome = nil
             self.systemActivity.endTransmission()
             self.isStreaming = false
             self.isSessionOpen = false
@@ -407,9 +423,20 @@ public final class MainViewModel: ObservableObject {
         serverService.broadcastControlMessage(type: isPaused ? "STREAM_PAUSED" : "STREAM_RESUMED", payload: nil)
     }
 
-    private func updateServerURL() {
+    /// Relê o IP da máquina e, se a sessão estiver aberta, refaz o nome `.local` quando ele mudou.
+    public func updateServerURL() {
         let ip = serverService.localIPAddress
         self.serverURLString = "http://\(ip):\(serverService.port)"
+
+        // Trocou de rede no meio da aula: o nome `.local` seguia apontando para o IP antigo, e o
+        // painel, que prefere o nome, passava a mostrar um endereço que não leva a lugar nenhum.
+        // Retira o nome e o registra de novo no IP novo; até confirmar, o painel mostra o IP.
+        if isSessionOpen, let registrado = ipDoNome, registrado != ip {
+            mdnsHostname = nil
+            mdnsService.stop()
+            mdnsService.start(ip: ip)
+            ipDoNome = ip
+        }
     }
 }
 

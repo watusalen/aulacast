@@ -67,6 +67,15 @@ final class FakeAdvertiser: ServiceAdvertiserProtocol {
     func stopAdvertising() { isAdvertising = false }
 }
 
+final class FakeHostname: HostnameAdvertisingProtocol {
+    var onHostnameChange: ((String?) -> Void)?
+    private(set) var ip: String?
+    func start(ip: String) { self.ip = ip }
+    func stop() { ip = nil }
+    /// Simula o sistema confirmando (ou perdendo) o nome.
+    func confirmar(_ nome: String?) { onHostnameChange?(nome) }
+}
+
 final class FakeServer: NetworkServerProtocol {
     var isRunning: Bool = false
     var port: UInt16 = 8080

@@ -794,7 +794,8 @@ struct AulaCastTestRunner {
                 serverService: servidor,
                 advertiserService: FakeAdvertiser(),
                 systemActivity: FakeSystemActivity(),
-                permission: FakePermission(concedida: permissao)
+                permission: FakePermission(concedida: permissao),
+                hostnameService: FakeHostname()
             )
             return (vm, captura, servidor)
         }
@@ -1978,8 +1979,41 @@ struct AulaCastTestRunner {
             serverService: servidorDaLousa, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity()
         )
         assertTest(vmEndereco.displayAddress == "192.168.1.10:8080", "O painel mostra o endereço sem o http://")
+        assertTest(!vmEndereco.displayAddress.contains(".local"), "Sem sessão aberta e sem nome confirmado, o painel mostra o IP")
         assertTest(vmEndereco.serverURLString == "http://192.168.1.10:8080",
                    "O link copiado continua completo, para ser clicável quando colado")
+
+        // Duas transmissões na mesma rede: o painel só mostra o nome que o mDNS confirmou.
+        let nomeFalso = FakeHostname()
+        let servidorNome = FakeServer()
+        let vmNome = MainViewModel(
+            captureService: FakeCaptureService(), encoderService: FakeEncoder(),
+            serverService: servidorNome, advertiserService: FakeAdvertiser(), systemActivity: FakeSystemActivity(),
+            permission: FakePermission(concedida: true), hostnameService: nomeFalso
+        )
+        vmNome.startStream()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        assertTest(vmNome.isSessionOpen, "A sessão abre com o serviço de nome falso")
+        assertTest(nomeFalso.ip == "192.168.1.10", "O nome é registrado apontando para o IP do servidor")
+        assertTest(vmNome.displayAddress == "192.168.1.10:8080",
+                   "Sessão aberta mas nome ainda não confirmado: o painel mostra o IP")
+        nomeFalso.confirmar("aulacast-2.local")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmNome.displayAddress == "aulacast-2.local:8080",
+                   "Nome confirmado (o segundo professor da rede): o painel mostra aulacast-2.local")
+        nomeFalso.confirmar(nil)
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmNome.displayAddress == "192.168.1.10:8080", "Nome perdido: o painel volta para o IP")
+
+        // Trocou de Wi-Fi no meio da aula: o nome antigo aponta para o IP velho e sai do painel.
+        nomeFalso.confirmar("aulacast.local")
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        assertTest(vmNome.displayAddress == "aulacast.local:8080", "Nome confirmado antes da troca de rede")
+        servidorNome.localIPAddress = "10.0.0.7"
+        vmNome.updateServerURL()
+        assertTest(vmNome.displayAddress == "10.0.0.7:8080",
+                   "Trocou de IP: o painel mostra o IP novo, não um nome que apontaria para o antigo")
+        assertTest(nomeFalso.ip == "10.0.0.7", "O nome é registrado de novo, apontando para o IP novo")
 
         // TESTE 27: Painel do professor.
         print("\n--- [27/27] Testes: painel do professor ---")
@@ -2442,6 +2476,182 @@ struct AulaCastTestRunner {
             servidorChatTurma.stop()
         } catch {
             assertTest(false, "Falha no teste E2E do chat visível entre alunos: \(error.localizedDescription)")
+        }
+
+        // TESTE 31: Nome mDNS por tentativa (sem tocar a rede).
+        print("\n--- [31/33] Testes de Domínio: nome mDNS por tentativa ---")
+        assertTest(MDNSHostnameService.hostname(attempt: 1) == "aulacast.local.", "Tentativa 1 usa o nome sem número")
+        assertTest(MDNSHostnameService.hostname(attempt: 2) == "aulacast-2.local.", "Tentativa 2 vira aulacast-2")
+        assertTest(MDNSHostnameService.hostname(attempt: 7) == "aulacast-7.local.", "Tentativa 7 vira aulacast-7")
+        assertTest(MDNSHostnameService.hostname(attempt: 0) == "aulacast.local.", "Tentativa 0 se comporta como a 1")
+        assertTest(MDNSHostnameService.hostname(attempt: -3) == "aulacast.local.", "Tentativa negativa se comporta como a 1")
+        assertTest(MDNSHostnameService.maxAttempts > 1, "Há mais de uma tentativa de nome antes de desistir")
+        assertTest(
+            MDNSHostnameService.hostname(attempt: MDNSHostnameService.maxAttempts)
+                == "aulacast-\(MDNSHostnameService.maxAttempts).local.",
+            "A última tentativa permitida ainda gera um nome numerado"
+        )
+        // Erros do dnssd: 0 = sem erro, -65548 = conflito de nome, -65537 = desconhecido.
+        assertTest(MDNSHostnameService.proximoPasso(erro: 0, tentativa: 1) == .confirmar,
+                   "Sem erro: o nome é confirmado")
+        assertTest(MDNSHostnameService.proximoPasso(erro: -65548, tentativa: 1) == .tentarCom(tentativa: 2),
+                   "Conflito no primeiro nome: tenta o aulacast-2")
+        assertTest(MDNSHostnameService.proximoPasso(erro: -65548, tentativa: 2) == .tentarCom(tentativa: 3),
+                   "Conflito no segundo nome: tenta o aulacast-3")
+        assertTest(MDNSHostnameService.proximoPasso(erro: -65548, tentativa: MDNSHostnameService.maxAttempts) == .desistir,
+                   "Conflito na última tentativa: desiste e deixa só o IP")
+        assertTest(MDNSHostnameService.proximoPasso(erro: -65537, tentativa: 1) == .falhar,
+                   "Outro erro qualquer: falha, sem nome")
+
+        // TESTE 32: Taxas entre duas fotografias dos contadores.
+        print("\n--- [32/33] Testes de Domínio: StreamRates.entre ---")
+        let alunoA: UInt64 = 1
+        let alunoB: UInt64 = 2
+        let alunoC: UInt64 = 3
+
+        var antesT = StreamSnapshot()
+        antesT.quadrosPublicados = 100
+        antesT.bytesEnviados = 5_000_000
+        antesT.quadrosPorAluno = [alunoA: 10, alunoB: 20]
+        var depoisT = StreamSnapshot()
+        depoisT.quadrosPublicados = 160
+        depoisT.bytesEnviados = 6_250_000
+        depoisT.quadrosPorAluno = [alunoA: 40, alunoB: 30, alunoC: 99]
+
+        let taxas = StreamRates.entre(antesT, e: depoisT, segundos: 2)
+        assertTest(taxas?.alunos == 2, "Aluno só na fotografia de depois fica de fora da contagem")
+        assertTest(taxas?.fpsMedioPorAluno == 10, "fps médio por aluno: (15 + 5) / 2 = 10")
+        assertTest(taxas?.fpsMinimoPorAluno == 5, "fps mínimo por aluno é o do mais lento")
+        assertTest(taxas?.fpsDaTela == 30, "fps da tela sai da diferença de quadros publicados")
+        assertTest(taxas?.megabitsPorSegundo == 5, "1_250_000 bytes em 2 s = 5 Mbps")
+
+        var antesComSaida = antesT
+        antesComSaida.quadrosPorAluno[alunoC] = 1
+        var depoisSemB = depoisT
+        depoisSemB.quadrosPorAluno.removeValue(forKey: alunoB)
+        depoisSemB.quadrosPorAluno.removeValue(forKey: alunoC)
+        let taxasSaida = StreamRates.entre(antesComSaida, e: depoisSemB, segundos: 2)
+        assertTest(taxasSaida?.alunos == 1 && taxasSaida?.fpsMedioPorAluno == 15,
+                   "Aluno só na fotografia de antes (saiu) fica de fora")
+
+        var umSegundoDepois = StreamSnapshot()
+        umSegundoDepois.bytesEnviados = 1_250_000
+        let taxaMbps = StreamRates.entre(StreamSnapshot(), e: umSegundoDepois, segundos: 1)
+        assertTest(taxaMbps?.megabitsPorSegundo == 10, "1_250_000 bytes em 1 s = 10 Mbps")
+
+        let semAlunos = StreamRates.entre(StreamSnapshot(), e: StreamSnapshot(), segundos: 1)
+        assertTest(semAlunos?.alunos == 0 && semAlunos?.fpsMedioPorAluno == 0 && semAlunos?.fpsMinimoPorAluno == 0,
+                   "Sem alunos, fps médio e mínimo são 0 (e não infinito)")
+        assertTest(StreamRates.entre(antesT, e: depoisT, segundos: 0) == nil, "Intervalo de 0 s é inválido")
+        assertTest(StreamRates.entre(antesT, e: depoisT, segundos: -1) == nil, "Intervalo negativo é inválido")
+
+        var recuou = StreamSnapshot()
+        recuou.quadrosPublicados = 5
+        recuou.bytesEnviados = 5
+        recuou.quadrosPorAluno = [alunoA: 1]
+        var avancado = StreamSnapshot()
+        avancado.quadrosPublicados = 10
+        avancado.bytesEnviados = 10
+        avancado.quadrosPorAluno = [alunoA: 2]
+        let taxasRecuo = StreamRates.entre(avancado, e: recuou, segundos: 1)
+        assertTest(taxasRecuo?.alunos == 0, "Aluno cujo contador recuou fica de fora, em vez de virar bilhões de fps")
+        assertTest(taxasRecuo?.fpsDaTela == 0 && taxasRecuo?.megabitsPorSegundo == 0,
+                   "Contadores de tela e bytes que recuaram contam como zero, não como uma volta de 2^64")
+
+        // TESTE 33: Contadores reais do vídeo, com o servidor de verdade.
+        print("\n--- [33/33] Testes de Rede: contadores de quadros por aluno ---")
+        let servidorContadores = NetworkListenerService(
+            port: 8130,
+            webAssetsPath: FileManager.default.temporaryDirectory
+        )
+        func abrirVideoBruto(_ porta: UInt16) -> Int32 {
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(porta.bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            let pedido = "GET /stream HTTP/1.1\r\nHost: x\r\n\r\n"
+            _ = pedido.withCString { send(fd, $0, strlen($0), 0) }
+            return fd
+        }
+        do {
+            try servidorContadores.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let inicial = servidorContadores.streamSnapshot()
+            assertTest(inicial.quadrosPublicados == 0 && inicial.bytesEnviados == 0 && inicial.quadrosPorAluno.isEmpty,
+                       "Servidor novo começa com os contadores zerados")
+
+            let fd1 = abrirVideoBruto(8130)
+            let fd2 = abrirVideoBruto(8130)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            assertTest(servidorContadores.streamSnapshot().quadrosPorAluno.count == 2,
+                       "Dois alunos conectados aparecem nos contadores")
+
+            let totalQuadros = 5
+            for i in 0..<totalQuadros {
+                servidorContadores.broadcastFrame(Data(repeating: UInt8(i + 1), count: 2048 + i))
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            let aposQuadros = servidorContadores.streamSnapshot()
+            assertTest(aposQuadros.quadrosPublicados == UInt64(totalQuadros),
+                       "Quadros publicados = \(totalQuadros) (veio \(aposQuadros.quadrosPublicados))")
+            assertTest(aposQuadros.bytesEnviados > 0, "Bytes enviados contados (\(aposQuadros.bytesEnviados))")
+            assertTest(aposQuadros.quadrosPorAluno.count == 2, "Os dois alunos seguem na lista")
+            assertTest(
+                aposQuadros.quadrosPorAluno.values.allSatisfy { $0 >= 1 && $0 <= UInt64(totalQuadros) },
+                "Cada aluno recebeu entre 1 e \(totalQuadros) quadros (veio \(Array(aposQuadros.quadrosPorAluno.values)))"
+            )
+
+            // Passou bem mais que os 150 ms da repetição do Safari: a repetição já aconteceu.
+            let antesDaRepeticao = aposQuadros.quadrosPorAluno
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let depoisDaRepeticao = servidorContadores.streamSnapshot()
+            assertTest(depoisDaRepeticao.quadrosPorAluno == antesDaRepeticao,
+                       "A repetição do último quadro não conta como quadro novo do aluno")
+            assertTest(depoisDaRepeticao.quadrosPublicados == UInt64(totalQuadros),
+                       "A repetição também não conta como quadro publicado")
+
+            // Um aluno sai: lê o que chegou antes de fechar, para sair com FIN e não RST.
+            var lixo = [UInt8](repeating: 0, count: 65536)
+            _ = recv(fd1, &lixo, lixo.count, MSG_DONTWAIT)
+            close(fd1)
+            var restantes = servidorContadores.streamSnapshot().quadrosPorAluno.count
+            for _ in 0..<10 where restantes > 1 {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                restantes = servidorContadores.streamSnapshot().quadrosPorAluno.count
+            }
+            assertTest(restantes == 1, "Aluno que sai deixa os contadores (sobraram: \(restantes))")
+
+            close(fd2)
+            servidorContadores.stop()
+        } catch {
+            assertTest(false, "Falha no teste dos contadores de vídeo: \(error.localizedDescription)")
+        }
+
+        // Um único quadro, depois de parar a tela: a repetição não pode somar um segundo.
+        let servidorUnico = NetworkListenerService(port: 8131, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorUnico.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd = abrirVideoBruto(8131)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            servidorUnico.broadcastFrame(Data(repeating: 0x42, count: 2048))
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let unico = servidorUnico.streamSnapshot()
+            assertTest(unico.quadrosPorAluno.count == 1 && unico.quadrosPorAluno.values.first == 1,
+                       "Um quadro publicado e tela parada: o aluno conta exatamente 1 (veio \(Array(unico.quadrosPorAluno.values)))")
+            close(fd)
+            servidorUnico.stop()
+        } catch {
+            assertTest(false, "Falha no teste do quadro único: \(error.localizedDescription)")
         }
 
         // SUMÁRIO FINAL
