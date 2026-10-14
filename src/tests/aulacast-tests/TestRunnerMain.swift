@@ -5,6 +5,12 @@ import CoreVideo
 import Network
 import AulaCastCore
 
+/// Descarta o CONNECTED e, em build de depuração, o DEBUG_INFO que vem logo depois.
+func descartarBoasVindas(_ socket: URLSessionWebSocketTask) async {
+    _ = try? await socket.receive()
+    if MetricasDebug.ativo { _ = try? await socket.receive() }
+}
+
 @main
 struct AulaCastTestRunner {
     @MainActor
@@ -511,7 +517,7 @@ struct AulaCastTestRunner {
             // professor liga a visibilidade no meio da aula — não só na próxima mensagem.
             let socketAoVivo = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8100/ws")!)
             socketAoVivo.resume()
-            _ = try? await socketAoVivo.receive() // descarta o CONNECTED
+            await descartarBoasVindas(socketAoVivo)
 
             servidorE2E.broadcastControlMessage(type: "CHAT_VISIBILITY", payload: ["visible": "true"])
             var avisoDeVisibilidade = ""
@@ -688,8 +694,8 @@ struct AulaCastTestRunner {
             alunoA.resume()
             alunoB.resume()
 
-            _ = try? await alunoA.receive() // CONNECTED
-            _ = try? await alunoB.receive() // CONNECTED
+            await descartarBoasVindas(alunoA)
+            await descartarBoasVindas(alunoB)
 
             /// Guarda a primeira mensagem que chegar numa conexão.
             /// Só um `receive` fica pendente por socket: encadear vários deixa o anterior na
@@ -1809,7 +1815,7 @@ struct AulaCastTestRunner {
             // Quem já está conectado recebe a lista nova; quem chega depois, no CONNECTED.
             let socketArquivos = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8116/ws")!)
             socketArquivos.resume()
-            _ = try? await socketArquivos.receive()
+            await descartarBoasVindas(socketArquivos)
             servidorDownload.updateSharedFiles(vmArquivos.sharedFiles)
             var mensagemDeArquivos = ""
             if case .string(let texto)? = try? await socketArquivos.receive() { mensagemDeArquivos = texto }
@@ -2365,9 +2371,9 @@ struct AulaCastTestRunner {
             alunoY.resume()
             alunoZ.resume()
 
-            _ = try? await alunoX.receive() // CONNECTED
-            _ = try? await alunoY.receive() // CONNECTED
-            _ = try? await alunoZ.receive() // CONNECTED
+            await descartarBoasVindas(alunoX)
+            await descartarBoasVindas(alunoY)
+            await descartarBoasVindas(alunoZ)
 
             /// Guarda a primeira mensagem que chegar numa conexão (mesmo desenho do teste de
             /// privacidade do chat, TESTE 11 — cada `receive` só pode ter uma chamada pendente).
@@ -2423,9 +2429,9 @@ struct AulaCastTestRunner {
             colegaQ.resume()
             colegaR.resume()
 
-            _ = try? await autora.receive() // CONNECTED
-            _ = try? await colegaQ.receive() // CONNECTED
-            _ = try? await colegaR.receive() // CONNECTED
+            await descartarBoasVindas(autora)
+            await descartarBoasVindas(colegaQ)
+            await descartarBoasVindas(colegaR)
 
             let escutaQ = CaixaDeEscuta()
             let escutaR = CaixaDeEscuta()
@@ -3232,6 +3238,36 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste de limite de conexões: \(error.localizedDescription)")
         }
 
+        // (14b) DEBUG_INFO: uma vez, logo depois do CONNECTED, só com as chaves esperadas.
+        print("\n--- DEBUG_INFO ---")
+        do {
+            let servidorDebug = NetworkListenerService(port: 8170, webAssetsPath: FileManager.default.temporaryDirectory)
+            try? servidorDebug.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let ws = URLSession.shared.webSocketTask(with: URL(string: "ws://127.0.0.1:8170/ws")!)
+            ws.resume()
+            var tipos: [String] = []
+            var infoDebug: [String: Any] = [:]
+            for _ in 0..<2 {
+                guard case .string(let t)? = try? await ws.receive(), let d = t.data(using: .utf8),
+                      let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { break }
+                tipos.append(j["type"] as? String ?? "?")
+                if j["type"] as? String == "DEBUG_INFO" { infoDebug = j["payload"] as? [String: Any] ?? [:] }
+            }
+            assertTest(tipos == ["CONNECTED", "DEBUG_INFO"], "DEBUG_INFO vem uma vez, logo depois do CONNECTED (\(tipos))")
+            let esperadas: Set<String> = ["versao", "porta", "ip", "h264", "h264TaxaMinBps", "h264TaxaMaxBps", "quadroChaveMaxSeg",
+                                          "maxMp4PorIp", "maxMp4Total", "filaMaxBytes", "filaMaxMs", "pedidoQuadroChaveMs"]
+            assertTest(Set(infoDebug.keys) == esperadas, "DEBUG_INFO traz só as chaves esperadas (\(Set(infoDebug.keys).symmetricDifference(esperadas)))")
+            assertTest(infoDebug["porta"] as? Int == 8170 && infoDebug["maxMp4PorIp"] as? Int == 4 && infoDebug["maxMp4Total"] as? Int == 120,
+                       "DEBUG_INFO: porta e limites de conexão")
+            let volta = try? JSONSerialization.data(withJSONObject: infoDebug)
+            assertTest((volta.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })?.count == esperadas.count,
+                       "DEBUG_INFO sobrevive ao ciclo JSON")
+            ws.cancel(with: .goingAway, reason: nil)
+            servidorDebug.stop()
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+
         // (14) Métricas por aluno: METRICS validado, guardado e devolvido no METRICS_TABLE.
         print("\n--- Métricas: METRICS e METRICS_TABLE ---")
         do {
@@ -3318,6 +3354,8 @@ struct AulaCastTestRunner {
             assertTest(linhas.count == 2, "Só alunos identificados aparecem (linhas: \(linhas.count))")
             assertTest(tabela?["alunosH264"] != nil && tabela?["telaFps"] != nil && tabela?["mbps"] != nil,
                        "A tabela traz o resumo do servidor")
+            assertTest(tabela?["estourosDeFila"] != nil && tabela?["pedidosDeQuadroChave"] != nil && tabela?["bytesTotais"] != nil,
+                       "A tabela traz os contadores de fila, pedidos de quadro-chave e bytes totais")
 
             saida.cancel(with: .goingAway, reason: nil)
             try? await Task.sleep(nanoseconds: 600_000_000)

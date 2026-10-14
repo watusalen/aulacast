@@ -63,7 +63,7 @@ Ao iniciar a transmissão, o app mostra o endereço para passar à turma.
 
 ```bash
 ./scripts/build-app.sh    # monta build/AulaCast.app
-./scripts/gerar-dmg.sh    # monta o .app e o embala em build/AulaCast-1.0.0.dmg
+./scripts/gerar-dmg.sh    # monta o .app e o embala em build/AulaCast-2.0.0.dmg
 ```
 
 O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos — quem recebe só arrasta um

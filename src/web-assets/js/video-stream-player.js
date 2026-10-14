@@ -162,6 +162,7 @@ export class VideoStreamPlayer {
     }
     this.querTransmitir = true;
     this.tentativas = 0;
+    globalThis.AulaCastDebug?.log('rota', `H.264: iniciando ${this.streamUrl}`);
     this.iniciarVerificador();
     this.conectar();
   }
@@ -271,12 +272,14 @@ export class VideoStreamPlayer {
       return false;
     }
     this.sourceBuffer = sb;
+    globalThis.AulaCastDebug?.log('mse', `SourceBuffer criado, codec ${codec}`);
     sb.addEventListener('updateend', () => {
       if (sb !== this.sourceBuffer) return;
       this.sincronizar();
       if (!this.aparar(MANTER_ATRAS_S)) this.escoarFila();
     });
     sb.addEventListener('error', () => {
+      globalThis.AulaCastDebug?.log('mse', 'evento error no SourceBuffer (updateend com erro)');
       if (sb === this.sourceBuffer) this.aoQuedaDeConexao('erro do SourceBuffer');
     });
     return true;
@@ -320,6 +323,7 @@ export class VideoStreamPlayer {
         }
         if (value && value.byteLength) {
           this.bytesRecebidos += value.byteLength;
+          globalThis.AulaCastDebug?.fragmentos(value);
           this.receberPedaco(value);
         }
       }
@@ -342,6 +346,7 @@ export class VideoStreamPlayer {
     if (!codec && !semCodecParaLer) return;
     const bytes = this.inicio;
     this.inicio = null;
+    globalThis.AulaCastDebug?.log('mse', `init segment ${bytes.length} bytes`, codec ? `codec lido do avcC` : 'avcC ilegível; codec padrão');
     if (!this.criarSourceBuffer(codec || CODEC_PADRAO)) return;
     this.filaDePedacos.push(bytes);
     this.escoarFila();
@@ -360,6 +365,7 @@ export class VideoStreamPlayer {
       sb.appendBuffer(proximo);
       this.retentouQuota = false;
     } catch (erro) {
+      globalThis.AulaCastDebug?.log('mse', `appendBuffer falhou: ${erro && erro.name}`);
       if (erro && erro.name === 'QuotaExceededError' && !this.retentouQuota && this.liberarQuota()) {
         this.retentouQuota = true;
         this.filaDePedacos.unshift(proximo);
@@ -383,6 +389,7 @@ export class VideoStreamPlayer {
     const corte = fim - MARGEM_QUOTA_S;
     if (!(corte > inicio)) return false;
     try {
+      globalThis.AulaCastDebug?.log('seek', `quota cheia: descartando ${inicio.toFixed(2)}-${corte.toFixed(2)} s e indo à borda ao vivo`);
       sb.remove(inicio, corte);
       this.video.currentTime = fim - FOLGA_AO_VIVO_S;
       return true;
@@ -399,6 +406,7 @@ export class VideoStreamPlayer {
     const limite = this.video.currentTime - margem;
     if (!(faixas.start(0) < limite)) return false;
     try {
+      globalThis.AulaCastDebug?.log('mse', `trim: removendo buffer até ${limite.toFixed(2)} s`);
       sb.remove(0, limite);
       return true;
     } catch (_) {
@@ -430,6 +438,8 @@ export class VideoStreamPlayer {
       }
     }
     if (alvo !== null) {
+      globalThis.AulaCastDebug?.log('seek', `${t.toFixed(2)} -> ${alvo.toFixed(2)} s`,
+        this.faixaQueContem(faixas, t) >= 0 ? 'atraso acima de 2 s' : t < faixas.start(0) ? 'antes do buffer (late joiner)' : 'buraco no buffer');
       this.video.currentTime = alvo;
       this.ajustarVelocidade(0);
     }
@@ -440,8 +450,12 @@ export class VideoStreamPlayer {
   ajustarVelocidade(atraso) {
     const v = this.video;
     if (atraso > ATRASO_MINIMO_S) {
-      if (v.playbackRate !== VELOCIDADE_ALCANCE) v.playbackRate = VELOCIDADE_ALCANCE;
+      if (v.playbackRate !== VELOCIDADE_ALCANCE) {
+        globalThis.AulaCastDebug?.log('rate', `playbackRate ${v.playbackRate} -> ${VELOCIDADE_ALCANCE}`, `atraso ${atraso.toFixed(2)} s`);
+        v.playbackRate = VELOCIDADE_ALCANCE;
+      }
     } else if (atraso <= ATRASO_ALCANCADO_S && v.playbackRate !== 1) {
+      globalThis.AulaCastDebug?.log('rate', `playbackRate ${v.playbackRate} -> 1`, `atraso ${atraso.toFixed(2)} s`);
       v.playbackRate = 1;
     }
   }
@@ -501,6 +515,7 @@ export class VideoStreamPlayer {
    */
   aoQuedaDeConexao(motivo) {
     if (!this.querTransmitir) return;
+    globalThis.AulaCastDebug?.log('rota', `queda do /stream.mp4: ${motivo}`);
     this.encerrarConexaoAtual();
     this.esconderVideo();
     this.tentativas += 1;
@@ -523,6 +538,7 @@ export class VideoStreamPlayer {
   }
 
   cairParaFallback(motivo) {
+    globalThis.AulaCastDebug?.log('rota', `H.264 abandonado: ${motivo}`);
     const primeiraVez = !this.emFallback;
     this.emFallback = true;
     this.desistiu = true;

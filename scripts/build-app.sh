@@ -21,7 +21,7 @@ SAIDA="$(mkdir -p "$SAIDA" && cd "$SAIDA" && pwd)"
 APP="$SAIDA/AulaCast.app"
 
 IDENTIFICADOR="com.aulacast"
-VERSAO="1.0.0"
+VERSAO="2.0.0"
 MACOS_MINIMO="13.0"
 
 # Opt-in: métricas por aluno (console do navegador + arquivo ~/AulaCast-metricas). Fora disso o

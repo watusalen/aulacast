@@ -32,6 +32,9 @@ public final class WebSocketHandlerService {
     /// manda em cada mensagem: antes um aluno podia escrever ao professor assinando como
     /// um colega (ou como "Professor") só trocando o campo `sender`.
     private var nomes: [String: String] = [:]
+    /// Fatos estáticos do servidor mandados no `DEBUG_INFO` (só em build de depuração).
+    var infoDeDepuracao: (() -> [String: Any])?
+
     /// Último estado da transmissão anunciado à turma, repetido no CONNECTED.
     ///
     /// Sem isto, quem reconectava (ou entrava no meio da aula) com a transmissão pausada
@@ -168,6 +171,11 @@ public final class WebSocketHandlerService {
         ]
         if let welcomeJSON = Self.serializar(welcomeDict) {
             sendTextFrame(connection: connection, text: welcomeJSON)
+        }
+        // Só depuração: fatos estáticos do servidor para o painel de depuração do aluno, uma vez por conexão.
+        if MetricasDebug.ativo, let info = infoDeDepuracao?(),
+           let json = Self.serializar(["type": "DEBUG_INFO", "payload": info]) {
+            sendTextFrame(connection: connection, text: json)
         }
 
         // Inicia escuta continua de frames WebSocket nessa conexao.

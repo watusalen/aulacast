@@ -32,7 +32,11 @@ fi
 # A versão vem do Info.plist recém-escrito, e não de uma cópia aqui: dois lugares guardando
 # o mesmo número acabam discordando, e aí o nome do arquivo mente sobre o que há dentro.
 VERSAO="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
-DMG="$SAIDA/AulaCast-$VERSAO.dmg"
+# Build com as métricas de depuração (AULACAST_DEBUG_METRICS=1) leva "-debug" no nome: não é
+# o arquivo para distribuir a alunos.
+SUFIXO=""
+[ "${AULACAST_DEBUG_METRICS:-}" = "1" ] && SUFIXO="-debug"
+DMG="$SAIDA/AulaCast-$VERSAO$SUFIXO.dmg"
 
 echo "==> Preparando o conteúdo da imagem"
 # Pasta temporária com exatamente o que deve aparecer ao abrir o .dmg. Montar a imagem a

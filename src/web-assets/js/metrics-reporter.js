@@ -92,8 +92,10 @@ export class MetricsReporter {
 
   publicar(m) {
     const fmt = (v, un) => (v === null ? 'n/d' : `${v} ${un}`);
-    this.log.log(`${PREFIXO} você: rota ${m.rota} | ${fmt(m.fps, 'fps')} | ${fmt(m.mbps, 'Mbps')} | `
-      + `perdidos ${fmt(m.dropped, 'quadros')} | atraso ${fmt(m.lagMs, 'ms')}`);
+    const linha = `você: rota ${m.rota} | ${fmt(m.fps, 'fps')} | ${fmt(m.mbps, 'Mbps')} | `
+      + `perdidos ${fmt(m.dropped, 'quadros')} | atraso ${fmt(m.lagMs, 'ms')}`;
+    this.log.log(`${PREFIXO} ${linha}`);
+    globalThis.AulaCastDebug?.log('metricas', linha);
     this.enviar({ type: 'METRICS', payload: m });
   }
 
@@ -101,9 +103,12 @@ export class MetricsReporter {
   aoReceberTabela(payload) {
     if (!this.habilitado || !payload || typeof payload !== 'object') return;
     const n = (v) => (ehNumero(v) ? arredondar(v, 1) : 'n/d');
-    this.log.log(`${PREFIXO} turma: ${n(payload.alunos)} alunos (H.264 ${n(payload.alunosH264)} / MJPEG `
+    const resumo = `turma: ${n(payload.alunos)} alunos (H.264 ${n(payload.alunosH264)} / MJPEG `
       + `${n(payload.alunosMJPEG)}) | tela ${n(payload.telaFps)} fps | por aluno: média ${n(payload.mediaFps)}, `
-      + `mínimo ${n(payload.minimoFps)} fps | ${n(payload.mbps)} Mbps (servidor)`);
+      + `mínimo ${n(payload.minimoFps)} fps | ${n(payload.mbps)} Mbps (servidor)`;
+    this.log.log(`${PREFIXO} ${resumo}`);
+    globalThis.AulaCastDebug?.log('metricas', `${resumo} | filas estouradas ${n(payload.estourosDeFila)}, `
+      + `pedidos de quadro-chave ${n(payload.pedidosDeQuadroChave)}, bytes totais ${n(payload.bytesTotais)}`);
     const linhas = Array.isArray(payload.rows) ? payload.rows : [];
     this.log.table(linhas.map((l) => ({
       nome: l.nome, rota: l.rota, fps: l.fps, mbps: l.mbps, dropped: l.dropped, lagMs: l.lagMs

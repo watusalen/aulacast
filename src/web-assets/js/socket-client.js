@@ -49,10 +49,11 @@ export class SocketClient {
     const wsUrl = `${protocol}//${window.location.host}/ws`;
 
     try {
+      globalThis.AulaCastDebug?.log('ws', `conectando (tentativa ${this.reconnectAttempts})`, wsUrl);
       this.ws = new WebSocket(wsUrl);
       this.ws.onopen = () => this.handleOpen();
       this.ws.onmessage = (e) => this.handleMessage(e);
-      this.ws.onclose = () => this.handleClose();
+      this.ws.onclose = (e) => this.handleClose(e);
       this.ws.onerror = (err) => this.handleError(err);
     } catch (err) {
       console.error('Erro ao conectar WebSocket:', err);
@@ -73,6 +74,7 @@ export class SocketClient {
   handleOpen() {
     this.reconnectAttempts = 0;
     this.lastMessageAt = Date.now();
+    globalThis.AulaCastDebug?.log('ws', 'aberto');
     this.onStateChange(ConnectionState.CONNECTED, 0);
     this.startHeartbeat();
   }
@@ -81,7 +83,10 @@ export class SocketClient {
     this.lastMessageAt = Date.now();
     try {
       const data = JSON.parse(event.data);
-      if (data.type !== 'PONG') {
+      if (data.type === 'PONG') {
+        if (this.pingEnviadoEm) globalThis.AulaCastDebug?.rtt(Date.now() - this.pingEnviadoEm);
+        this.pingEnviadoEm = 0;
+      } else {
         this.onMessage(data);
       }
     } catch (e) {
@@ -89,8 +94,10 @@ export class SocketClient {
     }
   }
 
-  handleClose() {
+  handleClose(evento) {
     this.stopHeartbeat();
+    globalThis.AulaCastDebug?.log('ws', 'fechado', evento && evento.code !== undefined
+      ? { codigo: evento.code, motivo: evento.reason || '', limpo: evento.wasClean } : 'sem evento (silêncio ou erro)');
 
     if (this.manuallyStopped) return;
 
@@ -124,6 +131,7 @@ export class SocketClient {
   scheduleReconnect() {
     if (this.reconnectTimer) return;
     this.reconnectAttempts++;
+    globalThis.AulaCastDebug?.log('ws', `reconexão em ${this.nextDelay()} ms (tentativa ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -138,10 +146,13 @@ export class SocketClient {
       // ponto de acesso, o `onclose` pode levar minutos: nesse meio-tempo a página dizia
       // "Conectado" com o vídeo congelado e o chat indo para lugar nenhum.
       if (Date.now() - this.lastMessageAt > SERVER_SILENCE_TIMEOUT_MS) {
+        globalThis.AulaCastDebug?.log('ws', `servidor mudo há mais de ${SERVER_SILENCE_TIMEOUT_MS} ms; derrubando`);
         this.cleanup();
         this.handleClose();
         return;
       }
+      this.pingEnviadoEm = Date.now();
+      globalThis.AulaCastDebug?.log('ws', 'PING');
       this.send({ type: 'PING' });
     }, 10000);
   }

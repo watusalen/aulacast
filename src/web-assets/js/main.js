@@ -3,6 +3,7 @@ import { UIController } from './ui-controller.js';
 import { ChatManager } from './chat-manager.js';
 import { EntryGate } from './entry-gate.js';
 import { PresenceReporter } from './presence-reporter.js';
+import { DebugPanel } from './debug-panel.js';
 import { MetricsReporter } from './metrics-reporter.js';
 import { FilesList } from './files-list.js';
 import { MaoLevantada } from './raise-hand.js';
@@ -31,6 +32,8 @@ export class AulaCastApp {
     this.h264Desistiu = false;
     this.ui = new UIController({ criarVigia, mjpegSuprimido: suporteAH264 });
     this.identidade = null;
+    /** `DebugPanel`, criado só com o aviso `metricas` do servidor. */
+    this.debug = null;
 
     const criarPlayer = criarVideoPlayer || ((el, opcoes) => new VideoStreamPlayer(el, opcoes));
     this.videoPlayer = videoElementoMP4
@@ -42,6 +45,7 @@ export class AulaCastApp {
             // Daqui em diante esta página é MJPEG: nenhum caminho volta a ligar o H.264.
             this.h264Desistiu = true;
             console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
+            globalThis.AulaCastDebug?.log('rota', `fallback H.264 -> MJPEG: ${motivo}`);
             this.ui.ativarFallbackMJPEG();
           }
         })
@@ -104,6 +108,7 @@ export class AulaCastApp {
   entrarNaAula(identidade, { porGesto = false } = {}) {
     this.identidade = identidade;
     this.metricas.iniciar();
+    this.debug?.aoIdentificar();
     this.ui.setStudentName(identidade.name);
 
     // O navegador só deixa manter a tela acesa a partir de um gesto do usuário. No envio
@@ -153,8 +158,26 @@ export class AulaCastApp {
     }
   }
 
+  /** Painel de depuração: só nasce quando o servidor (build de depuração) liga `metricas`. */
+  ativarDebug() {
+    if (this.debug) return;
+    this.debug = new DebugPanel({ video: document.getElementById('videoStreamMP4') });
+    this.debug.ativar();
+    this.debug.log('rota', this.videoPlayer
+      ? 'rota escolhida: H.264 (/stream.mp4 via MediaSource); MJPEG fica de reserva'
+      : 'rota escolhida: MJPEG (/stream); sem MediaSource/H.264 neste navegador');
+    if (this.identidade) this.debug.aoIdentificar();
+  }
+
   handleServerMessage(data) {
+    if (data.type === 'CONNECTED' && data.payload && data.payload.metricas === 'true') this.ativarDebug();
+    // Só o tipo: o conteúdo (chat, nomes) nunca vai para o log de depuração.
+    globalThis.AulaCastDebug?.log('srv', data.type);
     switch (data.type) {
+      case 'DEBUG_INFO':
+        globalThis.AulaCastDebug?.log('servidor', 'DEBUG_INFO', data.payload);
+        break;
+
       // Quem entra no meio da aula precisa saber como o chat está agora, e não só
       // quando o professor mexer no botão da próxima vez.
       case 'CONNECTED':

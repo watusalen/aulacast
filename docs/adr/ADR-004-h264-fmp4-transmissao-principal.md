@@ -27,3 +27,5 @@ O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 
 - Blocos alterados em JPEG/PNG num `<canvas>` (estilo VNC): HTTP puro e texto nítido, não implementado.
 - WebRTC e WebCodecs: descartados (UDP/sinalização; WebCodecs exige HTTPS).
 - Só puxar quadros (long-poll): melhora cadência e atraso, mas não reduz bytes.
+
+- Depuração de rede (somente com `metricas`): `DEBUG_INFO` do servidor e painel "Debug" no aluno (docs/04, seção 3.13) para inspecionar o fluxo H.264/MJPEG sem alterar o comportamento normal.

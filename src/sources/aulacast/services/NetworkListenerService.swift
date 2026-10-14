@@ -71,6 +71,26 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         self.staticFileProvider = StaticFileProviderService(webAssetsPath: webAssetsPath)
         self.streamerService = MJPEGStreamerService()
         self.webSocketHandler = WebSocketHandlerService()
+        self.webSocketHandler.infoDeDepuracao = { [weak self] in self?.infoDeDepuracao() ?? [:] }
+    }
+
+    /// Payload do `DEBUG_INFO`: só fatos que o servidor já conhece (sem fps/resolução da captura,
+    /// nem o nome mDNS, que vivem no MainViewModel e exigiriam acoplar o servidor a eles).
+    func infoDeDepuracao() -> [String: Any] {
+        [
+            "versao": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev",
+            "porta": Int(port),
+            "ip": localIPAddress,
+            "h264": true,
+            "h264TaxaMinBps": H264FrameEncoder.taxaMinimaBps,
+            "h264TaxaMaxBps": H264FrameEncoder.taxaMaximaBps,
+            "quadroChaveMaxSeg": H264FrameEncoder.intervaloMaxEntreChavesSeg,
+            "maxMp4PorIp": MP4StreamerService.maxConexoesPorIP,
+            "maxMp4Total": MP4StreamerService.maxConexoesTotal,
+            "filaMaxBytes": MP4StreamerService.filaMaxBytes,
+            "filaMaxMs": 1000,
+            "pedidoQuadroChaveMs": 1000
+        ]
     }
 
     public func start() throws {
@@ -201,7 +221,10 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             "telaFps": taxa.fpsDaTela,
             "mediaFps": taxa.fpsMedioPorAluno,
             "minimoFps": taxa.fpsMinimoPorAluno,
-            "mbps": taxa.megabitsPorSegundo
+            "mbps": taxa.megabitsPorSegundo,
+            "estourosDeFila": mp4StreamerService.estourosDeFila,
+            "pedidosDeQuadroChave": mp4StreamerService.pedidosDeQuadroChave,
+            "bytesTotais": Int(truncatingIfNeeded: streamSnapshot().bytesEnviados)
         ]
         let linhas = webSocketHandler.broadcastMetricsTable(resumo: resumo)
         if !linhas.isEmpty || taxa.alunos > 0 {

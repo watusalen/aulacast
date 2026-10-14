@@ -68,6 +68,7 @@ for (const s of ['.placeholder-title', '.placeholder-sub', '.spinner', '.placeho
 elementos.chatPinned.hidden = true;
 
 globalThis.document = {
+  body: criarElemento('body'),
   getElementById: (id) => elementos[id] ?? null,
   createElement: (tag) => criarElemento(tag),
   createTextNode: (texto) => ({ tagName: '#text', textContent: texto }),
@@ -343,5 +344,31 @@ test('Quem entra sozinho com a identidade salva ativa a tela acesa no primeiro t
     assert.deepStrictEqual(telaAcesa.chamadas, ['instalarNoPrimeiroGesto']);
   } finally {
     delete globalThis.sessionStorage;
+  }
+});
+
+test('CONNECTED sem metricas: nenhum painel de depuração, nó, relógio nem global', () => {
+  const { app } = novoApp();
+  const antes = globalThis.document.body.filhos.length;
+  app.handleServerMessage({ type: 'CONNECTED', payload: { chatEnabled: true } });
+  assert.strictEqual(app.debug, null);
+  assert.strictEqual(globalThis.AulaCastDebug, undefined);
+  assert.strictEqual(globalThis.document.body.filhos.length, antes);
+});
+
+test('CONNECTED com metricas:"true": o painel nasce e abre ao identificar; chat nunca é logado', () => {
+  const { app } = novoApp();
+  try {
+    app.handleServerMessage({ type: 'CONNECTED', payload: { metricas: 'true' } });
+    assert.ok(app.debug.ativo);
+    assert.strictEqual(typeof globalThis.AulaCastDebug.log, 'function');
+    assert.strictEqual(app.debug.aberto, false);
+    app.entrarNaAula({ name: 'Ana' }, {});
+    assert.strictEqual(app.debug.aberto, true);
+    app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Bia', text: 'segredo', isProf: false } });
+    assert.ok(app.debug.linhas.some((l) => l.includes('[srv] CHAT_MESSAGE')));
+    assert.ok(!app.debug.linhas.some((l) => l.includes('segredo')));
+  } finally {
+    app.debug?.desativar();
   }
 });

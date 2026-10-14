@@ -238,6 +238,10 @@ Cada 5 s o navegador manda a própria medição; o servidor (só de aluno já id
 Validação: chaves conhecidas, `rota` em {`H.264`,`MJPEG`}, números finitos limitados (fps 0-240, mbps 0-1000, dropped >= 0, lagMs 0-3600000), 1 mensagem aceita por segundo por cliente, até 100 linhas; a linha some na desconexão. Na rota MJPEG o navegador não mede por quadro: manda só a rota e os números vão `null`.
 Arquivo da sessão (também só no modo de depuração): `~/AulaCast-metricas/sessao-AAAAMMDD-HHmmss.jsonl`, um JSON por linha (`inicio`, `amostra` a cada 5 s com alunos conectados, `entrada`, `saida`, `fim`), limitado a ~20 MB (`truncado`).
 
+`METRICS_TABLE` também traz `estourosDeFila`, `pedidosDeQuadroChave` e `bytesTotais` (bytes entregues ao buffer do sistema, MJPEG + H.264).
+**`DEBUG_INFO` (mesma trava `metricas`)**: logo depois do `CONNECTED`, uma vez por conexão, `{ versao, porta, ip, h264, h264TaxaMinBps, h264TaxaMaxBps, quadroChaveMaxSeg, maxMp4PorIp, maxMp4Total, filaMaxBytes, filaMaxMs, pedidoQuadroChaveMs }`. Fps/resolução da captura, taxa-alvo exata e nome mDNS não vão (vivem no `MainViewModel`; acoplar o servidor a eles não compensa).
+**Painel de depuração do aluno** (`debug-panel.js`): botão "Debug" e gaveta (folha inferior em tela estreita), criados só com `metricas: "true"`; abre expandido uma vez ao entrar. Traz a explicação de ponta a ponta e um log ao vivo (anel de 500 linhas, ms) de WebSocket, PING/PONG com RTT, tipos de mensagem do servidor (nunca o texto do chat), rota/codec/init segment, fragmentos, MSE, buffer, atraso, `playbackRate`, seeks e visibilidade, com "Copiar log" (fallback para http) e "Baixar .txt". Os módulos chamam `globalThis.AulaCastDebug?.log(...)`, que só existe com o painel.
+
 ---
 
 ### 4. Diagrama de Sequência: Fluxo de Transmissão & Interação
