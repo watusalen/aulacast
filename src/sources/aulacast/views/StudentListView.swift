@@ -94,6 +94,12 @@ public struct StudentListView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        // A linha inteira abre o painel de tempo do aluno, inclusive as áreas vazias.
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.alunoAberto = aluno.id }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Abre o tempo de \(aluno.name) na aula")
     }
 
     /// Ninguém entrou ainda: o que fazer e o atalho para isso (como o "Adicionar pessoas"

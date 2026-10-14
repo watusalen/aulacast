@@ -68,3 +68,8 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 3. **RF-18 e RF-19:** as prioridades (COULD) estão corretas?
 4. **RF-19:** a lista de apps ocultos deve sobreviver ao fechar e reabrir o app? Hoje ela se perde.
 5. **RF-05:** o comportamento de conflito de nome foi verificado com três registros na mesma máquina. Falta conferir com dois Macs reais na mesma rede, inclusive o que acontece com um conflito tardio (volta do sono, duas redes que se juntam).
+
+---
+
+### RF-20: Tempo de cada aluno na aula (Proposto)
+O professor clica na linha de um aluno na aba Alunos e vê um painel com: tempo **na aula**, tempo **com a aula à vista** (aba visível e em foco, não é rastreio do olhar), porcentagem, saídas da aula, maior trecho sem sair e desconexões e voltas. O tempo conta só com a transmissão no ar e sem pausa; abas simultâneas da mesma pessoa contam uma vez. Regras de identidade: ADR-005.

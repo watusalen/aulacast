@@ -58,6 +58,7 @@ public struct MainDashboardView: View {
         .frame(minWidth: painelAberto ? 1040 : 760, minHeight: 620)
         .background(M3.surfaceContainerLow)
         .ignoresSafeArea(.container, edges: .top)
+        .overlay { StudentDetailOverlay(viewModel: viewModel) }
         .animation(M3.Mola.padrao, value: painelAberto)
         .animation(M3.Mola.padrao, value: abaSalva)
         .task(id: chavePrevia) {
