@@ -34,3 +34,10 @@ Os testes usam **portas fixas** (faixa 81xx). Duas execuções ao mesmo tempo co
 
 ## Pendências para o usuário aprovar (todos **Proposto**)
 RF-17 (renumeração), RF-18, RF-19, RNF-10, UC-09, US-11/12/13, ADR-001/002/003. Perguntas em aberto: unidade e valor da meta de CPU (RNF-03); FPS mínimo, banda por aluno e latência (RNF-10); prioridade de RF-18 e RF-19; persistência dos apps ocultos; comportamento do conflito de nome mDNS.
+
+## Atualização: integração para teste (branch `integracao-teste`)
+Junta, sem tocar na `main` e sem push: docs (`dc018a5`), mDNS automático e métricas (`86d661b`) e o H.264/fMP4 (`c63592b`) com as correções da revisão (`58214ba`).
+- **mDNS:** segundo professor recebe `aulacast-2.local` sozinho; o painel mostra só nome confirmado, senão o IP (RF-05, ADR-002).
+- **H.264 (RNF-10, ADR-004 Proposto):** corrigidos entrada tardia, congelamento após tela parada, perseguição do ao vivo, fantasma após pausa, reset entre sessões, corrida cabeçalho/init, pedidos de quadro-chave e fila por cliente sem limite, taxa de bits sem controle.
+- **Testes:** Swift 388 passando (3 execuções seguidas), JS 184. Uma falha única do teste do encoder real em 1 de 5 execuções.
+- **Não verificado:** navegadores reais (Chrome/Safari/iPhone), rede da sala com 40 alunos, bitrate efetivo e legibilidade do texto, dois Macs reais para o mDNS.

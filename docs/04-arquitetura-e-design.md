@@ -319,7 +319,7 @@ de S bytes, o custo por quadro é O(n·S) de rede e de cópias de memória; só 
   repetição do Safari conta bytes, mas não quadros. O fps por aluno no navegador não é medido.
 - **Direção em estudo:** codec com predição entre quadros (H.264 em fMP4, via MSE no navegador,
   sem app no aluno), mantendo o MJPEG como compatibilidade. Há uma implementação de referência
-  na branch local `compressao-video-h264` (commit `c63592b`), fora da main. Ver ADR-001; decidir por ele pede um ADR novo.
+  na branch local `compressao-video-h264` (commit `c63592b`), fora da main. Integrado na branch `integracao-teste`: ver ADR-004 (Proposto) e a medição `[Métricas]`.
   As metas numéricas dependem de medição (RNF-10).
 
 ### 4.2. Tela do professor: Material 3 Expressive no desenho do Google Meet

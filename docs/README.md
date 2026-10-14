@@ -27,3 +27,4 @@ Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Su
 | [ADR-001](adr/ADR-001-mjpeg-http-multipart.md) | MJPEG por HTTP multipart, quadro codificado uma vez | Proposto (retroativo) |
 | [ADR-002](adr/ADR-002-aulacast-local-porta-8080.md) | `aulacast.local` na porta 8080; porta 80 revertida | Proposto (retroativo) |
 | [ADR-003](adr/ADR-003-chat-entre-alunos-opcional.md) | Chat entre alunos opcional, desligado por padrão | Proposto (retroativo) |
+| [ADR-004](adr/ADR-004-h264-fmp4-transmissao-principal.md) | H.264/fMP4 como transmissão principal; MJPEG como compatibilidade | Proposto |
