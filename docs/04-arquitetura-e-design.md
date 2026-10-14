@@ -39,7 +39,7 @@ flowchart TB
 #### 2.1. `ScreenCaptureService` (`ScreenCaptureKit`)
 - **Responsabilidade:** Capturar o conteúdo dos monitores ou janelas selecionadas com alta taxa de quadros e baixo overhead de memória.
 - **Implementação:** Utiliza `SCStream` e `SCStreamOutput`. Envia amostras de vídeo (`CMSampleBuffer`) para o codificador.
-- **Parâmetros:** formato `32BGRA`, `queueDepth = 5` (`ScreenCaptureService.swift:228`), fps padrão 30 (opções 15/30/45) e resolução 1080p ou 720p, na proporção da fonte e sem ampliar.
+- **Parâmetros:** formato `32BGRA`, `queueDepth = 5` (`ScreenCaptureService.swift:228`), padrão **720p e 15 fps** (opções de fps 15/30/45 e resolução 720p ou 1080p, que o professor muda na hora, com efeito imediato), na proporção da fonte e sem ampliar. O padrão foi baixado na versão 2.0 para poupar banda da turma (RNF-10).
 - **Ocultar apps (RF-19):** o menu de botão direito aparece nos cartões de janela (`SourcePickerView`) e marca o app inteiro (`hiddenBundleIDs`). A marcação só tem efeito quando o monitor é a fonte: `filtroDeMonitor` exclui esses apps da captura, mesmo em tela cheia. A escolha não é guardada entre execuções.
 
 #### 2.2. `MJPEGFrameEncoder` (`CoreImage`)

@@ -32,14 +32,14 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     private var vigiaDaJanela: Task<Void, Never>?
 
     /// Idem para a qualidade: mudar durante a transmissão precisa surtir efeito imediato.
-    @Published public var resolution: VideoResolution = .p1080 {
+    @Published public var resolution: VideoResolution = .p720 {
         didSet {
             guard isRecording, oldValue != resolution else { return }
             Task { await applyConfigurationChange() }
         }
     }
 
-    @Published public var frameRate: Int = 30 {
+    @Published public var frameRate: Int = 15 {
         didSet {
             guard isRecording, oldValue != frameRate else { return }
             Task { await applyConfigurationChange() }

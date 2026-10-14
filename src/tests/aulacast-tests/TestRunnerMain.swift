@@ -2714,6 +2714,19 @@ struct AulaCastTestRunner {
         // 15 quadros, não 5: o encoder de baixa latência segura um pequeno buffer de partida
         // (poucos quadros sem devolver nada) antes de entrar em regime — um teste curto demais
         // mediria só esse aquecimento, não a entrega em regime permanente.
+        // Aquecimento: o encoder de hardware pode levar mais de um segundo para o primeiro uso
+        // do processo (logo depois de recompilar) e descarta quadros enquanto isso. Espera-se o
+        // primeiro quadro entregue, até ~6 s, e só então se mede a entrega em regime.
+        var indiceAquecimento = 100
+        while coletorAU.unidades.isEmpty && indiceAquecimento < 140 {
+            if let amostra = criarAmostraH264(indice: indiceAquecimento) {
+                encoderH264.encode(sampleBuffer: amostra)
+            }
+            indiceAquecimento += 1
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        let jaEntregues = coletorAU.unidades.count
+
         for indice in 0..<15 {
             if let amostra = criarAmostraH264(indice: indice) {
                 encoderH264.encode(sampleBuffer: amostra)
@@ -2723,7 +2736,8 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 1_000_000_000)
 
         let unidades = coletorAU.unidades
-        assertTest(unidades.count >= 8, "O encoder H.264 entrega vários quadros em regime (recebidos: \(unidades.count) de 15)")
+        let emRegime = unidades.count - jaEntregues
+        assertTest(emRegime >= 8, "O encoder H.264 entrega vários quadros em regime (recebidos: \(emRegime) de 15)")
         assertTest(unidades.first?.isKeyFrame == true, "O primeiro quadro do encoder H.264 é sempre quadro-chave")
 
         func contemNAL(_ dados: Data, tipo: UInt8) -> Bool {
