@@ -46,6 +46,34 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     /// anterior para decodificar a partir dele).
     private var forcarProximoKeyFrame = false
 
+    /// Quadros por segundo da captura (`ScreenCaptureService.frameRate`). Entra no cálculo da taxa
+    /// de bits e do intervalo entre quadros-chave; vale na próxima (re)criação da sessão.
+    public var framesPerSecond: Int = 30
+
+    // MARK: - Controle de taxa
+
+    /// Bits por pixel por quadro usados para estimar a taxa média: ~0,04 dá ~2,5 Mbps em
+    /// 1080p30, bom para texto/slides com `RealTime`. Ajuste aqui para trocar qualidade por banda.
+    static let bitsPorPixelPorQuadro = 0.04
+    static let taxaMinimaBps = 1_200_000
+    static let taxaMaximaBps = 4_000_000
+    /// O teto de picos (quadro-chave) é este múltiplo da média, numa janela de 1 s.
+    static let multiplicadorDoTeto = 1.5
+    /// Quadro-chave pelo menos a cada tanto tempo, qualquer que seja o fps (uma tela parada
+    /// produz poucos quadros, e "60 quadros" viraria minutos).
+    static let intervaloMaxEntreChavesSeg = 2.0
+
+    /// Taxa média alvo em bits por segundo, limitada a [`taxaMinimaBps`, `taxaMaximaBps`].
+    public static func taxaMediaBps(largura: Int, altura: Int, fps: Int) -> Int {
+        let bruta = Double(largura) * Double(altura) * Double(max(1, fps)) * bitsPorPixelPorQuadro
+        return Int(min(max(bruta, Double(taxaMinimaBps)), Double(taxaMaximaBps)))
+    }
+
+    /// Macroblocos por segundo (limite do nível H.264 4.0: 245 760).
+    static func macroblocosPorSegundo(largura: Int, altura: Int, fps: Int) -> Int {
+        ((largura + 15) / 16) * ((altura + 15) / 16) * max(1, fps)
+    }
+
     public init() {}
 
     deinit {
@@ -79,12 +107,16 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         forcarProximoKeyFrame = false
         vooLock.unlock()
 
+        /// O pedido só é "gasto" se o quadro de fato foi submetido; senão volta para a próxima vez.
+        let devolverPedido = { if deveForcarKeyFrame { self.forceNextKeyFrame() } }
+
         let largura = Int32(CVPixelBufferGetWidth(pixelBuffer))
         let altura = Int32(CVPixelBufferGetHeight(pixelBuffer))
 
         encodingQueue.async { [weak self] in
             guard let self else { return }
             guard let session = self.sessaoValida(largura: largura, altura: altura) else {
+                devolverPedido()
                 self.marcarQuadroConcluido()
                 return
             }
@@ -106,6 +138,7 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
             )
 
             if status != noErr {
+                devolverPedido()
                 self.marcarQuadroConcluido()
             }
             // Em caso de sucesso, é o callback (`saidaDoEncoder`) que marca a conclusão —
@@ -127,9 +160,15 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         }
 
         if let session {
+            // Entrega o que o encoder ainda segura antes de derrubar a sessão, senão os quadros
+            // em voo somem e o contador deles nunca volta a zero.
+            VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
             VTCompressionSessionInvalidate(session)
         }
         self.session = nil
+        vooLock.lock()
+        quadrosEmVoo = 0
+        vooLock.unlock()
 
         var novaSessao: VTCompressionSession?
         // `kVTVideoEncoderSpecification_EnableLowLatencyRateControl` pede ao VideoToolbox o
@@ -157,17 +196,34 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
 
         // Baseline: é o perfil com decodificação garantida em qualquer navegador/SO (ver
         // seção 3.4 do PLANO-COMPRESSAO-DE-VIDEO.md) — H.265/AV1 ficam de fora por isso.
-        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_ProfileLevel,
-                              value: kVTProfileLevel_H264_Baseline_AutoLevel)
+        // Nível 4.0 cobre 1080p30; acima disso (ex.: 1080p60) deixa o VideoToolbox escolher.
+        let fps = max(1, framesPerSecond)
+        let cabeNoNivel40 = Self.macroblocosPorSegundo(largura: Int(largura), altura: Int(altura), fps: fps) <= 245_760
+        let nivel = cabeNoNivel40 ? kVTProfileLevel_H264_Baseline_4_0 : kVTProfileLevel_H264_Baseline_AutoLevel
+        if VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_ProfileLevel, value: nivel) != noErr {
+            VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_ProfileLevel,
+                                  value: kVTProfileLevel_H264_Baseline_AutoLevel)
+        }
         VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
         // Sem isto o encoder pode reordenar quadros (B-frames), o que exige o decoder — e a
         // rede — segurarem quadros para desembaralhar depois. Numa aula ao vivo isso só
         // adiciona atraso, sem ganho perceptível para conteúdo de tela.
         VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
-        // Um quadro-chave a cada ~2s (a 30fps): frequente o bastante para um aluno que troca
-        // de aba não ficar muito tempo sem imagem, raro o bastante para não perder o ganho de
-        // banda da predição entre quadros.
-        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 60 as CFNumber)
+        // Quadro-chave a cada ~2 s: frequente o bastante para um aluno que troca de aba não
+        // ficar muito tempo sem imagem, raro o bastante para não perder o ganho da predição. O
+        // limite em segundos é o que vale com a tela parada; o em quadros é só um teto.
+        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
+                              value: Self.intervaloMaxEntreChavesSeg as CFNumber)
+        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_MaxKeyFrameInterval,
+                              value: Int(Self.intervaloMaxEntreChavesSeg) * fps as CFNumber)
+        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: fps as CFNumber)
+
+        // Controle de taxa: média alvo e teto de picos (DataRateLimits = [bytes, segundos]).
+        let taxaMedia = Self.taxaMediaBps(largura: Int(largura), altura: Int(altura), fps: fps)
+        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_AverageBitRate, value: taxaMedia as CFNumber)
+        let tetoEmBytes = Int(Double(taxaMedia) * Self.multiplicadorDoTeto / 8)
+        VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_DataRateLimits,
+                              value: [tetoEmBytes, 1] as CFArray)
 
         VTCompressionSessionPrepareToEncodeFrames(novaSessao)
 
@@ -244,23 +300,40 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     /// Converte o `CMBlockBuffer` (NALs prefixados por tamanho de 4 bytes big-endian — o
     /// formato que o VideoToolbox devolve) para Annex-B (NALs prefixados por start code).
     private static func avccParaAnnexB(_ blockBuffer: CMBlockBuffer) -> Data? {
+        var comprimentoNoOffset = 0
         var comprimentoTotal = 0
         var ponteiro: UnsafeMutablePointer<Int8>?
         guard CMBlockBufferGetDataPointer(
-            blockBuffer, atOffset: 0, lengthAtOffsetOut: nil,
+            blockBuffer, atOffset: 0, lengthAtOffsetOut: &comprimentoNoOffset,
             totalLengthOut: &comprimentoTotal, dataPointerOut: &ponteiro
-        ) == noErr, let ponteiro else { return nil }
+        ) == noErr, comprimentoTotal > 0 else { return nil }
 
-        let bytes = ponteiro.withMemoryRebound(to: UInt8.self, capacity: comprimentoTotal) { $0 }
+        // Bloco contíguo: lê no lugar, e o ponteiro não sai deste escopo. Fragmentado: copia.
+        if let ponteiro, comprimentoNoOffset == comprimentoTotal {
+            return ponteiro.withMemoryRebound(to: UInt8.self, capacity: comprimentoTotal) {
+                converterParaAnnexB(UnsafeBufferPointer(start: $0, count: comprimentoTotal))
+            }
+        }
+
+        var copia = [UInt8](repeating: 0, count: comprimentoTotal)
+        let status = copia.withUnsafeMutableBytes {
+            CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: comprimentoTotal,
+                                       destination: $0.baseAddress!)
+        }
+        guard status == noErr else { return nil }
+        return copia.withUnsafeBufferPointer { converterParaAnnexB($0) }
+    }
+
+    private static func converterParaAnnexB(_ bytes: UnsafeBufferPointer<UInt8>) -> Data {
         var resultado = Data()
         var offset = 0
-        while offset + 4 <= comprimentoTotal {
+        while offset + 4 <= bytes.count {
             let comprimentoNAL = Int(bytes[offset]) << 24 | Int(bytes[offset + 1]) << 16
                 | Int(bytes[offset + 2]) << 8 | Int(bytes[offset + 3])
             offset += 4
-            guard comprimentoNAL > 0, offset + comprimentoNAL <= comprimentoTotal else { break }
+            guard comprimentoNAL > 0, offset + comprimentoNAL <= bytes.count else { break }
             resultado.append(contentsOf: [0, 0, 0, 1])
-            resultado.append(Data(bytes: bytes + offset, count: comprimentoNAL))
+            resultado.append(UnsafeBufferPointer(rebasing: bytes[offset..<offset + comprimentoNAL]))
             offset += comprimentoNAL
         }
         return resultado

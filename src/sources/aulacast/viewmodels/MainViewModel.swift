@@ -361,6 +361,8 @@ public final class MainViewModel: ObservableObject {
             do {
                 try serverService.start()
                 advertiserService.startAdvertising()
+                // A taxa de bits do H.264 sai do fps escolhido; vale na criação da sessão do encoder.
+                h264EncoderService.framesPerSecond = captureService.frameRate
                 let ipAtual = serverService.localIPAddress
                 mdnsService.start(ip: ipAtual)
                 ipDoNome = ipAtual
@@ -410,6 +412,10 @@ public final class MainViewModel: ObservableObject {
             mdnsService.stop()
             self.mdnsHostname = nil
             self.ipDoNome = nil
+            // Sessão seguinte começa do zero: sem isto o empacotador, que lembra SPS e
+            // resolução, não emitiria de novo o segmento de inicialização que o servidor apagou.
+            self.fmp4Packager.reset()
+            self.h264EncoderService.forceNextKeyFrame()
             self.systemActivity.endTransmission()
             self.isStreaming = false
             self.isSessionOpen = false
@@ -432,6 +438,9 @@ public final class MainViewModel: ObservableObject {
     private func alternarPausa() {
         isPaused.toggle()
         streamState.setPaused(isPaused)
+        // Ao retomar, o primeiro quadro tem de ser um quadro-chave: a referência dos alunos é a
+        // de antes da pausa, e a tela pode ser outra.
+        if !isPaused { h264EncoderService.forceNextKeyFrame() }
         serverService.broadcastControlMessage(type: isPaused ? "STREAM_PAUSED" : "STREAM_RESUMED", payload: nil)
     }
 
@@ -457,8 +466,14 @@ extension MainViewModel: FrameReceiverProtocol {
     /// Encaminha direto para o encoder, sem passar pela MainActor: saltar de thread a cada quadro
     /// adiciona latência e ainda segura os buffers do pool da captura.
     public nonisolated func didReceiveSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        encoderService.encode(sampleBuffer: sampleBuffer)
+        // Em pausa nenhum codificador recebe quadro. O H.264 não pode "assistir" à pausa: ele
+        // usa cada quadro como referência do seguinte, e quem a descarta só na saída entrega,
+        // ao retomar, diferenças calculadas sobre imagens que o aluno nunca recebeu — um
+        // fantasma do que o professor mostrou durante a pausa, visível até o próximo quadro-chave.
+        guard !streamState.isPaused else { return }
+        // O H.264 vai primeiro: o JPEG, feito na mesma thread, não deve somar-se ao atraso dele.
         h264EncoderService.encode(sampleBuffer: sampleBuffer)
+        encoderService.encode(sampleBuffer: sampleBuffer)
     }
 }
 

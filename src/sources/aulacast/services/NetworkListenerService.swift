@@ -126,7 +126,27 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     // MARK: - Medição do vídeo
 
     /// Fotografia dos contadores de quadros e bytes enviados aos alunos.
-    public func streamSnapshot() -> StreamSnapshot { streamerService.snapshot() }
+    /// Cobre as duas rotas de vídeo (MJPEG e H.264).
+    public func streamSnapshot() -> StreamSnapshot {
+        Self.mesclar(mjpeg: streamerService.snapshot(), mp4: mp4StreamerService.snapshot())
+    }
+
+    /// Bit que separa as chaves dos alunos H.264 das do MJPEG: cada serviço numera suas
+    /// conexões a partir de 1, então sem isto os ids colidiriam.
+    public static let marcaDeAlunoMP4: UInt64 = 1 << 63
+
+    /// Junta as fotografias das duas rotas. Quadros publicados: o maior dos dois, não a soma —
+    /// o professor tem uma tela só, e as duas rotas contam o mesmo quadro (somar dobraria o fps
+    /// da tela). Bytes: soma. Alunos: união, com as chaves do MP4 marcadas. O(n) nos alunos.
+    public static func mesclar(mjpeg: StreamSnapshot, mp4: StreamSnapshot) -> StreamSnapshot {
+        var resultado = mjpeg
+        resultado.quadrosPublicados = max(mjpeg.quadrosPublicados, mp4.quadrosPublicados)
+        resultado.bytesEnviados = mjpeg.bytesEnviados &+ mp4.bytesEnviados
+        for (serie, quadros) in mp4.quadrosPorAluno {
+            resultado.quadrosPorAluno[serie | marcaDeAlunoMP4] = quadros
+        }
+        return resultado
+    }
 
     /// Intervalo entre as linhas `[Métricas]` no log.
     static let intervaloDasMetricas: TimeInterval = 5
@@ -136,13 +156,13 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     /// sem alunos com o vídeo aberto. Custo por amostra: O(n) nos alunos conectados.
     private func iniciarMedicao() {
         medidor?.cancel()
-        var anterior = streamerService.snapshot()
+        var anterior = streamSnapshot()
         var instanteAnterior = DispatchTime.now()
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + Self.intervaloDasMetricas, repeating: Self.intervaloDasMetricas)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            let atual = self.streamerService.snapshot()
+            let atual = self.streamSnapshot()
             let agora = DispatchTime.now()
             // O timer pode atrasar (fila `.utility`, economia de energia): dividir pelo tempo
             // que passou de verdade, e não pelos 5 s nominais, mantém a taxa honesta.
@@ -150,8 +170,9 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             defer { anterior = atual; instanteAnterior = agora }
             guard let taxa = StreamRates.entre(anterior, e: atual, segundos: segundos),
                   taxa.alunos > 0 else { return }
-            print(String(format: "[Métricas] %d alunos | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
-                         taxa.alunos, taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
+            print(String(format: "[Métricas] %d alunos (H.264 %d / MJPEG %d) | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
+                         taxa.alunos, self.mp4StreamerService.activeStreamCount, self.streamerService.activeStreamCount,
+                         taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
         }
         timer.resume()
         medidor = timer
@@ -182,8 +203,8 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         self.isRunning = false
     }
 
-    /// Quantos alunos estão com o vídeo aberto agora (conexões de `/stream` vivas).
-    public var activeStreamCount: Int { streamerService.activeStreamCount }
+    /// Quantos alunos estão com o vídeo aberto agora (`/stream` MJPEG e `/stream.mp4` H.264).
+    public var activeStreamCount: Int { streamerService.activeStreamCount + mp4StreamerService.activeStreamCount }
 
     public func broadcastFrame(_ jpegData: Data) {
         streamerService.updateFrame(jpegData)

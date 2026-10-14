@@ -91,8 +91,10 @@ function criarDubles() {
   const videoPlayer = {
     chamadas: [],
     opcoesRecebidas: null,
+    pausas: [],
     start() { videoPlayer.chamadas.push('start'); },
-    stop() { videoPlayer.chamadas.push('stop'); }
+    stop() { videoPlayer.chamadas.push('stop'); },
+    definirPausado(p) { videoPlayer.pausas.push(p); }
   };
   return { vigia, videoPlayer };
 }
@@ -146,4 +148,41 @@ test('STREAM_ENDED encerra o player H.264 (não só o MJPEG)', () => {
   app.handleServerMessage({ type: 'STREAM_ENDED', payload: { reason: 'Monitor desconectado.' } });
 
   assert.deepStrictEqual(videoPlayer.chamadas, ['start', 'stop']);
+});
+
+test('item 7: depois do fallback, STREAM_STARTED e CONNECTED (live/paused) não ligam o H.264 de novo', () => {
+  const { app, vigia, videoPlayer } = novoApp();
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  assert.deepStrictEqual(videoPlayer.chamadas, ['start']);
+  assert.strictEqual(vigia.chamadas.includes('start'), true, 'MJPEG de pé');
+
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live' } });
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'paused' } });
+
+  assert.deepStrictEqual(videoPlayer.chamadas, ['start'], 'nenhum start() novo: seria banda dobrada');
+});
+
+test('item 7: com o H.264 de pé, reconexão do WebSocket em estado live não liga o MJPEG', () => {
+  const { app, vigia, videoPlayer } = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live' } });
+  app.handleStateChange('connected', 0);
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live' } });
+
+  assert.strictEqual(vigia.chamadas.includes('start'), false);
+  assert.ok(videoPlayer.chamadas.every((c) => c === 'start'));
+});
+
+test('item 2/5: pausa e retomada chegam ao player (pausada não é queda; entrar pausado também)', () => {
+  const { app, videoPlayer } = novoApp();
+  app.handleServerMessage({ type: 'STREAM_PAUSED' });
+  app.handleServerMessage({ type: 'STREAM_RESUMED' });
+  assert.deepStrictEqual(videoPlayer.pausas, [true, false]);
+
+  videoPlayer.pausas.length = 0;
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'paused' } });
+  assert.deepStrictEqual(videoPlayer.pausas, [true]);
+  assert.strictEqual(elementos.pausedOverlay.hidden, false, 'quem entra pausado vê o aviso de pausa');
+  assert.strictEqual(elementos.placeholder.hidden, false, 'e o palco de aguardando, não um <video> preto');
 });

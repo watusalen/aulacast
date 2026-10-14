@@ -2656,7 +2656,7 @@ struct AulaCastTestRunner {
 
         // TESTE 34: pipeline H.264 + fMP4 (H264FrameEncoder, FMP4Packager, MP4StreamerService).
         // Ver PLANO-COMPRESSAO-DE-VIDEO.md na raiz do repositório para o porquê de cada peça.
-        print("\n--- [34/34] Testes: codificação H.264 e empacotamento fMP4 ---")
+        print("\n--- [34/35] Testes: codificação H.264 e empacotamento fMP4 ---")
 
         final class ColetorDeAccessUnits: H264AccessUnitReceiverProtocol, @unchecked Sendable {
             private let trava = NSLock()
@@ -2866,6 +2866,296 @@ struct AulaCastTestRunner {
             "Em pausa, nenhum fragmento novo de vídeo H.264 chega à turma"
         )
         vmPausaMP4.togglePause()
+
+        // TESTE 35: correções da revisão do H.264 (duração, init, rota, rate limit, filas, métricas).
+        print("\n--- [35/35] Testes: robustez do pipeline H.264/fMP4 (duração, init, cabeçalho, filas, métricas) ---")
+
+        // Access units sintéticos: SPS/PPS/IDR ou P-slice em Annex-B (preenchimento 0x11 evita start code falso).
+        func unidadeSintetica(chave: Bool, segundos: Double, sps: UInt8 = 0x1F) -> H264AccessUnit {
+            var dados = Data()
+            if chave {
+                dados.append(contentsOf: [0, 0, 0, 1, 0x67, 0x42, 0x00, sps, 0x11, 0x11])
+                dados.append(contentsOf: [0, 0, 0, 1, 0x68, 0xCE, 0x3C, 0x80])
+                dados.append(contentsOf: [0, 0, 0, 1, 0x65, 0x88] + [UInt8](repeating: 0x11, count: 64))
+            } else {
+                dados.append(contentsOf: [0, 0, 0, 1, 0x41, 0x9A] + [UInt8](repeating: 0x11, count: 32))
+            }
+            return H264AccessUnit(data: dados, presentationTime: CMTime(seconds: segundos, preferredTimescale: 600),
+                                  isKeyFrame: chave, width: 1920, height: 1080)
+        }
+        func inteiroBE(_ d: Data, _ inicio: Int, _ bytes: Int) -> UInt64 {
+            var v: UInt64 = 0
+            for i in 0..<bytes { v = (v << 8) | UInt64(d[d.startIndex + inicio + i]) }
+            return v
+        }
+        func duracaoDoFragmento(_ d: Data) -> UInt64? {
+            d.range(of: Data("trun".utf8)).map { inteiroBE(d, $0.upperBound - d.startIndex + 12, 4) }
+        }
+        func tfdtDoFragmento(_ d: Data) -> UInt64? {
+            d.range(of: Data("tfdt".utf8)).map { inteiroBE(d, $0.upperBound - d.startIndex + 4, 8) }
+        }
+
+        // (1) duração depois de 30 s parado + (3) timeline contínua
+        do {
+            let coletor = ColetorDeFragmentos()
+            let pacote = FMP4Packager()
+            pacote.outputReceiver = coletor
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: true, segundos: 0))
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: false, segundos: 1.0 / 30))
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: false, segundos: 30.1))
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: false, segundos: 30.1 + 1.0 / 30))
+            let midia = coletor.fragmentos.filter { !$0.isInitSegment }.map { $0.data }
+            assertTest(midia.count == 4, "Empacotador: 4 fragmentos de mídia (veio \(midia.count))")
+            if midia.count == 4 {
+                let duracoes = midia.compactMap(duracaoDoFragmento)
+                assertTest(duracoes.count == 4 && duracoes.allSatisfy { $0 >= 1 && $0 <= 6000 },
+                           "Depois de 30 s de tela parada a duração do quadro é limitada a 2 períodos (veio \(duracoes))")
+                let bases = midia.compactMap(tfdtDoFragmento)
+                var continua = bases.count == 4
+                for i in 1..<max(1, bases.count) where bases[i] != bases[i - 1] + duracoes[i - 1] { continua = false }
+                assertTest(continua, "baseMediaDecodeTime avança pela mesma duração (linha do tempo contínua: \(bases))")
+            }
+        }
+
+        // (4) init por SPS/PPS, reset(), duas sessões
+        do {
+            let coletor = ColetorDeFragmentos()
+            let pacote = FMP4Packager()
+            pacote.outputReceiver = coletor
+            func inits() -> Int { coletor.fragmentos.filter { $0.isInitSegment }.count }
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: true, segundos: 0))
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: true, segundos: 2))
+            assertTest(inits() == 1, "Quadro-chave de rotina com o mesmo SPS/PPS não gera init novo (inits: \(inits()))")
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: true, segundos: 4, sps: 0x28))
+            assertTest(inits() == 2, "SPS diferente (mesma resolução) gera init novo (inits: \(inits()))")
+            pacote.reset()
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: false, segundos: 5))
+            assertTest(inits() == 2, "Depois do reset(), P-frame sozinho não emite nada")
+            pacote.didReceiveAccessUnit(unidadeSintetica(chave: true, segundos: 6, sps: 0x28))
+            assertTest(inits() == 3, "Depois do reset(), o próximo quadro-chave emite init novo (inits: \(inits()))")
+            let frags = coletor.fragmentos
+            assertTest(frags.last?.isInitSegment == false && frags[frags.count - 2].isInitSegment,
+                       "Na segunda sessão o init vem antes do primeiro fragmento de mídia")
+            if let ultimo = frags.last?.data, let seq = ultimo.range(of: Data("mfhd".utf8)) {
+                assertTest(inteiroBE(ultimo, seq.upperBound - ultimo.startIndex + 4, 4) == 1,
+                           "Sequência do fragmento recomeça em 1 depois do reset()")
+            }
+        }
+
+        // Fragmentos de teste com marcador no começo (para achar na conexão) e tamanho livre.
+        func fragmentoMarcado(_ marca: String, tamanho: Int = 0) -> Data {
+            Data(marca.utf8) + Data(repeating: 0x5A, count: tamanho)
+        }
+        func abrirMP4Bruto(_ porta: UInt16, bufferDeRecepcao: Int32? = nil) -> Int32 {
+            let fd = socket(AF_INET, SOCK_STREAM, 0)
+            if var tam = bufferDeRecepcao {
+                setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &tam, socklen_t(MemoryLayout<Int32>.size))
+            }
+            var destino = sockaddr_in()
+            destino.sin_family = sa_family_t(AF_INET)
+            destino.sin_port = in_port_t(porta.bigEndian)
+            destino.sin_addr.s_addr = inet_addr("127.0.0.1")
+            _ = withUnsafePointer(to: &destino) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            _ = "GET /stream.mp4 HTTP/1.1\r\nHost: x\r\n\r\n".withCString { send(fd, $0, strlen($0), 0) }
+            return fd
+        }
+        func lerDisponivel(_ fd: Int32) -> Data {
+            var dados = Data()
+            var pedaco = [UInt8](repeating: 0, count: 262_144)
+            while true {
+                let n = recv(fd, &pedaco, pedaco.count, MSG_DONTWAIT)
+                if n <= 0 { break }
+                dados.append(contentsOf: pedaco[0..<n])
+            }
+            return dados
+        }
+        func posicao(_ marca: String, em dados: Data) -> Int? {
+            dados.range(of: Data(marca.utf8)).map { $0.lowerBound - dados.startIndex }
+        }
+
+        // (5) cabeçalho antes do init, mesmo com publicações concorrentes; (e) entrada no meio do stream
+        let servidorOrdem = NetworkListenerService(port: 8140, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorOrdem.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("INIT-A"), isInitSegment: true, isKeyFrame: true)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("KEY-1"), isInitSegment: false, isKeyFrame: true)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("PFR-1"), isInitSegment: false, isKeyFrame: false)
+
+            let fdMeio = abrirMP4Bruto(8140)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("PFR-2"), isInitSegment: false, isKeyFrame: false)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("KEY-2"), isInitSegment: false, isKeyFrame: true)
+            servidorOrdem.broadcastVideoFragment(fragmentoMarcado("PFR-3"), isInitSegment: false, isKeyFrame: false)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            let recebidoMeio = lerDisponivel(fdMeio)
+            let pHeader = posicao("HTTP/1.1 200", em: recebidoMeio)
+            let pInit = posicao("INIT-A", em: recebidoMeio)
+            let pK2 = posicao("KEY-2", em: recebidoMeio)
+            let pP3 = posicao("PFR-3", em: recebidoMeio)
+            assertTest(pHeader == 0, "Aluno que entra no meio: o cabeçalho HTTP é o primeiro byte")
+            assertTest(pInit != nil && pK2 != nil && pInit! < pK2!, "Aluno no meio recebe init e depois o quadro-chave")
+            assertTest(pP3 != nil && pK2 != nil && pK2! < pP3!, "...e os P-frames seguintes, em ordem")
+            assertTest(posicao("KEY-1", em: recebidoMeio) == nil && posicao("PFR-1", em: recebidoMeio) == nil
+                       && posicao("PFR-2", em: recebidoMeio) == nil,
+                       "Aluno no meio não recebe quadros anteriores ao seu primeiro quadro-chave")
+            close(fdMeio)
+
+            // Corrida: publica sem parar enquanto conexões novas chegam; o primeiro byte tem que ser o cabeçalho.
+            let parar = NSLock()
+            nonisolated(unsafe) var continuar = true
+            let publicador = DispatchQueue(label: "teste.publicador")
+            publicador.async {
+                while true {
+                    parar.lock(); let seguir = continuar; parar.unlock()
+                    if !seguir { break }
+                    servidorOrdem.broadcastVideoFragment(fragmentoMarcado("KEY-R"), isInitSegment: false, isKeyFrame: true)
+                    usleep(300)
+                }
+            }
+            var todosComCabecalhoPrimeiro = true
+            for _ in 0..<8 {
+                let fd = abrirMP4Bruto(8140)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                let r = lerDisponivel(fd)
+                if posicao("HTTP/1.1 200", em: r) != 0 { todosComCabecalhoPrimeiro = false }
+                close(fd)
+            }
+            parar.lock(); continuar = false; parar.unlock()
+            assertTest(todosComCabecalhoPrimeiro, "Com publicação concorrente, 'HTTP/1.1 200' sempre sai antes do init/fragmentos")
+            servidorOrdem.stop()
+        } catch {
+            assertTest(false, "Falha no teste de ordem da rota /stream.mp4: \(error.localizedDescription)")
+        }
+
+        // (7) pedidos de quadro-chave agrupados
+        let servidorRate = NetworkListenerService(port: 8141, webAssetsPath: FileManager.default.temporaryDirectory)
+        let pedidosRate = ContadorDePedidos()
+        servidorRate.onVideoViewerNeedsKeyFrame = { pedidosRate.pedir() }
+        do {
+            try servidorRate.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            for _ in 0..<20 {
+                close(abrirMP4Bruto(8141))
+            }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            assertTest(pedidosRate.pedidos == 1, "20 conexões em rajada: 1 pedido imediato (veio \(pedidosRate.pedidos))")
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            assertTest(pedidosRate.pedidos == 2, "O pedido dentro da janela é adiado, não perdido: 2 no total (veio \(pedidosRate.pedidos))")
+            servidorRate.stop()
+        } catch {
+            assertTest(false, "Falha no teste de agrupamento dos pedidos: \(error.localizedDescription)")
+        }
+
+        // (6) conexão fechada sai de `conexoes` mesmo sem nenhum quadro fluindo
+        let servidorSaida = NetworkListenerService(port: 8142, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorSaida.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd = abrirMP4Bruto(8142)
+            var n = 0
+            for _ in 0..<20 where n < 1 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                n = servidorSaida.activeStreamCount
+            }
+            assertTest(n == 1, "Aluno H.264 conectado é contado em activeStreamCount (veio \(n))")
+            close(fd)
+            var sobrou = servidorSaida.activeStreamCount
+            for _ in 0..<20 where sobrou > 0 {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                sobrou = servidorSaida.activeStreamCount
+            }
+            assertTest(sobrou == 0, "Fechou sem nenhum quadro publicado: activeStreamCount volta a 0 (sobrou \(sobrou))")
+            assertTest(servidorSaida.streamSnapshot().quadrosPorAluno.isEmpty, "...e o contador do aluno some do snapshot")
+            servidorSaida.stop()
+        } catch {
+            assertTest(false, "Falha no teste de saída sem quadros: \(error.localizedDescription)")
+        }
+
+        // (9) contadores do snapshot e chaves mescladas
+        let servidorSnap = NetworkListenerService(port: 8143, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorSnap.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd = abrirMP4Bruto(8143)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let tamanhos = [3000, 500, 700]
+            servidorSnap.broadcastVideoFragment(fragmentoMarcado("INIT-S", tamanho: 200), isInitSegment: true, isKeyFrame: true)
+            servidorSnap.broadcastVideoFragment(fragmentoMarcado("K", tamanho: tamanhos[0]), isInitSegment: false, isKeyFrame: true)
+            servidorSnap.broadcastVideoFragment(fragmentoMarcado("P", tamanho: tamanhos[1]), isInitSegment: false, isKeyFrame: false)
+            servidorSnap.broadcastVideoFragment(fragmentoMarcado("P", tamanho: tamanhos[2]), isInitSegment: false, isKeyFrame: false)
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            let snap = servidorSnap.streamSnapshot()
+            assertTest(snap.quadrosPublicados == 3, "quadrosPublicados conta só fragmentos de mídia (veio \(snap.quadrosPublicados))")
+            assertTest(snap.bytesEnviados >= UInt64(tamanhos.reduce(0, +) + 200),
+                       "bytesEnviados soma tudo que saiu (veio \(snap.bytesEnviados))")
+            assertTest(snap.quadrosPorAluno.count == 1 && snap.quadrosPorAluno.values.first == 3,
+                       "O aluno conta 3 fragmentos de mídia, sem o init (veio \(Array(snap.quadrosPorAluno.values)))")
+            assertTest(snap.quadrosPorAluno.keys.allSatisfy { $0 & NetworkListenerService.marcaDeAlunoMP4 != 0 },
+                       "Chaves dos alunos H.264 vêm marcadas no snapshot mesclado")
+            _ = lerDisponivel(fd)
+            close(fd)
+            servidorSnap.stop()
+        } catch {
+            assertTest(false, "Falha no teste dos contadores H.264: \(error.localizedDescription)")
+        }
+        do {
+            var mjpeg = StreamSnapshot()
+            mjpeg.quadrosPublicados = 10; mjpeg.bytesEnviados = 1000; mjpeg.quadrosPorAluno = [1: 5, 2: 6]
+            var mp4 = StreamSnapshot()
+            mp4.quadrosPublicados = 12; mp4.bytesEnviados = 500; mp4.quadrosPorAluno = [1: 7]
+            let junto = NetworkListenerService.mesclar(mjpeg: mjpeg, mp4: mp4)
+            assertTest(junto.quadrosPorAluno.count == 3, "Mesclado: mesmo id 1 nas duas rotas não colide (3 alunos)")
+            assertTest(junto.quadrosPublicados == 12, "Mesclado: quadros publicados = máximo, não soma (\(junto.quadrosPublicados))")
+            assertTest(junto.bytesEnviados == 1500, "Mesclado: bytes somam")
+            assertTest(junto.quadrosPorAluno[1] == 5 && junto.quadrosPorAluno[1 | NetworkListenerService.marcaDeAlunoMP4] == 7,
+                       "Mesclado: cada aluno mantém o próprio contador")
+        }
+
+        // (8) cliente lento: fila por bytes estoura, descarta, pede quadro-chave e ressincroniza
+        let servidorLento = NetworkListenerService(port: 8144, webAssetsPath: FileManager.default.temporaryDirectory)
+        let pedidosLento = ContadorDePedidos()
+        servidorLento.onVideoViewerNeedsKeyFrame = { pedidosLento.pedir() }
+        do {
+            try servidorLento.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            let fd = abrirMP4Bruto(8144, bufferDeRecepcao: 4096)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            servidorLento.broadcastVideoFragment(fragmentoMarcado("INIT-L"), isInitSegment: true, isKeyFrame: true)
+            servidorLento.broadcastVideoFragment(fragmentoMarcado("KEY-L0", tamanho: 900_000), isInitSegment: false, isKeyFrame: true)
+            for _ in 0..<12 {
+                servidorLento.broadcastVideoFragment(fragmentoMarcado("PFR-L", tamanho: 900_000), isInitSegment: false, isKeyFrame: false)
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            assertTest(pedidosLento.pedidos >= 2, "Estouro da fila por bytes pede quadro-chave de novo (pedidos: \(pedidosLento.pedidos))")
+            assertTest(servidorLento.activeStreamCount == 1, "O aluno lento continua conectado (só ressincroniza)")
+
+            // Ele volta a ler e um quadro-chave novo o ressincroniza.
+            servidorLento.broadcastVideoFragment(fragmentoMarcado("KEY-FINAL"), isInitSegment: false, isKeyFrame: true)
+            var achou = false
+            var acumulado = Data()
+            for _ in 0..<60 where !achou {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                acumulado.append(lerDisponivel(fd))
+                achou = acumulado.range(of: Data("KEY-FINAL".utf8)) != nil
+            }
+            assertTest(achou, "Depois de ler de novo, o aluno lento recebe o próximo quadro-chave")
+            close(fd)
+            servidorLento.stop()
+        } catch {
+            assertTest(false, "Falha no teste do cliente lento: \(error.localizedDescription)")
+        }
+
+        // (10) taxa de bits alvo
+        assertTest(H264FrameEncoder.taxaMediaBps(largura: 1920, altura: 1080, fps: 30) == 2_488_320,
+                   "Taxa média alvo em 1080p30 ≈ 2,5 Mbps")
+        assertTest(H264FrameEncoder.taxaMediaBps(largura: 640, altura: 360, fps: 15) == 1_200_000,
+                   "Taxa média alvo tem piso de 1,2 Mbps")
+        assertTest(H264FrameEncoder.taxaMediaBps(largura: 3840, altura: 2160, fps: 60) == 4_000_000,
+                   "Taxa média alvo tem teto de 4 Mbps")
 
         // SUMÁRIO FINAL
         print("\n==========================================")

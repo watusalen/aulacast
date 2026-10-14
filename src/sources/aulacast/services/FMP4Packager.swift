@@ -16,6 +16,17 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
     private static let mediaTimescale: Int32 = 90_000
     private static let trackID: UInt32 = 1
 
+    /// Período nominal de um quadro (30 fps: o maior valor típico entre os oferecidos). A duração
+    /// de cada amostra é o intervalo real desde o quadro anterior, limitado a
+    /// `maxPeriodosPorAmostra` períodos: depois de uma tela parada (que não produz quadros) o
+    /// próximo quadro não pode ganhar dezenas de segundos de duração, senão a imagem congela e o
+    /// atraso se acumula no player.
+    private static let duracaoNominal = UInt32(mediaTimescale / 30)
+    private static let maxPeriodosPorAmostra: Int64 = 2
+
+    /// Protege todo o estado: chamado pela thread do VideoToolbox e por `MainViewModel` (`reset()`).
+    private let lock = NSLock()
+
     private var sps: Data?
     private var pps: Data?
     private var largura = 0
@@ -27,8 +38,28 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
 
     public init() {}
 
+    /// Esquece SPS, resolução e relógio: a próxima sessão emite um segmento de inicialização novo.
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        sps = nil
+        pps = nil
+        largura = 0
+        altura = 0
+        reiniciarRelogio()
+    }
+
+    private func reiniciarRelogio() {
+        sequenceNumber = 0
+        baseMediaDecodeTime = 0
+        tempoApresentadoAnterior = nil
+    }
+
     public func didReceiveAccessUnit(_ unit: H264AccessUnit) {
         let nals = Self.dividirEmNALs(unit.data)
+
+        lock.lock()
+        defer { lock.unlock() }
 
         if unit.isKeyFrame {
             var novoSPS: Data?
@@ -43,19 +74,17 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
             }
             guard let novoSPS, let novoPPS else { return }
 
-            // Muda de verdade só quando a resolução muda (troca ao vivo em
-            // `QualitySettingsView`) — não a cada quadro-chave "de rotina", que não precisa de
-            // um novo `avcC`/`moov`.
-            let precisaNovoInit = sps == nil || largura != Int(unit.width) || altura != Int(unit.height)
+            // Novo `avcC`/`moov` só quando algo que ele descreve muda (SPS, PPS ou resolução) —
+            // não a cada quadro-chave "de rotina".
+            let precisaNovoInit = sps != novoSPS || pps != novoPPS
+                || largura != Int(unit.width) || altura != Int(unit.height)
             sps = novoSPS
             pps = novoPPS
             largura = Int(unit.width)
             altura = Int(unit.height)
 
             if precisaNovoInit {
-                sequenceNumber = 0
-                baseMediaDecodeTime = 0
-                tempoApresentadoAnterior = nil
+                reiniciarRelogio()
                 outputReceiver?.didReceiveFragment(montarInitSegment(), isInitSegment: true, isKeyFrame: true)
             }
         }
@@ -71,21 +100,23 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
         let fragmento = montarFragmento(amostra: amostra, duracao: duracao, isKeyFrame: unit.isKeyFrame)
         outputReceiver?.didReceiveFragment(fragmento, isInitSegment: false, isKeyFrame: unit.isKeyFrame)
 
-        sequenceNumber += 1
-        baseMediaDecodeTime += UInt64(duracao)
+        sequenceNumber &+= 1
+        baseMediaDecodeTime &+= UInt64(duracao)
         tempoApresentadoAnterior = unit.presentationTime
     }
 
-    /// Duração do quadro anterior até este, na escala de tempo da faixa. Sem quadro anterior
-    /// (primeiro da sessão), um palpite de 30fps — só afeta o metadado de duração daquele
-    /// primeiro fragmento, não a decodificação.
+    /// Duração desta amostra: o intervalo desde o quadro anterior, entre 1 tick e
+    /// `maxPeriodosPorAmostra` períodos nominais. Sem quadro anterior (ou tempo inválido), o
+    /// período nominal. O `baseMediaDecodeTime` avança pela mesma duração, então a linha do
+    /// tempo do `SourceBuffer` continua contígua mesmo depois de uma pausa na captura.
     private func duracaoDoQuadro(_ tempo: CMTime) -> UInt32 {
-        guard let anterior = tempoApresentadoAnterior else {
-            return UInt32(Self.mediaTimescale / 30)
+        guard let anterior = tempoApresentadoAnterior, tempo.isNumeric, anterior.isNumeric else {
+            return Self.duracaoNominal
         }
         let delta = CMTimeSubtract(tempo, anterior)
         let escalado = CMTimeConvertScale(delta, timescale: Self.mediaTimescale, method: .default)
-        return UInt32(max(1, escalado.value))
+        let teto = Int64(Self.duracaoNominal) * Self.maxPeriodosPorAmostra
+        return UInt32(clamping: min(max(1, escalado.value), teto))
     }
 
     // MARK: - NALs
@@ -375,7 +406,7 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
     /// valor certo — evita um número mágico hardcoded que quebraria em silêncio se alguma caixa
     /// aqui em cima mudar de tamanho no futuro.
     private func montarFragmento(amostra: Data, duracao: UInt32, isKeyFrame: Bool) -> Data {
-        let sequencia = sequenceNumber + 1
+        let sequencia = sequenceNumber &+ 1
 
         func montarMoof(dataOffset: Int32) -> Data {
             var traf = Self.montarTfhd()

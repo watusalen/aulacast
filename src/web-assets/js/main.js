@@ -26,6 +26,8 @@ export class AulaCastApp {
     const suporteAH264 = Boolean(videoElementoMP4)
       && mediaSourceSuportado(typeof window !== 'undefined' ? window : undefined);
 
+    /** Depois do fallback para MJPEG, o H.264 não é tentado de novo nesta página (banda dobrada). */
+    this.h264Desistiu = false;
     this.ui = new UIController({ criarVigia, mjpegSuprimido: suporteAH264 });
     this.identidade = null;
 
@@ -36,6 +38,8 @@ export class AulaCastApp {
           // MJPEG (`aoMudarEstadoDoVideo`) — o H.264 é só outra fonte do mesmo estado.
           onEstado: (estado) => this.ui.aoMudarEstadoDoVideo(estado),
           onFallback: (motivo) => {
+            // Daqui em diante esta página é MJPEG: nenhum caminho volta a ligar o H.264.
+            this.h264Desistiu = true;
             console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
             this.ui.ativarFallbackMJPEG();
           }
@@ -204,15 +208,19 @@ export class AulaCastApp {
       // aula encerrada até recarregar a página.
       case 'STREAM_STARTED':
         this.ui.showStreaming();
-        this.videoPlayer?.start();
+        this.videoPlayer?.definirPausado?.(false);
+        this.iniciarH264();
         break;
 
+      // Pausada, o servidor não manda nada: o player não pode ler isso como queda.
       case 'STREAM_PAUSED':
         this.ui.showPaused();
+        this.videoPlayer?.definirPausado?.(true);
         break;
 
       case 'STREAM_RESUMED':
         this.ui.hidePaused();
+        this.videoPlayer?.definirPausado?.(false);
         break;
 
       // A captura do professor caiu (monitor desconectado, permissão revogada, erro do
@@ -222,6 +230,12 @@ export class AulaCastApp {
         this.videoPlayer?.stop();
         break;
     }
+  }
+
+  /** Liga o H.264 — salvo se ele já desistiu nesta página e o MJPEG está de pé. */
+  iniciarH264() {
+    if (this.h264Desistiu) return;
+    this.videoPlayer?.start();
   }
 
   /** Com Arquivos fechado, o contador no botão avisa que chegou arquivo. */
@@ -243,7 +257,8 @@ export class AulaCastApp {
       case 'paused':
         this.ui.showStreaming();
         this.ui.showPaused();
-        this.videoPlayer?.start();
+        this.videoPlayer?.definirPausado?.(true);
+        this.iniciarH264();
         break;
       case 'ended':
         this.ui.showStreamEnded(payload.reason);
@@ -251,7 +266,8 @@ export class AulaCastApp {
         break;
       case 'live':
         this.ui.showStreaming();
-        this.videoPlayer?.start();
+        this.videoPlayer?.definirPausado?.(false);
+        this.iniciarH264();
         break;
     }
   }
