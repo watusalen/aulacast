@@ -31,7 +31,7 @@ struct AulaCastTestRunner {
             }
         }
 
-        // TESTE 1: ClientManagerService (UC-03: lista de alunos)
+        // TESTE 1: ClientManagerService (RF-07 & UC-06: lista de alunos e identificação)
         print("\n--- [1/12] Testes de Domínio: ClientManagerService ---")
         let clientManager = ClientManagerService()
 
@@ -141,7 +141,7 @@ struct AulaCastTestRunner {
             "Nome digitado não cria aluno duplicado no caminho completo"
         )
 
-        // TESTE 2: ChatManagerService (UC-05 & RF-09: Chat Local Offline)
+        // TESTE 2: ChatManagerService (UC-04 & RF-09: Chat Local Offline)
         print("\n--- [2/12] Testes de Domínio: ChatManagerService ---")
         let chatManager = ChatManagerService()
         

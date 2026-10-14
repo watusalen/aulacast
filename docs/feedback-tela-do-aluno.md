@@ -85,7 +85,7 @@ ao professor. E o professor pode desligar "Alunos podem escrever" no painel do c
 vira só comunicados.
 
 - [x] **7a. Nada a fazer.**
-- [ ] **7b. Dizer isso na tela do aluno**, uma linha no chat: "Suas mensagens vão só para o
+- [x] **7b. Dizer isso na tela do aluno**, uma linha no chat: "Suas mensagens vão só para o
   professor." (A turma pediu uma coisa que já existe, então ela não sabe disso.) **P**
 
 ---
