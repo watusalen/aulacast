@@ -3130,7 +3130,9 @@ struct AulaCastTestRunner {
                 try? await Task.sleep(nanoseconds: 20_000_000)
             }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
-            assertTest(pedidosLento.pedidos >= 2, "Estouro da fila por bytes pede quadro-chave de novo (pedidos: \(pedidosLento.pedidos))")
+            // Havia um quadro-chave publicado há menos de 2 s: o estouro não pede outro (evita o laço
+            // "aluno lento -> quadro-chave para a turma"); só o pedido da conexão nova conta.
+            assertTest(pedidosLento.pedidos == 1, "Estouro da fila com quadro-chave recente não pede outro (pedidos: \(pedidosLento.pedidos))")
             assertTest(servidorLento.activeStreamCount == 1, "O aluno lento continua conectado (só ressincroniza)")
 
             // Ele volta a ler e um quadro-chave novo o ressincroniza.
@@ -3156,6 +3158,79 @@ struct AulaCastTestRunner {
                    "Taxa média alvo tem piso de 1,2 Mbps")
         assertTest(H264FrameEncoder.taxaMediaBps(largura: 3840, altura: 2160, fps: 60) == 4_000_000,
                    "Taxa média alvo tem teto de 4 Mbps")
+
+        // (11) Teto de duração derivado do fps real: a 15 fps, 2 períodos = 12000 ticks (não 6000).
+        do {
+            let coletor = ColetorDeFragmentos()
+            let pacote = FMP4Packager()
+            pacote.outputReceiver = coletor
+            func au15(chave: Bool, segundos: Double) -> H264AccessUnit {
+                let base = unidadeSintetica(chave: chave, segundos: segundos)
+                return H264AccessUnit(data: base.data, presentationTime: base.presentationTime, isKeyFrame: chave,
+                                      width: base.width, height: base.height, framesPerSecond: 15)
+            }
+            pacote.didReceiveAccessUnit(au15(chave: true, segundos: 0))
+            pacote.didReceiveAccessUnit(au15(chave: false, segundos: 30))
+            pacote.didReceiveAccessUnit(au15(chave: false, segundos: 30.07))
+            let duracoes = coletor.fragmentos.filter { !$0.isInitSegment }.compactMap { duracaoDoFragmento($0.data) }
+            assertTest(duracoes == [6000, 12000, 6300],
+                       "Teto de 2 períodos usa o fps real (15 fps => 12000 ticks; veio \(duracoes))")
+        }
+
+        // (12) Quadro-chave pedido com a tela parada re-codifica o último quadro; reset() o esquece.
+        do {
+            let coletor = ColetorDeAccessUnits()
+            let encoder = H264FrameEncoder()
+            encoder.h264OutputReceiver = coletor
+            for indice in 0..<4 {
+                if let amostra = criarAmostraH264(indice: indice) { encoder.encode(sampleBuffer: amostra) }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            let antes = coletor.unidades.count
+            assertTest(antes >= 1, "Encoder de tela parada: já entregou quadros antes do pedido (\(antes))")
+
+            encoder.forceNextKeyFrame() // sem nenhum quadro novo chegando
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            let depois = coletor.unidades
+            assertTest(depois.count > antes && depois.last?.isKeyFrame == true,
+                       "Pedido de quadro-chave com a tela parada gera um IDR do último quadro (\(antes) -> \(depois.count))")
+            if let ultimaChave = depois.last, let anterior = depois.dropLast().last {
+                assertTest(CMTimeCompare(ultimaChave.presentationTime, anterior.presentationTime) > 0,
+                           "O IDR re-codificado tem PTS monotônico")
+            }
+
+            encoder.reset()
+            let aposReset = coletor.unidades.count
+            encoder.forceNextKeyFrame()
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            assertTest(coletor.unidades.count == aposReset,
+                       "Depois de reset(), o pedido não reenvia a tela da sessão anterior")
+        }
+
+        // (13) Limite de conexões /stream.mp4 por IP: a 5ª do mesmo IP é fechada na hora.
+        let servidorLimite = NetworkListenerService(port: 8150, webAssetsPath: FileManager.default.temporaryDirectory)
+        do {
+            try servidorLimite.start()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            servidorLimite.broadcastVideoFragment(fragmentoMarcado("INIT-L"), isInitSegment: true, isKeyFrame: true)
+            let fds = (0..<5).map { _ in abrirMP4Bruto(8150) }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            let respostas = fds.map { String(decoding: lerDisponivel($0), as: UTF8.self) }
+            let aceitas = respostas.filter { $0.contains("200 OK") }.count
+            assertTest(aceitas == 4, "Limite por IP: só 4 conexões /stream.mp4 de 127.0.0.1 são atendidas (atendidas: \(aceitas))")
+            assertTest(servidorLimite.activeStreamCount == 4, "Limite por IP: 4 alunos ativos (\(servidorLimite.activeStreamCount))")
+            fds.forEach { close($0) }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            let fdNovo = abrirMP4Bruto(8150)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            assertTest(String(decoding: lerDisponivel(fdNovo), as: UTF8.self).contains("200 OK"),
+                       "Liberadas as conexões, uma nova do mesmo IP volta a ser atendida")
+            close(fdNovo)
+            servidorLimite.stop()
+        } catch {
+            assertTest(false, "Falha no teste de limite de conexões: \(error.localizedDescription)")
+        }
 
         // SUMÁRIO FINAL
         print("\n==========================================")

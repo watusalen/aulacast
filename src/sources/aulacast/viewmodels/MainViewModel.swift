@@ -407,14 +407,15 @@ public final class MainViewModel: ObservableObject {
     public func stopStream() {
         Task {
             await captureService.stopCapture()
+            // Antes de parar o servidor: um quadro-chave em voo entre os dois resets gravaria um
+            // segmento de inicialização velho no servidor.
+            self.fmp4Packager.reset()
             serverService.stop()
             advertiserService.stopAdvertising()
             mdnsService.stop()
             self.mdnsHostname = nil
             self.ipDoNome = nil
-            // Sessão seguinte começa do zero: sem isto o empacotador, que lembra SPS e
-            // resolução, não emitiria de novo o segmento de inicialização que o servidor apagou.
-            self.fmp4Packager.reset()
+            // Sessão seguinte começa do zero (o empacotador já foi zerado acima).
             self.h264EncoderService.forceNextKeyFrame()
             self.systemActivity.endTransmission()
             self.isStreaming = false
@@ -497,7 +498,9 @@ extension MainViewModel: FMP4FragmentReceiverProtocol {
     public nonisolated func didReceiveFragment(_ data: Data, isInitSegment: Bool, isKeyFrame: Bool) {
         // Mesmo portão do MJPEG: com a aula pausada, ninguém recebe atualização nova em
         // nenhuma das duas rotas — é o que sustenta o "modo pausado" sem tratamento especial.
-        guard !streamState.isPaused else { return }
+        // O segmento de inicialização passa mesmo em pausa: descartá-lo deixaria o servidor com
+        // um `avcC` velho enquanto o empacotador acha que já o enviou.
+        guard isInitSegment || !streamState.isPaused else { return }
         serverService.broadcastVideoFragment(data, isInitSegment: isInitSegment, isKeyFrame: isKeyFrame)
     }
 }

@@ -405,7 +405,7 @@ test('item 1: video fica muted + playsinline para o autoplay funcionar', () => {
   assert.strictEqual(ctx.video.playsInline, true);
 });
 
-test('item 2: atraso acima de 0,8 s pula para buffered.end - 0,1 (timer, waiting, timeupdate)', async () => {
+test('item 2: atraso acima de 2 s pula para buffered.end - 0,1 (timer, waiting, timeupdate)', async () => {
   for (const origem of ['verificar', 'waiting', 'timeupdate']) {
     const ctx = montar();
     await iniciarComDados(ctx);
@@ -418,7 +418,7 @@ test('item 2: atraso acima de 0,8 s pula para buffered.end - 0,1 (timer, waiting
   }
 });
 
-test('item 2: atraso pequeno (<= 0,8 s) não pula', async () => {
+test('item 2: atraso pequeno (< 2 s) não pula', async () => {
   const ctx = montar();
   await iniciarComDados(ctx);
   ctx.sb.faixas = [[100, 110]];
@@ -448,49 +448,60 @@ test('item 2: aba voltando a ficar visível pula para o ao vivo', async () => {
   ctx.player.stop();
 });
 
-test('item 2: relógio parado por 3 s é UMA queda (contada uma vez) e reconecta', async () => {
+test('tela parada (relógio sem avançar por muito tempo) NÃO é queda nem reconecta', async () => {
   let agora = 0;
   const ctx = montar({ opcoes: { agora: () => agora } });
   await iniciarComDados(ctx);
   ctx.sb.faixas = [[100, 100.5]];
   ctx.video.currentTime = 100.4;
-
-  for (const t of [0, 1000, 2000]) { agora = t; ctx.player.verificar(); }
-  assert.strictEqual(ctx.player.tentativas, 0, 'antes de 3 s não é queda');
-  agora = 3000;
-  ctx.player.verificar();
-  assert.strictEqual(ctx.player.tentativas, 1);
-  assert.ok(ctx.estados.includes('reconectando'));
-
-  // O tique seguinte (conexão já encerrada) e os eventos da fonte velha não contam de novo.
-  agora = 4000;
-  ctx.player.verificar();
-  await aguardar();
-  await aguardar();
-  assert.strictEqual(ctx.player.tentativas, 1);
-  ctx.player.stop();
-});
-
-test('item 2: durante a pausa do professor, parar de avançar não é queda', async () => {
-  let agora = 0;
-  const ctx = montar({ opcoes: { agora: () => agora } });
-  await iniciarComDados(ctx);
-  ctx.sb.faixas = [[100, 100.5]];
-  ctx.video.currentTime = 100.4;
-  ctx.player.definirPausado(true);
-  for (const t of [0, 2000, 4000, 8000, 20000]) { agora = t; ctx.player.verificar(); }
+  for (const t of [0, 1000, 3000, 8000, 60000]) { agora = t; ctx.player.verificar(); }
   assert.strictEqual(ctx.player.tentativas, 0);
+  assert.ok(!ctx.estados.includes('reconectando'));
   ctx.player.stop();
 });
 
-test('item 2: aba oculta não conta estagnação', async () => {
-  let agora = 0;
-  const ctx = montar({ opcoes: { agora: () => agora } });
+test('item 7: atraso entre 0,3 s e 2 s acelera (sem seek) e volta a 1x ao alcançar', async () => {
+  const ctx = montar();
   await iniciarComDados(ctx);
-  ctx.sb.faixas = [[100, 100.5]];
-  ctx.video.currentTime = 100.4;
-  ctx.janela.document.visibilityState = 'hidden';
-  for (const t of [0, 5000, 10000]) { agora = t; ctx.player.verificar(); }
+  ctx.sb.faixas = [[100, 110]];
+  ctx.video.currentTime = 108.5; // atraso 1,5 s
+  ctx.player.verificar();
+  assert.strictEqual(ctx.video.currentTime, 108.5, 'não pula');
+  assert.ok(ctx.video.playbackRate > 1 && ctx.video.playbackRate <= 1.1);
+  ctx.video.currentTime = 109.95; // atraso 0,05 s
+  ctx.player.verificar();
+  assert.strictEqual(ctx.video.playbackRate, 1);
+  ctx.player.stop();
+});
+
+test('item 7: atraso acima de 2 s pula e deixa a velocidade em 1x', async () => {
+  const ctx = montar();
+  await iniciarComDados(ctx);
+  ctx.sb.faixas = [[100, 110]];
+  ctx.video.currentTime = 107;
+  ctx.player.verificar();
+  assert.ok(Math.abs(ctx.video.currentTime - 109.9) < 1e-9);
+  assert.strictEqual(ctx.video.playbackRate, 1);
+  ctx.player.stop();
+});
+
+test('item 6: quota com TUDO à frente do currentTime (aba oculta) libera, salta ao vivo e não conta queda', async () => {
+  const ctx = montar();
+  let falhasRestantes = 1;
+  const original = ctx.sb.appendBuffer.bind(ctx.sb);
+  ctx.sb.appendBuffer = (p) => {
+    if (falhasRestantes > 0) { falhasRestantes -= 1; throw quota(); }
+    original(p);
+  };
+  ctx.sb.faixas = [[100, 130]];
+  ctx.video.currentTime = 100; // nada atrás do relógio
+  await iniciarComDados(ctx);
+  assert.strictEqual(ctx.player.tentativas, 0, 'quota não é queda');
+  assert.deepStrictEqual(ctx.sb.removidos, [[100, 129.5]]);
+  assert.ok(Math.abs(ctx.video.currentTime - 129.9) < 1e-9, `currentTime=${ctx.video.currentTime}`);
+  ctx.sb.faixas = [[129.5, 130]];
+  ctx.sb.dispatch('updateend');
+  assert.strictEqual(ctx.sb.anexados.length, 1);
   assert.strictEqual(ctx.player.tentativas, 0);
   ctx.player.stop();
 });

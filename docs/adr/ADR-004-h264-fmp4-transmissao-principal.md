@@ -18,6 +18,9 @@ O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 
 - Aluno lento perde a fila e ressincroniza no próximo quadro-chave (pedidos agrupados a no máximo 1 por segundo).
 - **Não verificado:** Chrome/Safari/iOS reais, a rede da sala, o bitrate efetivo do encoder em hardware, a legibilidade do texto na taxa escolhida. Uma falha única do teste do encoder real apareceu em 1 de 5 execuções; o rate control não foi descartado como causa.
 - Entrar durante uma pausa mostra "Aguardando" até a retomada.
+- Tela parada (o caso normal de um slide): o ScreenCaptureKit não entrega quadros, então o encoder guarda o último quadro e o recodifica como quadro-chave quando alguém entra ou a aula retoma. O player **não** trata imagem parada como queda.
+- Limites: 4 conexões `/stream.mp4` por IP e 120 no total; aluno lento só pede novo quadro-chave se nenhum saiu nos últimos 2 s.
+- **Riscos conhecidos, não tratados:** teto de 4 Mbps é por aluno (até ~160 Mbps para 40); o fps do encoder só é lido ao iniciar; os dois codificadores rodam sempre (custo de CPU, não de banda); a retomada de uma pausa mostra primeiro o último quadro de antes da pausa, até a tela mudar.
 
 ## Alternativas
 - Blocos alterados em JPEG/PNG num `<canvas>` (estilo VNC): HTTP puro e texto nítido, não implementado.

@@ -16,12 +16,13 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
     private static let mediaTimescale: Int32 = 90_000
     private static let trackID: UInt32 = 1
 
-    /// Período nominal de um quadro (30 fps: o maior valor típico entre os oferecidos). A duração
+    /// Período nominal de um quadro. A duração
     /// de cada amostra é o intervalo real desde o quadro anterior, limitado a
     /// `maxPeriodosPorAmostra` períodos: depois de uma tela parada (que não produz quadros) o
     /// próximo quadro não pode ganhar dezenas de segundos de duração, senão a imagem congela e o
     /// atraso se acumula no player.
-    private static let duracaoNominal = UInt32(mediaTimescale / 30)
+    /// Vem do fps real da captura (`H264AccessUnit.framesPerSecond`); o teto é de 2 períodos dele.
+    private static func duracaoNominal(fps: Int) -> UInt32 { UInt32(mediaTimescale) / UInt32(max(1, min(fps, 240))) }
     private static let maxPeriodosPorAmostra: Int64 = 2
 
     /// Protege todo o estado: chamado pela thread do VideoToolbox e por `MainViewModel` (`reset()`).
@@ -36,17 +37,21 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
     private var baseMediaDecodeTime: UInt64 = 0
     private var tempoApresentadoAnterior: CMTime?
 
+    /// Chamado ao fim de `reset()`, fora do lock (o encoder solta o quadro retido).
+    public var onReset: (() -> Void)?
+
     public init() {}
 
     /// Esquece SPS, resolução e relógio: a próxima sessão emite um segmento de inicialização novo.
     public func reset() {
         lock.lock()
-        defer { lock.unlock() }
         sps = nil
         pps = nil
         largura = 0
         altura = 0
         reiniciarRelogio()
+        lock.unlock()
+        onReset?()
     }
 
     private func reiniciarRelogio() {
@@ -96,7 +101,7 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
         let amostra = Self.montarAmostra(nals: nals)
         guard !amostra.isEmpty else { return }
 
-        let duracao = duracaoDoQuadro(unit.presentationTime)
+        let duracao = duracaoDoQuadro(unit.presentationTime, fps: unit.framesPerSecond)
         let fragmento = montarFragmento(amostra: amostra, duracao: duracao, isKeyFrame: unit.isKeyFrame)
         outputReceiver?.didReceiveFragment(fragmento, isInitSegment: false, isKeyFrame: unit.isKeyFrame)
 
@@ -109,13 +114,14 @@ public final class FMP4Packager: H264AccessUnitReceiverProtocol {
     /// `maxPeriodosPorAmostra` períodos nominais. Sem quadro anterior (ou tempo inválido), o
     /// período nominal. O `baseMediaDecodeTime` avança pela mesma duração, então a linha do
     /// tempo do `SourceBuffer` continua contígua mesmo depois de uma pausa na captura.
-    private func duracaoDoQuadro(_ tempo: CMTime) -> UInt32 {
+    private func duracaoDoQuadro(_ tempo: CMTime, fps: Int) -> UInt32 {
+        let nominal = Self.duracaoNominal(fps: fps)
         guard let anterior = tempoApresentadoAnterior, tempo.isNumeric, anterior.isNumeric else {
-            return Self.duracaoNominal
+            return nominal
         }
         let delta = CMTimeSubtract(tempo, anterior)
         let escalado = CMTimeConvertScale(delta, timescale: Self.mediaTimescale, method: .default)
-        let teto = Int64(Self.duracaoNominal) * Self.maxPeriodosPorAmostra
+        let teto = Int64(nominal) * Self.maxPeriodosPorAmostra
         return UInt32(clamping: min(max(1, escalado.value), teto))
     }
 

@@ -20,6 +20,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
 
     private final class Conexao {
         let connection: NWConnection
+        let ip: String
         var fila: [Entrada] = []
         var filaBytes = 0
         /// Começa em `true`: a conexão só é liberada para receber fragmentos depois que o
@@ -30,7 +31,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         /// e o `SourceBuffer` do navegador não tem nada para decodificar aquilo.
         var aguardandoKeyFrame = true
 
-        init(connection: NWConnection) { self.connection = connection }
+        init(connection: NWConnection, ip: String) { self.connection = connection; self.ip = ip }
 
         func enfileirar(_ entrada: Entrada) {
             fila.append(entrada)
@@ -60,6 +61,22 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
     /// memória e atraso (com a tela parada, 120 fragmentos pequenos podiam significar 30 s).
     static let filaMaxBytes = 1_000_000
     private static let filaMaxIdadeNs: UInt64 = 1_000_000_000
+
+    /// Limites de conexões: por IP de origem (um aluno legítimo abre uma, no máximo duas) e total.
+    /// Passou deles, a conexão é fechada na hora, sem pedir quadro-chave.
+    static let maxConexoesPorIP = 4
+    static let maxConexoesTotal = 120
+    /// Só pede quadro-chave por aluno lento se nenhum saiu nesta janela (evita o laço
+    /// "aluno lento -> quadro-chave para a turma -> mais banda -> mais alunos lentos").
+    private static let janelaSemKeyFrameNs: UInt64 = 2_000_000_000
+    private var ultimoKeyFramePublicado: DispatchTime?
+
+    private static func ip(de connection: NWConnection) -> String {
+        if case .hostPort(let host, _) = connection.endpoint {
+            return "\(host)".split(separator: "%").first.map(String.init) ?? "\(host)"
+        }
+        return "\(connection.endpoint)"
+    }
 
     /// Chamado quando um quadro-chave faz falta (aluno novo, ou aluno que perdeu a sincronia):
     /// quem estiver ouvindo (o encoder H.264) deve forçar um quadro-chave. Os pedidos são
@@ -159,6 +176,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
     public func reset() {
         lock.lock()
         initSegment = nil
+        ultimoKeyFramePublicado = nil
         let existentes = Array(conexoes.values)
         conexoes.removeAll()
         lock.unlock()
@@ -181,20 +199,26 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
                       "Connection: close\r\n\r\n"
         let cabecalho = Data(headers.utf8)
 
-        let estado = Conexao(connection: connection)
+        let estado = Conexao(connection: connection, ip: Self.ip(de: connection))
+
+        lock.lock()
+        let doMesmoIP = conexoes.values.reduce(0) { $0 + ($1.ip == estado.ip ? 1 : 0) }
+        if doMesmoIP >= Self.maxConexoesPorIP || conexoes.count >= Self.maxConexoesTotal {
+            lock.unlock()
+            connection.cancel()
+            return
+        }
+        if let initSegment {
+            estado.enfileirar(Entrada(data: initSegment, media: false, instante: .now()))
+        }
+        conexoes[ObjectIdentifier(connection)] = estado
+        lock.unlock()
 
         contadoresLock.lock()
         proximaSerie &+= 1
         serieDaConexao[ObjectIdentifier(connection)] = proximaSerie
         contadores.quadrosPorAluno[proximaSerie] = 0
         contadoresLock.unlock()
-
-        lock.lock()
-        if let initSegment {
-            estado.enfileirar(Entrada(data: initSegment, media: false, instante: .now()))
-        }
-        conexoes[ObjectIdentifier(connection)] = estado
-        lock.unlock()
 
         pedirKeyFrame()
 
@@ -311,6 +335,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         }
 
         let agora = DispatchTime.now()
+        if isKeyFrame { ultimoKeyFramePublicado = agora }
         let entrada = Entrada(data: data, media: true, instante: agora)
         var precisaDeKeyFrame = false
         let alvos = Array(conexoes.values)
@@ -333,9 +358,12 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
             estado.aguardandoKeyFrame = false
             estado.enfileirar(entrada)
         }
+        let keyFrameRecente = ultimoKeyFramePublicado.map {
+            agora.uptimeNanoseconds &- $0.uptimeNanoseconds < Self.janelaSemKeyFrameNs
+        } ?? false
         lock.unlock()
 
-        if precisaDeKeyFrame { pedirKeyFrame() }
+        if precisaDeKeyFrame && !keyFrameRecente { pedirKeyFrame() }
         for estado in alvos {
             bombear(estado.connection)
         }

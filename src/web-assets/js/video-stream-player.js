@@ -11,14 +11,18 @@ const tipoMp4 = (codec) => `video/mp4; codecs="${codec}"`;
 /** Desiste (e cai para o MJPEG) depois de tantas quedas REAIS seguidas de `/stream.mp4`. */
 const MAX_TENTATIVAS_DE_RECONEXAO = 5;
 
-/** Atraso máximo tolerado do ao vivo; acima disso, pula para a borda. */
-const ATRASO_MAXIMO_S = 0.8;
+/** Atraso do ao vivo: entre o mínimo e o máximo, acelera suavemente; acima do máximo, pula. */
+const ATRASO_MINIMO_S = 0.3;
+const ATRASO_MAXIMO_S = 2;
+/** Atraso abaixo do qual a velocidade volta a 1x (histerese, evita oscilar em 0,3 s). */
+const ATRASO_ALCANCADO_S = 0.15;
+const VELOCIDADE_ALCANCE = 1.1;
 /** Folga mantida atrás da borda ao vivo ao pular. */
 const FOLGA_AO_VIVO_S = 0.1;
-/** Sem avançar o relógio do vídeo por tanto tempo, enquanto deveria estar ao vivo = queda. */
-const ESTAGNACAO_MS = 3000;
 const INTERVALO_VERIFICACAO_MS = 1000;
 /** Mantém só tanto atrás do ponto de reprodução no SourceBuffer (memória). */
+/** Quanto do fim do buffer sobra ao liberar a quota com tudo à frente do vídeo. */
+const MARGEM_QUOTA_S = 0.5;
 const MANTER_ATRAS_S = 10;
 /** Sem `avcC` nem `moof` depois de tantos bytes, desiste de ler o codec e usa o padrão. */
 const LIMITE_BYTES_PARA_CODEC = 64 * 1024;
@@ -124,7 +128,6 @@ export class VideoStreamPlayer {
     /** O professor pausou: o servidor não manda nada, então parar de avançar é esperado. */
     this.pausado = false;
     /** Última posição vista do vídeo e quando: base da detecção de reprodução parada. */
-    this.marca = null;
     this.retentouQuota = false;
 
     // Muted + playsinline é o que permite o autoplay sem gesto (iOS inclusive).
@@ -171,10 +174,12 @@ export class VideoStreamPlayer {
     this.esconderVideo();
   }
 
-  /** O professor pausou/retomou: sem dados na pausa, não confundir com reprodução travada. */
+  /**
+   * O professor pausou/retomou. Tela parada NÃO é queda (o servidor não manda quadros), então
+   * nada aqui reconecta; o estado só fica disponível para a interface.
+   */
   definirPausado(pausado) {
     this.pausado = Boolean(pausado);
-    this.marca = null;
   }
 
   conectar() {
@@ -328,12 +333,34 @@ export class VideoStreamPlayer {
       sb.appendBuffer(proximo);
       this.retentouQuota = false;
     } catch (erro) {
-      if (erro && erro.name === 'QuotaExceededError' && !this.retentouQuota && this.aparar(1)) {
+      if (erro && erro.name === 'QuotaExceededError' && !this.retentouQuota && this.liberarQuota()) {
         this.retentouQuota = true;
         this.filaDePedacos.unshift(proximo);
         return;
       }
       this.aoQuedaDeConexao(`appendBuffer falhou: ${erro}`);
+    }
+  }
+
+  /**
+   * Quota cheia: apara o que já passou; se tudo está À FRENTE do ponto de reprodução (aba
+   * oculta, o relógio não andou), descarta quase todo o buffer e salta para a borda ao vivo.
+   */
+  liberarQuota() {
+    if (this.aparar(1)) return true;
+    const sb = this.sourceBuffer;
+    const faixas = sb && sb.buffered;
+    if (!faixas || !faixas.length || sb.updating) return false;
+    const inicio = faixas.start(0);
+    const fim = faixas.end(faixas.length - 1);
+    const corte = fim - MARGEM_QUOTA_S;
+    if (!(corte > inicio)) return false;
+    try {
+      sb.remove(inicio, corte);
+      this.video.currentTime = fim - FOLGA_AO_VIVO_S;
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -365,7 +392,9 @@ export class VideoStreamPlayer {
     const fim = faixas.end(faixas.length - 1);
     let alvo = null;
     if (this.faixaQueContem(faixas, t) >= 0) {
-      if (fim - t > ATRASO_MAXIMO_S) alvo = fim - FOLGA_AO_VIVO_S;
+      const atraso = fim - t;
+      if (atraso > ATRASO_MAXIMO_S) alvo = fim - FOLGA_AO_VIVO_S;
+      else this.ajustarVelocidade(atraso);
     } else if (t < faixas.start(0)) {
       alvo = Math.max(faixas.start(0), fim - FOLGA_AO_VIVO_S);
     } else {
@@ -375,9 +404,19 @@ export class VideoStreamPlayer {
     }
     if (alvo !== null) {
       this.video.currentTime = alvo;
-      this.marca = null;
+      this.ajustarVelocidade(0);
     }
     if (this.video.paused) this.tocar();
+  }
+
+  /** Recupera atraso moderado acelerando um pouco (sem o tranco de um seek); 1x ao alcançar. */
+  ajustarVelocidade(atraso) {
+    const v = this.video;
+    if (atraso > ATRASO_MINIMO_S) {
+      if (v.playbackRate !== VELOCIDADE_ALCANCE) v.playbackRate = VELOCIDADE_ALCANCE;
+    } else if (atraso <= ATRASO_ALCANCADO_S && v.playbackRate !== 1) {
+      v.playbackRate = 1;
+    }
   }
 
   /** Índice da faixa bufferizada que contém `t`, ou -1 (buraco, antes ou depois de tudo). */
@@ -409,7 +448,6 @@ export class VideoStreamPlayer {
   aoMudarVisibilidade() {
     const doc = this.janela && this.janela.document;
     if (!doc || doc.visibilityState === 'hidden') return;
-    this.marca = null;
     this.sincronizar();
   }
 
@@ -424,26 +462,10 @@ export class VideoStreamPlayer {
     this.verificador = null;
   }
 
-  /** Tique de ~1 s: persegue a borda ao vivo e detecta reprodução parada (queda contada UMA vez). */
+  /** Tique de ~1 s: persegue a borda ao vivo. Tela parada (sem quadros novos) é normal, não queda. */
   verificar() {
     if (!this.querTransmitir || !this.sourceBuffer) return;
     this.sincronizar();
-    const doc = this.janela && this.janela.document;
-    const oculta = Boolean(doc) && doc.visibilityState === 'hidden';
-    const faixas = this.sourceBuffer.buffered;
-    if (this.pausado || oculta || !faixas || !faixas.length) {
-      this.marca = null;
-      return;
-    }
-    const t = this.video.currentTime;
-    const agora = this.agora();
-    if (!this.marca || Math.abs(t - this.marca.t) > 0.01) {
-      this.marca = { t, em: agora };
-      return;
-    }
-    if (agora - this.marca.em >= ESTAGNACAO_MS) {
-      this.aoQuedaDeConexao('reprodução parada');
-    }
   }
 
   /**
@@ -511,7 +533,6 @@ export class VideoStreamPlayer {
     this.leitor = null;
     this.filaDePedacos = [];
     this.inicio = null;
-    this.marca = null;
     this.retentouQuota = false;
     if (sb && ms) {
       try { ms.removeSourceBuffer(sb); } catch (_) { /* já não pertence à fonte */ }

@@ -13,8 +13,12 @@ public struct H264AccessUnit {
     /// largura/altura.
     public let width: Int32
     public let height: Int32
+    /// Fps nominal da captura: o empacotador deriva daqui o período nominal de um quadro.
+    public let framesPerSecond: Int
 
-    public init(data: Data, presentationTime: CMTime, isKeyFrame: Bool, width: Int32, height: Int32) {
+    public init(data: Data, presentationTime: CMTime, isKeyFrame: Bool, width: Int32, height: Int32,
+                framesPerSecond: Int = 30) {
+        self.framesPerSecond = framesPerSecond
         self.data = data
         self.presentationTime = presentationTime
         self.isKeyFrame = isKeyFrame

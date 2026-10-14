@@ -17,7 +17,11 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     public weak var outputReceiver: EncodedFrameReceiverProtocol?
 
     /// Quem recebe os access units H.264 (o empacotador fMP4, em uso normal).
-    public weak var h264OutputReceiver: H264AccessUnitReceiverProtocol?
+    public weak var h264OutputReceiver: H264AccessUnitReceiverProtocol? {
+        // O empacotador zera o relógio ao fim da sessão (`reset()`); o encoder solta junto o
+        // último quadro retido, para uma sessão nova nunca reenviar a tela da anterior.
+        didSet { (h264OutputReceiver as? FMP4Packager)?.onReset = { [weak self] in self?.reset() } }
+    }
 
     private let encodingQueue = DispatchQueue(label: "br.com.ifpi.aulacast.h264Queue", qos: .userInitiated)
 
@@ -45,6 +49,16 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     /// entregar bytes para um aluno que acabou de entrar (ele não tem nenhum quadro-chave
     /// anterior para decodificar a partir dele).
     private var forcarProximoKeyFrame = false
+
+    /// Último quadro recebido (um só, limitado) e o último PTS submetido. Tela parada não gera
+    /// quadros novos; para dar imagem a quem entra (ou volta de uma pausa) re-codificamos este
+    /// quadro como IDR. Protegidos por `vooLock`.
+    private var ultimoPixelBuffer: CVPixelBuffer?
+    private var ultimoTempo: CMTime?
+    private var fpsDaSessao = 30
+    /// Espera antes de re-codificar o quadro retido: se um quadro real chegar nesse intervalo,
+    /// ele já cumpre o pedido e não gastamos um IDR extra.
+    private static let esperaDoReenvioNs: UInt64 = 60_000_000
 
     /// Quadros por segundo da captura (`ScreenCaptureService.frameRate`). Entra no cálculo da taxa
     /// de bits e do intervalo entre quadros-chave; vale na próxima (re)criação da sessão.
@@ -88,7 +102,33 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     public func forceNextKeyFrame() {
         vooLock.lock()
         forcarProximoKeyFrame = true
+        let temRetido = ultimoPixelBuffer != nil
         vooLock.unlock()
+        guard temRetido else { return }
+        encodingQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(Self.esperaDoReenvioNs))) { [weak self] in
+            self?.reenviarUltimoQuadroSeAindaPendente()
+        }
+    }
+
+    /// Solta o quadro retido e o relógio de PTS (fim de sessão).
+    public func reset() {
+        vooLock.lock()
+        ultimoPixelBuffer = nil
+        ultimoTempo = nil
+        forcarProximoKeyFrame = false
+        vooLock.unlock()
+    }
+
+    /// Se o pedido de quadro-chave ainda não foi consumido por um quadro real, re-codifica o
+    /// quadro retido como IDR, com PTS monotônico (último + 1 ms).
+    private func reenviarUltimoQuadroSeAindaPendente() {
+        vooLock.lock()
+        guard forcarProximoKeyFrame, let buffer = ultimoPixelBuffer, let anterior = ultimoTempo else {
+            vooLock.unlock()
+            return
+        }
+        vooLock.unlock()
+        submeter(pixelBuffer: buffer, tempo: CMTimeAdd(anterior, CMTime(value: 1, timescale: 1000)), retem: false)
     }
 
     public func encode(sampleBuffer: CMSampleBuffer) {
@@ -96,8 +136,12 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         // para codificar, e forçar um pixel buffer inexistente pro VideoToolbox só derrubaria a
         // sessão.
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        submeter(pixelBuffer: pixelBuffer, tempo: CMSampleBufferGetPresentationTimeStamp(sampleBuffer), retem: true)
+    }
 
+    private func submeter(pixelBuffer: CVPixelBuffer, tempo tempoBruto: CMTime, retem: Bool) {
         vooLock.lock()
+        if retem { ultimoPixelBuffer = pixelBuffer }
         if quadrosEmVoo >= Self.maxQuadrosEmVoo {
             vooLock.unlock()
             return
@@ -105,10 +149,22 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         quadrosEmVoo += 1
         let deveForcarKeyFrame = forcarProximoKeyFrame
         forcarProximoKeyFrame = false
+        // PTS estritamente crescente: o quadro re-codificado e o próximo real não podem colidir.
+        var tempo = tempoBruto
+        if let anterior = ultimoTempo, tempo.isNumeric, anterior.isNumeric, tempo <= anterior {
+            tempo = CMTimeAdd(anterior, CMTime(value: 1, timescale: 1000))
+        }
+        ultimoTempo = tempo
         vooLock.unlock()
 
         /// O pedido só é "gasto" se o quadro de fato foi submetido; senão volta para a próxima vez.
-        let devolverPedido = { if deveForcarKeyFrame { self.forceNextKeyFrame() } }
+        let devolverPedido = {
+            if deveForcarKeyFrame {
+                self.vooLock.lock()
+                self.forcarProximoKeyFrame = true
+                self.vooLock.unlock()
+            }
+        }
 
         let largura = Int32(CVPixelBufferGetWidth(pixelBuffer))
         let altura = Int32(CVPixelBufferGetHeight(pixelBuffer))
@@ -121,7 +177,6 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
                 return
             }
 
-            let tempo = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             var propriedades: [String: Any] = [:]
             if deveForcarKeyFrame {
                 propriedades[kVTEncodeFrameOptionKey_ForceKeyFrame as String] = true
@@ -198,6 +253,9 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         // seção 3.4 do PLANO-COMPRESSAO-DE-VIDEO.md) — H.265/AV1 ficam de fora por isso.
         // Nível 4.0 cobre 1080p30; acima disso (ex.: 1080p60) deixa o VideoToolbox escolher.
         let fps = max(1, framesPerSecond)
+        vooLock.lock()
+        fpsDaSessao = fps
+        vooLock.unlock()
         let cabeNoNivel40 = Self.macroblocosPorSegundo(largura: Int(largura), altura: Int(altura), fps: fps) <= 245_760
         let nivel = cabeNoNivel40 ? kVTProfileLevel_H264_Baseline_4_0 : kVTProfileLevel_H264_Baseline_AutoLevel
         if VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_ProfileLevel, value: nivel) != noErr {
@@ -243,6 +301,9 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer),
               let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
 
+        vooLock.lock()
+        let fps = fpsDaSessao
+        vooLock.unlock()
         let ehChave = Self.ehQuadroChave(sampleBuffer)
         let dimensoes = CMVideoFormatDescriptionGetDimensions(formatDescription)
 
@@ -259,7 +320,8 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
             presentationTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
             isKeyFrame: ehChave,
             width: dimensoes.width,
-            height: dimensoes.height
+            height: dimensoes.height,
+            framesPerSecond: fps
         )
         h264OutputReceiver?.didReceiveAccessUnit(unidade)
     }
