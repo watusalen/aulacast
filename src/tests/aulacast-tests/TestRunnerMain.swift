@@ -3371,6 +3371,22 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste de métricas: \(error.localizedDescription)")
         }
 
+        // TESTE 36: Onde o app procura o frontend (web-assets).
+        print("\n--- [36/36] Testes de Domínio: caminho do web-assets ---")
+        let pastaDoProjeto = URL(fileURLWithPath: "/Users/prof/AulaCast")
+        let appEmpacotado = URL(fileURLWithPath: "/Users/prof/Downloads/AulaCast.app")
+        let recursos = URL(fileURLWithPath: "/Users/prof/Downloads/AulaCast.app/Contents/Resources")
+        let empacotadoCand = WebAssetsPathResolver.candidatos(currentDir: pastaDoProjeto, bundleURL: appEmpacotado, resourceURL: recursos)
+        assertTest(empacotadoCand.first?.path == "/Users/prof/Downloads/AulaCast.app/Contents/Resources/web-assets",
+                   "Rodando como .app, o frontend de dentro do app vence a pasta onde ele foi iniciado")
+        let soltoCand = WebAssetsPathResolver.candidatos(
+            currentDir: URL(fileURLWithPath: "/Users/prof/AulaCast/src"),
+            bundleURL: URL(fileURLWithPath: "/Users/prof/AulaCast/src/.build/debug/AulaCast"),
+            resourceURL: nil
+        )
+        assertTest(soltoCand.first?.path == "/Users/prof/AulaCast/src/web-assets",
+                   "Rodando solto (swift run), a pasta de trabalho continua sendo a primeira")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
