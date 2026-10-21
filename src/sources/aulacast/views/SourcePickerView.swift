@@ -78,6 +78,14 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
                     }
                 )
             }
+
+            if !recorder.appsOcultos.isEmpty {
+                AppsOcultosSecao(
+                    apps: recorder.appsOcultos,
+                    mostrar: { recorder.mostrarApp(bundleID: $0) },
+                    esquecerTodos: { recorder.esquecerTodosOsAppsOcultos() }
+                )
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .task {
@@ -130,9 +138,9 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     private func alternarOculta(_ source: DisplaySource) {
         guard let bundleID = source.ownerBundleID else { return }
         if recorder.hiddenBundleIDs.contains(bundleID) {
-            recorder.hiddenBundleIDs.remove(bundleID)
+            recorder.mostrarApp(bundleID: bundleID)
         } else {
-            recorder.hiddenBundleIDs.insert(bundleID)
+            recorder.ocultarApp(bundleID: bundleID, nome: SourceNaming.title(source))
         }
     }
 }
@@ -260,6 +268,63 @@ private struct MenuDeOcultarFonte: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// Apps lembrados como ocultos. Sem esta lista, um app que não está rodando não tem cartão
+/// para o botão direito e nunca sairia da memória.
+private struct AppsOcultosSecao: View {
+    let apps: [HiddenApp]
+    let mostrar: (String) -> Void
+    let esquecerTodos: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Apps ocultos (\(apps.count))")
+                    .m3(.titleSmall)
+                    .foregroundColor(M3.onSurface)
+                Spacer()
+                M3Botao(titulo: "Esquecer todos", variante: .texto, altura: 32, acao: esquecerTodos)
+                    .accessibilityLabel("Esquecer todos os apps ocultos")
+            }
+            ScrollView(.vertical) {
+                VStack(spacing: 4) {
+                    ForEach(apps, id: \.bundleID) { app in
+                        HStack(spacing: 12) {
+                            Image(nsImage: Self.icone(de: app.bundleID))
+                                .resizable()
+                                .frame(width: 24, height: 24)
+                                .accessibilityHidden(true)
+                            Text(app.nome)
+                                .m3(.bodyMedium)
+                                .foregroundColor(M3.onSurface)
+                                .lineLimit(1)
+                            Spacer()
+                            M3Botao(titulo: "Mostrar", variante: .tonal, altura: 32) { mostrar(app.bundleID) }
+                                .accessibilityLabel("Mostrar \(app.nome) na transmissão")
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: M3.Canto.medio, style: .continuous)
+                                .fill(M3.surfaceContainer)
+                        )
+                    }
+                }
+            }
+            .frame(maxHeight: 140)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+
+    /// Ícone do app se estiver instalado; o genérico do sistema caso contrário.
+    private static func icone(de bundleID: String) -> NSImage {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        return NSWorkspace.shared.icon(for: .applicationBundle)
     }
 }
 
