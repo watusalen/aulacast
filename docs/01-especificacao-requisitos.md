@@ -41,7 +41,7 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 | **RF-16** | Mensagem Fixada | O professor fixa uma mensagem sua (um link, um prazo), que fica no topo do chat de toda a turma, inclusive de quem entra depois. | **SHOULD** |
 | **RF-17** | Compartilhamento de Arquivos | O professor disponibiliza arquivos de qualquer tipo para a turma baixar pela página da aula, pela mesma porta 8080, sem internet. Pode tirar um arquivo da lista a qualquer momento, e o link deixa de funcionar. Pastas precisam ser compactadas antes. | **SHOULD** |
 | **RF-18** | Chat Visível entre Alunos | Opção do professor, **desligada por padrão** e só disponível com o chat ligado: com ela ativa, a mensagem do aluno é vista por toda a turma (sem duplicar para quem escreveu). Os alunos conectados são avisados na hora quando a opção muda (`CHAT_VISIBILITY`). **Status: Proposto (já implementado na main).** | **COULD** |
-| **RF-19** | Ocultar Apps da Transmissão | Com o monitor como fonte, o professor clica com o botão direito no cartão de um app e escolhe ocultá-lo ou mostrá-lo na transmissão, mesmo em tela cheia, inclusive com a transmissão em andamento. A escolha não é guardada entre execuções. **Status: Proposto (já implementado na main).** | **COULD** |
+| **RF-19** | Ocultar Apps da Transmissão | Com o monitor como fonte, o professor clica com o botão direito no cartão de um app e escolhe ocultá-lo ou mostrá-lo na transmissão, mesmo em tela cheia, inclusive com a transmissão em andamento. A escolha é guardada entre execuções, por app (bundle ID), e uma lista "Apps ocultos" permite mostrar de novo ou esquecer todos. Se um app oculto abrir durante a transmissão, o filtro é refeito, e ele pode aparecer por uma fração de segundo antes disso. **Status: Proposto.** | **COULD** |
 
 ---
 
@@ -66,8 +66,7 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 1. **RNF-03:** a meta de 15% é por núcleo ou do total? Manter e otimizar, ou ajustar para os ~16% de um núcleo medidos?
 2. **RNF-10:** com o objetivo "o máximo possível", falta a primeira medição em sala (40 alunos): qual o fps, a banda por aluno e a latência alcançados? Qual o Wi-Fi real da sala (padrão e banda medida)?
 3. **RF-18 e RF-19:** as prioridades (COULD) estão corretas?
-4. **RF-19:** a lista de apps ocultos deve sobreviver ao fechar e reabrir o app? Hoje ela se perde.
-5. **RF-05:** o comportamento de conflito de nome foi verificado com três registros na mesma máquina. Falta conferir com dois Macs reais na mesma rede, inclusive o que acontece com um conflito tardio (volta do sono, duas redes que se juntam).
+4. **RF-05:** o comportamento de conflito de nome foi verificado com três registros na mesma máquina. Falta conferir com dois Macs reais na mesma rede, inclusive o que acontece com um conflito tardio (volta do sono, duas redes que se juntam).
 
 ---
 

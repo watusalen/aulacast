@@ -2,11 +2,17 @@ import Foundation
 import ScreenCaptureKit
 import CoreMedia
 import Combine
+import AppKit
 
 /// Serviço responsável estritamente pelo controle do streaming da ScreenCaptureKit (SRP, LSP).
 public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     @Published public var availableSources: [DisplaySource] = []
-    @Published public var isRecording: Bool = false
+    @Published public var isRecording: Bool = false {
+        didSet {
+            guard oldValue != isRecording else { return }
+            atualizarObservadorDeLancamentos()
+        }
+    }
     @Published public var errorMessage: String?
 
     /// Trocar a fonte no meio da aula deve valer na hora, sem parar e reiniciar a transmissão.
@@ -51,11 +57,94 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     /// Só vale para a captura de monitor: uma janela específica como fonte já mostra só ela,
     /// então não há nada para esconder dentro dela. Some da transmissão mesmo em tela cheia,
     /// igual ao que já acontece com a própria janela do AulaCast — ver `filtroDeMonitor`.
-    @Published public var hiddenBundleIDs: Set<String> = [] {
+    @Published public var hiddenBundleIDs: Set<String> {
         didSet {
-            guard isRecording, oldValue != hiddenBundleIDs, selectedSource?.type == .display else { return }
+            guard oldValue != hiddenBundleIDs else { return }
+            salvarAppsOcultos()
+            guard isRecording, selectedSource?.type == .display else { return }
             trocaDeFonte?.cancel()
             trocaDeFonte = Task { @MainActor in await self.applyContentFilterChange() }
+        }
+    }
+
+    /// bundle ID -> nome, para listar um app oculto mesmo quando ele não está em execução.
+    private var nomesDosApps: [String: String]
+    private let store: HiddenAppsStore
+
+    public var appsOcultos: [HiddenApp] {
+        HiddenAppsStore.ordenados(hiddenBundleIDs.map {
+            HiddenApp(bundleID: $0, nome: nomesDosApps[$0] ?? $0)
+        })
+    }
+
+    public func ocultarApp(bundleID: String, nome: String) {
+        nomesDosApps[bundleID] = nome
+        hiddenBundleIDs.insert(bundleID)
+    }
+
+    public func mostrarApp(bundleID: String) {
+        hiddenBundleIDs.remove(bundleID)
+        nomesDosApps[bundleID] = nil
+    }
+
+    public func esquecerTodosOsAppsOcultos() {
+        hiddenBundleIDs = []
+        nomesDosApps = [:]
+    }
+
+    private func salvarAppsOcultos() {
+        store.salvar(appsOcultos)
+    }
+
+    // MARK: - App oculto que abre depois do filtro
+
+    private var observadorDeLancamentos: NSObjectProtocol?
+    private var refazerFiltro: [Task<Void, Never>] = []
+
+    /// Decisão pura: um app que acabou de abrir exige refazer o filtro?
+    public static func deveRefazerFiltro(bundleID: String?, escondidos: Set<String>, gravandoMonitor: Bool) -> Bool {
+        guard gravandoMonitor, let bundleID, !bundleID.isEmpty else { return false }
+        return escondidos.contains(bundleID)
+    }
+
+    /// `filtroDeMonitor` exclui os apps ocultos que estão rodando NO MOMENTO em que o filtro
+    /// é criado. Um app oculto que abre depois não está nessa lista. Enquanto há transmissão,
+    /// ouvimos os lançamentos e refazemos o filtro (150 ms e de novo 600 ms, porque a lista do
+    /// ScreenCaptureKit pode demorar a enxergar o app novo).
+    /// Limite honesto: o app pode aparecer para a turma por uma fração de segundo, até o
+    /// filtro ser refeito.
+    private func atualizarObservadorDeLancamentos() {
+        if let token = observadorDeLancamentos {
+            NSWorkspace.shared.notificationCenter.removeObserver(token)
+            observadorDeLancamentos = nil
+        }
+        refazerFiltro.forEach { $0.cancel() }
+        refazerFiltro = []
+        guard isRecording else { return }
+
+        observadorDeLancamentos = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notificacao in
+            let app = notificacao.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let bundleID = app?.bundleIdentifier
+            MainActor.assumeIsolated { self?.appAbriu(bundleID: bundleID) }
+        }
+    }
+
+    @MainActor
+    private func appAbriu(bundleID: String?) {
+        guard Self.deveRefazerFiltro(
+            bundleID: bundleID,
+            escondidos: hiddenBundleIDs,
+            gravandoMonitor: isRecording && selectedSource?.type == .display
+        ) else { return }
+        for atrasoMs: UInt64 in [150, 600] {
+            refazerFiltro.append(Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: atrasoMs * 1_000_000)
+                guard !Task.isCancelled, let self, self.isRecording,
+                      self.selectedSource?.type == .display else { return }
+                await self.applyContentFilterChange()
+            })
         }
     }
 
@@ -66,8 +155,13 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     private var stream: SCStream?
     private let captureQueue = DispatchQueue(label: "br.com.ifpi.aulacast.captureQueue", qos: .userInteractive)
     
-    public init(contentFetcher: ShareableContentFetcher = ShareableContentFetcher()) {
+    public init(contentFetcher: ShareableContentFetcher = ShareableContentFetcher(),
+                store: HiddenAppsStore = HiddenAppsStore()) {
         self.contentFetcher = contentFetcher
+        self.store = store
+        let salvos = store.carregar()
+        self.hiddenBundleIDs = Set(salvos.map(\.bundleID))
+        self.nomesDosApps = Dictionary(salvos.map { ($0.bundleID, $0.nome) }, uniquingKeysWith: { $1 })
         super.init()
     }
     

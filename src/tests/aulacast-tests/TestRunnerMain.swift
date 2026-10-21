@@ -3551,6 +3551,50 @@ struct AulaCastTestRunner {
         try? await Task.sleep(nanoseconds: 200_000_000)
         assertTest(vmLedger.alunoAberto == nil, "Quando o aluno desconecta, o painel dele fecha")
 
+        // ---- Apps ocultos lembrados entre execuções (RF-19) ----
+        let suiteOcultos = "aulacast.teste.ocultos.\(UUID().uuidString)"
+        let defaultsOcultos = UserDefaults(suiteName: suiteOcultos)!
+        defer { defaultsOcultos.removePersistentDomain(forName: suiteOcultos) }
+        let storeOcultos = HiddenAppsStore(defaults: defaultsOcultos)
+
+        assertTest(storeOcultos.carregar().isEmpty, "Store sem dado salvo devolve lista vazia")
+        let appsSalvos = [
+            HiddenApp(bundleID: "com.b", nome: "zeta"),
+            HiddenApp(bundleID: "com.a", nome: "Alfa"),
+            HiddenApp(bundleID: "com.c", nome: "beta"),
+        ]
+        storeOcultos.salvar(appsSalvos)
+        let recarregados = storeOcultos.carregar()
+        assertTest(Set(recarregados) == Set(appsSalvos), "Store: ida e volta preserva bundleID e nome")
+        assertTest(recarregados.map(\.nome) == ["Alfa", "beta", "zeta"], "Store: ordem por nome, sem diferenciar maiúsculas")
+
+        defaultsOcultos.set(Data("isto não é json".utf8), forKey: HiddenAppsStore.chave)
+        assertTest(storeOcultos.carregar().isEmpty, "Store: dado corrompido vira lista vazia, sem travar")
+
+        storeOcultos.salvar([HiddenApp(bundleID: "com.salvo", nome: "Salvo")])
+        let capturaOcultos = ScreenCaptureService(store: storeOcultos)
+        assertTest(capturaOcultos.hiddenBundleIDs == ["com.salvo"], "ScreenCaptureService carrega o conjunto salvo no init")
+        assertTest(capturaOcultos.appsOcultos.first?.nome == "Salvo", "ScreenCaptureService lembra o nome do app salvo")
+        capturaOcultos.ocultarApp(bundleID: "com.novo", nome: "Novo")
+        assertTest(Set(storeOcultos.carregar().map(\.bundleID)) == ["com.salvo", "com.novo"], "Ocultar grava no store, mesmo sem gravação")
+        assertTest(storeOcultos.carregar().contains(HiddenApp(bundleID: "com.novo", nome: "Novo")), "Ocultar grava o nome do app")
+        capturaOcultos.mostrarApp(bundleID: "com.salvo")
+        assertTest(storeOcultos.carregar().map(\.bundleID) == ["com.novo"], "Mostrar remove o app do store")
+        capturaOcultos.esquecerTodosOsAppsOcultos()
+        assertTest(storeOcultos.carregar().isEmpty && capturaOcultos.hiddenBundleIDs.isEmpty, "esquecerTodos limpa o conjunto e o store")
+
+        let escondidosT: Set<String> = ["com.oculto"]
+        assertTest(ScreenCaptureService.deveRefazerFiltro(bundleID: "com.oculto", escondidos: escondidosT, gravandoMonitor: true),
+                   "deveRefazerFiltro: app oculto abriu com captura de monitor = sim")
+        assertTest(!ScreenCaptureService.deveRefazerFiltro(bundleID: "com.outro", escondidos: escondidosT, gravandoMonitor: true),
+                   "deveRefazerFiltro: app não oculto = não")
+        assertTest(!ScreenCaptureService.deveRefazerFiltro(bundleID: "com.oculto", escondidos: escondidosT, gravandoMonitor: false),
+                   "deveRefazerFiltro: sem captura de monitor (parado ou fonte janela) = não")
+        assertTest(!ScreenCaptureService.deveRefazerFiltro(bundleID: nil, escondidos: escondidosT, gravandoMonitor: true),
+                   "deveRefazerFiltro: bundle nil = não")
+        assertTest(!ScreenCaptureService.deveRefazerFiltro(bundleID: "", escondidos: [""], gravandoMonitor: true),
+                   "deveRefazerFiltro: bundle vazio = não")
+
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")

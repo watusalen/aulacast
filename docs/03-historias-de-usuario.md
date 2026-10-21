@@ -208,7 +208,7 @@ Cenário: Professor liga a conversa entre alunos
 ---
 
 ### US-12: Ocultar Apps da Transmissão (RF-19)
-**Status: Proposto (já implementado na main).**
+**Status: Proposto.**
 - **Como** Professor transmitindo o monitor inteiro,
 - **Eu quero** tirar da transmissão apps que não devem aparecer (e-mail, mensagens),
 - **Para que** eu possa compartilhar a tela sem expor o que é pessoal, mesmo em tela cheia.
@@ -221,11 +221,11 @@ Cenário: Ocultar um app
   Então o app deve sumir da imagem dos alunos, inclusive em tela cheia
   E a transmissão não deve ser interrompida.
 
-Cenário: Escolha não persiste
+Cenário: Escolha é lembrada
   Dado que ocultei um app
   Quando eu fechar e reabrir o AulaCast
-  # Comportamento atual; ver pergunta em aberto em docs/01
-  Então o app volta a aparecer na transmissão
+  E iniciar a transmissão do monitor
+  Então o app não deve aparecer na imagem dos alunos.
 ```
 
 ---
