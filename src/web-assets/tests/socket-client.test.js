@@ -61,3 +61,27 @@ test('manuallyStopped impede novas tentativas', () => {
   assert.strictEqual(states.length, 0, 'nao deve reagendar quando parado de proposito');
   if (client.reconnectTimer) clearTimeout(client.reconnectTimer);
 });
+
+test('rttMs(): null até o primeiro PONG, depois o último RTT medido do PING/PONG', () => {
+  const c = new SocketClient(() => {}, () => {});
+  assert.strictEqual(c.rttMs(), null);
+  c.pingEnviadoEm = Date.now() - 37;
+  c.handleMessage({ data: JSON.stringify({ type: 'PONG' }) });
+  assert.ok(c.rttMs() >= 37 && c.rttMs() < 1000);
+  c.handleMessage({ data: JSON.stringify({ type: 'PONG' }) }); // PONG sem PING pendente
+  assert.ok(c.rttMs() >= 37, 'mantém o último valor');
+});
+
+test('ws_reconexao: o evento sai ao reabrir, com atraso e código da queda; sem queda, nada', () => {
+  const eventos = [];
+  globalThis.AulaCastMetricas = { evento: (t, d) => eventos.push([t, d]) };
+  const c = new SocketClient(() => {}, () => {});
+  c.startHeartbeat = () => {};
+  c.handleOpen();
+  assert.deepStrictEqual(eventos, [], 'primeira conexão não é reconexão');
+  c.handleClose({ code: 1006 });
+  clearTimeout(c.reconnectTimer);
+  c.handleOpen();
+  delete globalThis.AulaCastMetricas;
+  assert.deepStrictEqual(eventos, [['ws_reconexao', { atrasoMs: 2000, codigo: 1006, tentativas: 1 }]]);
+});

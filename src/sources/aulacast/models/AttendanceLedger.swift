@@ -193,6 +193,27 @@ public final class AttendanceLedger {
         )
     }
 
+    /// Tempos de cada pessoa com nome, para o `fim` do arquivo de métricas (chave: nome).
+    /// Mesma conta do `resumo`. O(n) nas pessoas.
+    public func temposPorNome(agora: Date? = nil) -> [String: [String: Any]] {
+        lock.lock(); defer { lock.unlock() }
+        let relogioAgora = relogio(em: agora ?? agoraDoSistema())
+        var saida: [String: [String: Any]] = [:]
+        for pessoa in pessoas.values {
+            guard let nome = pessoa.nome else { continue }
+            let delta = max(0, relogioAgora - pessoa.relogio)
+            let vista = pessoa.visiveis > 0 ? delta : 0
+            let naAula = pessoa.naAula + (pessoa.conexoes > 0 ? delta : 0)
+            let aVista = pessoa.aVista + vista
+            saida[nome] = [
+                "naAulaS": naAula.rounded(), "aVistaS": aVista.rounded(),
+                "aVistaPct": naAula > 0 ? (min(1, aVista / naAula) * 1000).rounded() / 10 : 0,
+                "saidas": pessoa.saidas, "maiorTrechoS": max(pessoa.maior, pessoa.trecho + vista).rounded()
+            ]
+        }
+        return saida
+    }
+
     // MARK: Internos
 
     private func relogio(em instante: Date) -> TimeInterval {

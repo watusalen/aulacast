@@ -31,14 +31,15 @@ function montar({ clipboard, seguro = true, execOk = true } = {}) {
   const win = { navigator: clipboard ? { clipboard } : {}, isSecureContext: seguro };
   const timers = [];
   const logs = [];
+  const infos = [];
   let t = 0;
   const painel = new DebugPanel({
     doc, win, agora: () => new Date(2026, 0, 1, 10, 0, 0, 7 + t++),
-    console: { log: (l) => logs.push(l) },
+    console: { log: (l) => logs.push(l), info: (l) => infos.push(l) },
     setIntervalImpl: (f, ms) => { const x = { f, ms }; timers.push(x); return x; },
     clearIntervalImpl: (x) => { timers.splice(timers.indexOf(x), 1); }
   });
-  return { painel, doc, win, body, timers, logs, docListeners };
+  return { painel, doc, win, body, timers, logs, infos, docListeners };
 }
 
 const achar = (raiz, classe) => {
@@ -59,15 +60,15 @@ test('sem ativar(): nenhum nó, relógio, ouvinte nem global', () => {
   assert.strictEqual(body.filhos.length, 0);
 });
 
-test('ativar(): renderiza o texto explicativo, o botão Debug, o global e os relógios', () => {
+test('ativar(): NÃO cria nenhum elemento na página (sem botão nem gaveta); só global e relógios', () => {
   const { painel, body, timers, win } = montar();
   painel.ativar();
-  const sobre = achar(body, 'debug-sobre');
-  assert.deepStrictEqual(sobre.filhos.map((p) => p.textContent), TEXTO_EXPLICATIVO);
-  assert.ok(TEXTO_EXPLICATIVO.length >= 8 && TEXTO_EXPLICATIVO.length <= 12);
-  assert.match(TEXTO_EXPLICATIVO.join(' '), /ScreenCaptureKit[\s\S]*8080[\s\S]*aulacast\.local[\s\S]*30 s[\s\S]*4 conexões/);
-  assert.strictEqual(achar(body, 'debug-toggle').textContent, 'Debug');
-  assert.strictEqual(typeof win.AulaCastDebug.log, 'function');
+  assert.strictEqual(body.filhos.length, 0, 'nada no DOM: o debug vive só no console');
+  assert.strictEqual(achar(body, 'debug-toggle'), null);
+  assert.strictEqual(achar(body, 'debug-painel'), null);
+  for (const nome of ['log', 'rtt', 'fragmentos', 'texto', 'copiar', 'baixar', 'ajuda']) {
+    assert.strictEqual(typeof win.AulaCastDebug[nome], 'function', nome);
+  }
   assert.deepStrictEqual(timers.map((t) => t.ms), [2000, 10000]);
   painel.desativar();
   assert.strictEqual(win.AulaCastDebug, undefined);
@@ -75,17 +76,17 @@ test('ativar(): renderiza o texto explicativo, o botão Debug, o global e os rel
   assert.strictEqual(body.filhos.length, 0);
 });
 
-test('abre sozinho uma única vez ao identificar; depois só o botão controla', () => {
-  const { painel, body } = montar();
+test('ao identificar, explica o sistema no console UMA vez e lista os comandos', () => {
+  const { painel, infos, body } = montar();
   painel.ativar();
-  const raiz = achar(body, 'debug-painel');
-  assert.strictEqual(raiz.hidden, true, 'nasce fechado, sem cobrir o vídeo');
   painel.aoIdentificar();
-  assert.strictEqual(raiz.hidden, false);
-  achar(body, 'debug-toggle').click();
-  assert.strictEqual(raiz.hidden, true);
   painel.aoIdentificar();
-  assert.strictEqual(raiz.hidden, true, 'não reabre por conta própria');
+  assert.strictEqual(infos.length, 2, 'texto explicativo + comandos, uma vez só');
+  for (const t of TEXTO_EXPLICATIVO) assert.ok(infos[0].includes(t));
+  assert.ok(TEXTO_EXPLICATIVO.length >= 8 && TEXTO_EXPLICATIVO.length <= 12);
+  assert.match(TEXTO_EXPLICATIVO.join(' '), /ScreenCaptureKit[\s\S]*8080[\s\S]*aulacast\.local[\s\S]*30 s[\s\S]*4 conexões/);
+  assert.match(infos[1], /AulaCastDebug\.texto\(\)[\s\S]*\.copiar\(\)[\s\S]*\.baixar\(\)/);
+  assert.strictEqual(body.filhos.length, 0, 'e continua sem tocar na página');
 });
 
 test('registra RTT, resumo min/média/máx, fragmentos e logs no console', () => {
@@ -114,47 +115,31 @@ test('registra RTT, resumo min/média/máx, fragmentos e logs no console', () =>
   assert.ok(logs.some((l) => l.includes('turma: 3 alunos')), 'também vai ao console');
 });
 
-test('anel de 500 linhas: descarta as mais antigas, no texto e nos nós', () => {
-  const { painel, body } = montar();
+test('anel de 500 linhas: descarta as mais antigas', () => {
+  const { painel } = montar();
   painel.ativar();
   for (let i = 0; i < MAX_LINHAS_LOG + 50; i += 1) painel.log('t', `n${i}`);
   assert.strictEqual(painel.linhas.length, MAX_LINHAS_LOG);
-  assert.strictEqual(achar(body, 'debug-log').filhos.length, MAX_LINHAS_LOG);
   assert.match(painel.linhas[0], /n50$/);
   assert.match(painel.linhas.at(-1), /n549$/);
-});
-
-test('auto-scroll pausa quando o aluno rola para cima e volta ao chegar no fim', () => {
-  const { painel, body } = montar();
-  painel.ativar();
-  painel.aoIdentificar();
-  const area = achar(body, 'debug-log');
-  area.scrollTop = 0;
-  area.dispatch('scroll');
-  painel.log('t', 'a');
-  assert.strictEqual(area.scrollTop, 0, 'pausado: não puxa para o fim');
-  area.scrollTop = 900;
-  area.dispatch('scroll');
-  painel.log('t', 'b');
-  assert.strictEqual(area.scrollTop, area.scrollHeight);
 });
 
 test('Copiar log: Clipboard API em contexto seguro', async () => {
   const escritos = [];
   const { painel } = montar({ clipboard: { writeText: async (t) => escritos.push(t) } });
   painel.ativar();
-  await painel.copiar();
+  assert.strictEqual(await painel.copiar(), true);
   assert.strictEqual(escritos.length, 1);
   assert.match(escritos[0], /depuração ativada/);
 });
 
 test('Copiar log: fallback textarea + execCommand em http (sem contexto seguro)', async () => {
-  const { painel, doc, body } = montar({ clipboard: { writeText: async () => { throw new Error('não deveria'); } }, seguro: false });
+  const { painel, doc, body, infos } = montar({ clipboard: { writeText: async () => { throw new Error('não deveria'); } }, seguro: false });
   painel.ativar();
   await painel.copiar();
   assert.deepStrictEqual(doc.copiados, ['copy']);
   assert.strictEqual(body.filhos.some((f) => f.tagName === 'TEXTAREA'), false, 'textarea removida depois');
-  assert.match(achar(body, 'debug-status').textContent, /copiado \(modo http\)/);
+  assert.ok(infos.some((l) => /copiado \(modo http\)/.test(l)), 'o resultado sai no console');
 });
 
 test('SocketClient: PONG gera RTT e o fechamento registra reconexão, só com o global presente', () => {

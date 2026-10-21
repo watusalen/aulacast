@@ -15,6 +15,11 @@ public struct StreamSnapshot: Equatable {
     /// Chave: número de série do vídeo de cada aluno (nunca reaproveitado, ao contrário de um
     /// endereço de memória, que um aluno novo pode herdar do que saiu).
     public var quadrosPorAluno: [UInt64: UInt64] = [:]
+    /// Mesma chave de `quadrosPorAluno`: IP da conexão de vídeo, bytes enviados a ela e vezes
+    /// em que a fila dela estourou. Alimentam a ligação com o aluno pelo IP (`StreamAttribution`).
+    public var ipPorAluno: [UInt64: String] = [:]
+    public var bytesPorAluno: [UInt64: UInt64] = [:]
+    public var estourosPorAluno: [UInt64: UInt64] = [:]
 
     public init() {}
 }

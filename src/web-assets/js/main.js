@@ -46,6 +46,7 @@ export class AulaCastApp {
             this.h264Desistiu = true;
             console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
             globalThis.AulaCastDebug?.log('rota', `fallback H.264 -> MJPEG: ${motivo}`);
+            globalThis.AulaCastMetricas?.evento('rota', { de: 'H.264', para: 'MJPEG', motivo: String(motivo) });
             this.ui.ativarFallbackMJPEG();
           }
         })
@@ -77,6 +78,7 @@ export class AulaCastApp {
     this.estadoDaTransmissao = 'live';
     this.metricas = new MetricsReporter({
       enviar: (mensagem) => this.socket.send(mensagem),
+      lerRtt: () => this.socket.rttMs(),
       ativo: () => Boolean(this.identidade) && this.socket.isConnected() && this.estadoDaTransmissao === 'live',
       // Depois do fallback a rota é MJPEG, em que o navegador não mede nada.
       lerEstatisticas: () => (this.videoPlayer && !this.h264Desistiu
@@ -184,6 +186,10 @@ export class AulaCastApp {
         // Métricas só existem em build de depuração do servidor: sem o aviso, o módulo fica ocioso.
         this.metricas.definirHabilitado(Boolean(data.payload) && data.payload.metricas === 'true');
         if (this.identidade) this.metricas.iniciar();
+        if (this.metricas.habilitado && !this.rotaInformada) {
+          this.rotaInformada = true;
+          this.metricas.evento('rota', { de: 'inicio', para: this.videoPlayer && !this.h264Desistiu ? 'H.264' : 'MJPEG', motivo: 'escolha inicial' });
+        }
         if (data.payload && typeof data.payload.chatEnabled === 'boolean') {
           this.chatManager.setEnabled(data.payload.chatEnabled);
         }

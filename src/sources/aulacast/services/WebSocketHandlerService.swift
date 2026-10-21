@@ -49,9 +49,21 @@ public final class WebSocketHandlerService {
     private let lock = NSLock()
     /// Medições que cada aluno faz do próprio vídeo (`METRICS`), mostradas à turma no `METRICS_TABLE`.
     let metricas: StudentMetricsBook
-    /// Avisado quando um aluno identificado entra ("entrada") ou sai ("saida"), com o nome.
-    /// Só usado no modo de depuração das métricas (arquivo da sessão).
-    public var onEventoDeAluno: ((_ tipo: String, _ nome: String) -> Void)?
+    /// Eventos de aluno para o arquivo da sessão (entrada, saida, visibilidade, EVENT do navegador).
+    /// Só usado no modo de depuração das métricas.
+    public var onEvento: ((_ tipo: String, _ dados: [String: Any]) -> Void)?
+
+    /// O que se sabe de cada conexão para o arquivo da sessão: IP, quando entrou e o navegador
+    /// (cabeçalho do handshake; o `ENV` depois o refina). Removido com a conexão.
+    private struct InfoDaConexao {
+        let ip: String
+        let desde: Date
+        var userAgent: String?
+    }
+    private var infoDaConexao: [String: InfoDaConexao] = [:]
+    /// Alunos identificados cuja `entrada` ainda não foi escrita (espera o `ENV` por um instante).
+    private var entradaPendente: Set<String> = []
+    static let esperaDoAmbiente: TimeInterval = 0.75
 
     /// Última vez que cada conexão mandou alguma coisa, e o aluno a que ela pertence.
     ///
@@ -98,7 +110,7 @@ public final class WebSocketHandlerService {
 
         for (id, conexao, aluno) in mortas {
             print("[WebSocket] Conexão sem sinal há \(Int(Self.tempoMaximoOcioso)) s; encerrando.")
-            removeConnection(id: id, clientId: aluno)
+            removeConnection(id: id, clientId: aluno, motivo: "sem sinal por \(Int(Self.tempoMaximoOcioso)) s")
             conexao.cancel()
         }
     }
@@ -143,8 +155,13 @@ public final class WebSocketHandlerService {
         }
 
         let connectedClient = ConnectedClient(name: "Aluno-\(String(clientIp.suffix(4)))", ipAddress: clientIp)
+        let cabecalhoUA = extractHeader("User-Agent", from: request).map { String($0.prefix(200)) }
         lock.lock()
         alunoDaConexao[id] = connectedClient.id
+        if MetricasDebug.ativo {
+            let ipLimpo = clientIp.split(separator: "%").first.map(String.init) ?? clientIp
+            infoDaConexao[connectedClient.id] = InfoDaConexao(ip: ipLimpo, desde: Date(), userAgent: cabecalhoUA)
+        }
         lock.unlock()
         clientObserver?.didClientConnect(connectedClient)
 
@@ -323,6 +340,8 @@ public final class WebSocketHandlerService {
     public func reset() {
         lock.lock()
         estadoDaTransmissao = ["stream": "live"]
+        infoDaConexao.removeAll()
+        entradaPendente.removeAll()
         lock.unlock()
         metricas.removerTudo()
     }
@@ -345,6 +364,61 @@ public final class WebSocketHandlerService {
         guard let json = Self.serializar(["type": "METRICS_TABLE", "payload": payload]) else { return linhas }
         conexoes.forEach { sendTextFrame(connection: $0, text: json) }
         return linhas
+    }
+
+    // MARK: - Arquivo da sessão (só depuração)
+
+    private func agendarEntrada(clientId: String) {
+        lock.lock()
+        entradaPendente.insert(clientId)
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + Self.esperaDoAmbiente) { [weak self] in
+            self?.emitirEntrada(clientId: clientId)
+        }
+    }
+
+    /// Escreve a linha `entrada` uma única vez (idempotente): quando o `ENV` chega, ao fim da
+    /// espera, ou antes da `saida`, o que vier primeiro.
+    private func emitirEntrada(clientId: String) {
+        lock.lock()
+        guard entradaPendente.remove(clientId) != nil, let nome = nomes[clientId] else { lock.unlock(); return }
+        let info = infoDaConexao[clientId]
+        lock.unlock()
+        let amb = metricas.ambiente(clientId: clientId)
+        var dados: [String: Any] = ["nome": nome, "ip": info?.ip ?? NSNull(), "userAgent": info?.userAgent ?? NSNull()]
+        dados["plataforma"] = amb?.plataforma ?? NSNull()
+        dados["telaLarg"] = amb?.telaLarg ?? NSNull()
+        dados["telaAlt"] = amb?.telaAlt ?? NSNull()
+        dados["dpr"] = amb?.dpr ?? NSNull()
+        dados["idioma"] = amb?.idioma ?? NSNull()
+        dados["conexaoTipo"] = amb?.conexao?.tipo ?? NSNull()
+        dados["conexaoDownlinkMbps"] = amb?.conexao?.downlinkMbps ?? NSNull()
+        dados["conexaoRttMs"] = amb?.conexao?.rttMs ?? NSNull()
+        onEvento?("entrada", dados)
+    }
+
+    /// Escreve já as `entrada` que ainda esperam o `ENV` (o servidor vai parar).
+    func descarregarEntradas() {
+        lock.lock()
+        let pendentes = Array(entradaPendente)
+        lock.unlock()
+        pendentes.forEach(emitirEntrada)
+    }
+
+    /// Uma linha `aluno` plana por aluno identificado (ordenada por nome, no máximo `maxLinhas`),
+    /// com o que o navegador reportou e o que o servidor mediu pelo IP. O(n log n) nos alunos.
+    func linhasDeAluno(conexoes: [MedidaDeConexao]) -> [[String: Any]] {
+        lock.lock()
+        let copiaNomes = nomes
+        let ips = infoDaConexao.mapValues(\.ip)
+        lock.unlock()
+        let relatorios = metricas.relatorios(nomes: copiaNomes)
+        let alunosComIP = ips.filter { copiaNomes[$0.key] != nil }
+        let srv = StreamAttribution.atribuir(alunos: alunosComIP, conexoes: conexoes)
+        return copiaNomes.sorted { $0.value < $1.value }.prefix(StudentMetricsBook.maxLinhas).map { id, nome in
+            MetricsFileLogger.linhaDeAluno(nome: nome, relatorio: relatorios[id]?.relatorio,
+                                           reportadoHa: relatorios[id]?.reportadoHa, srv: srv[id])
+        }
     }
 
     /// O nome aceito no IDENTIFY, ou `nil` se a conexão ainda não se identificou.
@@ -397,7 +471,7 @@ public final class WebSocketHandlerService {
                 // Cancelar é o que devolve o socket ao sistema. Só remover o registro deixava
                 // a conexão em CLOSE_WAIT até o app fechar — uma por aluno que fechou a tampa
                 // do notebook ou matou o navegador sem mandar CLOSE.
-                self.removeConnection(id: connectionId, clientId: clientId)
+                self.removeConnection(id: connectionId, clientId: clientId, motivo: error != nil ? "erro" : "fechou a aba")
                 connection.cancel()
                 return
             }
@@ -426,7 +500,8 @@ public final class WebSocketHandlerService {
     ///
     /// A mesma queda chega por dois caminhos (o frame de CLOSE e, logo depois, a falha da
     /// escuta): avisar em ambos tirava o aluno da lista duas vezes.
-    private func removeConnection(id: ObjectIdentifier, clientId: String) {
+    private func removeConnection(id: ObjectIdentifier, clientId: String, motivo: String) {
+        emitirEntrada(clientId: clientId)
         lock.lock()
         let estavaAtiva = activeConnections.removeValue(forKey: id) != nil
         let nomeQueSaiu = nomes[clientId]
@@ -436,10 +511,19 @@ public final class WebSocketHandlerService {
         metricas.remover(clientId: clientId)
         ultimaAtividade.removeValue(forKey: id)
         alunoDaConexao.removeValue(forKey: id)
+        let info = infoDaConexao.removeValue(forKey: clientId)
+        entradaPendente.remove(clientId)
         lock.unlock()
 
         guard estavaAtiva else { return }
-        if MetricasDebug.ativo, let nomeQueSaiu { onEventoDeAluno?("saida", nomeQueSaiu) }
+        if MetricasDebug.ativo, let nomeQueSaiu {
+            var dados: [String: Any] = ["nome": nomeQueSaiu, "motivo": motivo]
+            if let info {
+                dados["ip"] = info.ip
+                dados["duracaoS"] = Int(Date().timeIntervalSince(info.desde))
+            }
+            onEvento?("saida", dados)
+        }
         clientObserver?.didClientDisconnect(clientId: clientId)
     }
 
@@ -504,7 +588,7 @@ public final class WebSocketHandlerService {
         }
 
         if encerrar {
-            removeConnection(id: connectionId, clientId: clientId)
+            removeConnection(id: connectionId, clientId: clientId, motivo: respostaDeClose != nil ? "fechou a aba" : "erro")
             if let respostaDeClose {
                 connection.send(content: respostaDeClose, completion: .contentProcessed({ _ in
                     connection.cancel()
@@ -593,17 +677,33 @@ public final class WebSocketHandlerService {
             lock.unlock()
 
             presenceObserver?.didIdentifyStudent(clientId: clientId, name: nome)
-            if MetricasDebug.ativo { onEventoDeAluno?("entrada", nome) }
+            if MetricasDebug.ativo { agendarEntrada(clientId: clientId) }
             sendTextFrame(connection: connection, text: "{\"type\":\"IDENTIFY_ACCEPTED\"}")
 
         case "PRESENCE":
             let visivel = (payloadDict?["visible"] as? Bool) ?? true
             presenceObserver?.didChangeWatching(clientId: clientId, isWatching: visivel)
+            if MetricasDebug.ativo, let nome = nomeValidado(clientId) { onEvento?("visibilidade", ["nome": nome, "visivel": visivel]) }
 
         case "METRICS":
             // Só de quem tem nome validado: a linha aparece com o nome para a turma toda.
             guard MetricasDebug.ativo, nomeValidado(clientId) != nil else { return }
             metricas.registrar(clientId: clientId, payload: payloadDict)
+
+        case "ENV":
+            guard MetricasDebug.ativo, nomeValidado(clientId) != nil,
+                  let amb = metricas.registrarAmbiente(clientId: clientId, payload: payloadDict) else { return }
+            lock.lock()
+            if let ua = amb.userAgent { infoDaConexao[clientId]?.userAgent = ua }
+            lock.unlock()
+            emitirEntrada(clientId: clientId)
+
+        case "EVENT":
+            guard MetricasDebug.ativo, let nome = nomeValidado(clientId),
+                  let evento = metricas.registrarEvento(clientId: clientId, payload: payloadDict) else { return }
+            var dados = evento.dados
+            dados["nome"] = nome
+            onEvento?(evento.tipo, dados)
 
         case "PING":
             sendPong(connection: connection)

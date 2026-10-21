@@ -3389,13 +3389,13 @@ struct AulaCastTestRunner {
             let objetos: [[String: Any]] = ((try? String(contentsOf: caminhoSessao ?? pastaMetricas, encoding: .utf8)) ?? "")
                 .split(separator: "\n").compactMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
             let tipos = objetos.compactMap { $0["tipo"] as? String }
-            assertTest(tipos.first == "inicio" && objetos.first?["porta"] as? Int == 8160, "Arquivo: 1ª linha é 'inicio' com a porta")
+            assertTest(tipos.first == "legenda" && tipos.dropFirst().first == "inicio" && objetos[1]["porta"] as? Int == 8160, "Arquivo: legenda, depois inicio com a porta")
             assertTest(tipos.last == "fim", "Arquivo: última linha é 'fim'")
             assertTest(tipos.filter { $0 == "entrada" }.count == 2 && tipos.contains("saida"), "Arquivo: entrada e saída de alunos identificados")
             let amostra = objetos.first { $0["tipo"] as? String == "amostra" }
-            let detalhe = amostra?["alunosDetalhe"] as? [[String: Any]]
+            let linhasAluno = objetos.filter { $0["tipo"] as? String == "aluno" }
             assertTest(amostra != nil && amostra?["estourosDeFila"] != nil && amostra?["pedidosDeQuadroChave"] != nil
-                       && detalhe?.contains { $0["nome"] as? String == "Ana \"A\"\nB" && $0["reportadoHa"] != nil } == true,
+                       && linhasAluno.contains { $0["nome"] as? String == "Ana \"A\"\nB" && $0["reportadoHa"] != nil },
                        "Arquivo: amostra traz contadores e o detalhe por aluno com reportadoHa")
             assertTest(objetos.last?["picoAlunos"] as? Int == 2, "Arquivo: 'fim' traz o pico de alunos")
 
@@ -3411,7 +3411,7 @@ struct AulaCastTestRunner {
             for i in 0..<20 { curto.registrarEvento("entrada", nome: "Aluno \(i)") }
             curto.encerrar()
             let linhasTrunc = ((try? String(contentsOf: curto.arquivo!, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
-            assertTest(linhasTrunc.filter { $0.contains("truncado") }.count == 1, "Limite de tamanho: uma única linha 'truncado'")
+            assertTest(linhasTrunc.filter { $0.contains("\"tipo\":\"truncado\"") }.count == 1, "Limite de tamanho: uma única linha 'truncado'")
             assertTest(linhasTrunc.filter { $0.contains("entrada") }.count < 20, "Limite de tamanho: para de anexar")
 
             let semAcesso = MetricsFileLogger(diretorio: URL(fileURLWithPath: "/proc-inexistente/x/y"))
@@ -3594,6 +3594,8 @@ struct AulaCastTestRunner {
                    "deveRefazerFiltro: bundle nil = não")
         assertTest(!ScreenCaptureService.deveRefazerFiltro(bundleID: "", escondidos: [""], gravandoMonitor: true),
                    "deveRefazerFiltro: bundle vazio = não")
+
+        await testesMetricasRicas(assertTest)
 
         // SUMÁRIO FINAL
         print("\n==========================================")

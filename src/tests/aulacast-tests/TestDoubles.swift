@@ -128,6 +128,14 @@ final class FakeServer: NetworkServerProtocol {
     func broadcastControlMessage(type: String, payload: [String: String]?) {
         controlMessages.append((type: type, payload: payload))
     }
+
+    /// Eventos do arquivo de métricas e o provedor de configuração entregue pelo view model.
+    private(set) var eventosDeSessao: [(tipo: String, dados: [String: Any])] = []
+    var provedorDeConfiguracao: (() -> ConfigDeCaptura)?
+    func registrarEventoDeSessao(_ tipo: String, _ dados: [String: Any]) { eventosDeSessao.append((tipo, dados)) }
+    func configurarSessaoDeMetricas(contexto: [String: Any], tempos: (() -> [String: [String: Any]])?, configuracao: (() -> ConfigDeCaptura)?) {
+        provedorDeConfiguracao = configuracao
+    }
 }
 
 /// Registra as chamadas de proteção contra o App Nap, para os testes verificarem

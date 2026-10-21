@@ -148,12 +148,51 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     public var diretorioDeMetricas: URL = MetricsFileLogger.diretorioPadrao
     private var arquivoDeMetricas: MetricsFileLogger?
 
+    /// Limite de bytes do arquivo; os testes baixam para exercitar o `truncado`.
+    public var limiteDoArquivoDeMetricas = MetricsFileLogger.limitePadraoBytes
+    private var contextoDaCaptura: [String: Any] = [:]
+    private var temposDaSessao: (() -> [String: [String: Any]])?
+    private var amostrador = ProcessSampler()
+    private var pausada = false
+
+    private var provedorDeConfiguracao: (() -> ConfigDeCaptura)?
+
+    public func configurarSessaoDeMetricas(contexto: [String: Any], tempos: (() -> [String: [String: Any]])?, configuracao: (() -> ConfigDeCaptura)?) {
+        contextoDaCaptura = contexto
+        temposDaSessao = tempos
+        provedorDeConfiguracao = configuracao
+    }
+
+    /// Linha de evento no arquivo da sessão (`pausa`/`retomada` também ligam `pausada` nas amostras).
+    public func registrarEventoDeSessao(_ tipo: String, _ dados: [String: Any]) {
+        guard MetricasDebug.ativo else { return }
+        if tipo == "pausa" { pausada = true } else if tipo == "retomada" { pausada = false }
+        arquivoDeMetricas?.registrar(tipo: tipo, dados: dados)
+    }
+
     private func iniciarArquivoDeMetricas() {
         guard MetricasDebug.ativo else { return }
-        let arquivo = MetricsFileLogger(diretorio: diretorioDeMetricas)
-        arquivo.iniciar(porta: port)
+        let arquivo = MetricsFileLogger(diretorio: diretorioDeMetricas, limiteBytes: limiteDoArquivoDeMetricas)
+        var contexto = SessionEnvironment.fatosDoMac()
+        let info = infoDeDepuracao()
+        contexto["app"] = info["versao"] ?? "dev"
+        contexto["ip"] = info["ip"] ?? ""
+        contexto["limites"] = [
+            "maxMp4PorIp": MP4StreamerService.maxConexoesPorIP, "maxMp4Total": MP4StreamerService.maxConexoesTotal,
+            "filaMaxBytes": MP4StreamerService.filaMaxBytes, "filaMaxMs": 1000
+        ]
+        #if DEBUG
+        contexto["debug"] = true
+        #else
+        contexto["debug"] = false
+        #endif
+        contexto.merge(contextoDaCaptura) { _, novo in novo }
+        pausada = false
+        amostrador = ProcessSampler()
+        arquivo.iniciar(porta: port, contexto: contexto)
         arquivoDeMetricas = arquivo
-        webSocketHandler.onEventoDeAluno = { [weak arquivo] tipo, nome in arquivo?.registrarEvento(tipo, nome: nome) }
+        webSocketHandler.onEvento = { [weak arquivo] tipo, dados in arquivo?.registrar(tipo: tipo, dados: dados) }
+        mp4StreamerService.onEvento = { [weak arquivo] tipo, dados in arquivo?.registrar(tipo: tipo, dados: dados) }
     }
 
     /// Caminho do arquivo `.jsonl` da sessão atual (`nil` fora do modo de depuração ou sem acesso ao disco).
@@ -179,13 +218,19 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         resultado.quadrosPublicados = max(mjpeg.quadrosPublicados, mp4.quadrosPublicados)
         resultado.bytesEnviados = mjpeg.bytesEnviados &+ mp4.bytesEnviados
         for (serie, quadros) in mp4.quadrosPorAluno {
-            resultado.quadrosPorAluno[serie | marcaDeAlunoMP4] = quadros
+            let chave = serie | marcaDeAlunoMP4
+            resultado.quadrosPorAluno[chave] = quadros
+            resultado.ipPorAluno[chave] = mp4.ipPorAluno[serie]
+            resultado.bytesPorAluno[chave] = mp4.bytesPorAluno[serie]
+            resultado.estourosPorAluno[chave] = mp4.estourosPorAluno[serie]
         }
         return resultado
     }
 
-    /// Intervalo entre as linhas `[Métricas]` no log.
-    static let intervaloDasMetricas: TimeInterval = 5
+    /// Intervalo entre as amostras (tabela dos alunos e arquivo da sessão).
+    static let intervaloDasMetricas: TimeInterval = 2
+    /// A linha `[Métricas]` do terminal sai a cada `amostrasPorLinhaDoTerminal` amostras (~6 s).
+    static let amostrasPorLinhaDoTerminal = 3
     private var medidor: DispatchSourceTimer?
 
     /// Escreve no log, a cada `intervaloDasMetricas`, o que saiu para a turma. Fica quieto
@@ -194,6 +239,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         medidor?.cancel()
         var anterior = streamSnapshot()
         var instanteAnterior = DispatchTime.now()
+        var contagem = 0
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + Self.intervaloDasMetricas, repeating: Self.intervaloDasMetricas)
         timer.setEventHandler { [weak self] in
@@ -205,7 +251,9 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             let segundos = Double(agora.uptimeNanoseconds - instanteAnterior.uptimeNanoseconds) / 1_000_000_000
             defer { anterior = atual; instanteAnterior = agora }
             guard let taxa = StreamRates.entre(anterior, e: atual, segundos: segundos) else { return }
-            self.publicarMetricas(taxa)
+            contagem += 1
+            self.publicarMetricas(taxa, conexoes: StreamAttribution.medidas(anterior, e: atual, segundos: segundos),
+                                  imprimir: contagem % Self.amostrasPorLinhaDoTerminal == 0)
         }
         timer.resume()
         medidor = timer
@@ -213,7 +261,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
 
     /// Manda `METRICS_TABLE` aos navegadores e escreve no log a linha `[Métricas]` seguida das
     /// linhas por aluno. O log fica quieto sem alunos com vídeo.
-    public func publicarMetricas(_ taxa: StreamRates) {
+    public func publicarMetricas(_ taxa: StreamRates, conexoes: [MedidaDeConexao] = [], imprimir: Bool = true) {
         let resumo: [String: Any] = [
             "alunos": taxa.alunos,
             "alunosH264": mp4StreamerService.activeStreamCount,
@@ -227,14 +275,18 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             "bytesTotais": Int(truncatingIfNeeded: streamSnapshot().bytesEnviados)
         ]
         let linhas = webSocketHandler.broadcastMetricsTable(resumo: resumo)
-        if !linhas.isEmpty || taxa.alunos > 0 {
-            arquivoDeMetricas?.registrarAmostra(
+        let uso = amostrador.amostrar() // todo ciclo, para o delta de CPU cobrir só os últimos 2 s
+        if let arquivo = arquivoDeMetricas, !linhas.isEmpty || taxa.alunos > 0 {
+            arquivo.registrarAmostra(
                 alunos: taxa.alunos, h264: mp4StreamerService.activeStreamCount, mjpeg: streamerService.activeStreamCount,
                 telaFps: taxa.fpsDaTela, mediaFps: taxa.fpsMedioPorAluno, minFps: taxa.fpsMinimoPorAluno,
                 mbpsTotal: taxa.megabitsPorSegundo, estourosDeFila: mp4StreamerService.estourosDeFila,
-                pedidosDeQuadroChave: mp4StreamerService.pedidosDeQuadroChave, detalhe: linhas)
+                pedidosDeQuadroChave: mp4StreamerService.pedidosDeQuadroChave,
+                bytesTotais: resumo["bytesTotais"] as? Int ?? 0, cpuPct: uso.cpuPct, memMB: uso.memMB,
+                pausada: pausada, wifi: SessionEnvironment.wifi(), config: provedorDeConfiguracao?() ?? ConfigDeCaptura(),
+                linhasDeAluno: webSocketHandler.linhasDeAluno(conexoes: conexoes))
         }
-        guard taxa.alunos > 0 else { return }
+        guard taxa.alunos > 0, imprimir else { return }
         print(String(format: "[Métricas] %d alunos (H.264 %d / MJPEG %d) | tela %.1f fps | por aluno: média %.1f fps, mínimo %.1f fps | %.1f Mbps (entregue ao buffer do sistema)",
                      taxa.alunos, mp4StreamerService.activeStreamCount, streamerService.activeStreamCount,
                      taxa.fpsDaTela, taxa.fpsMedioPorAluno, taxa.fpsMinimoPorAluno, taxa.megabitsPorSegundo))
@@ -251,9 +303,11 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
     public func stop() {
         medidor?.cancel()
         medidor = nil
-        arquivoDeMetricas?.encerrar()
+        webSocketHandler.descarregarEntradas()
+        arquivoDeMetricas?.encerrar(tempos: temposDaSessao?() ?? [:])
         arquivoDeMetricas = nil
-        webSocketHandler.onEventoDeAluno = nil
+        webSocketHandler.onEvento = nil
+        mp4StreamerService.onEvento = nil
         self.listener?.cancel()
         self.listener = nil
 
