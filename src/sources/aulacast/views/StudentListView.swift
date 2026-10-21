@@ -42,7 +42,7 @@ public struct StudentListView: View {
                 }
 
                 ScrollView {
-                    VStack(spacing: 2) {
+                    VStack(spacing: 0) {
                         ForEach(alunos) { aluno in
                             linha(aluno)
                         }
@@ -61,45 +61,46 @@ public struct StudentListView: View {
     private var maos: Int { clientManager.handRaisedCount }
 
     private func linha(_ aluno: ConnectedClient) -> some View {
-        HStack(spacing: 16) {
-            AvatarDeIniciais(nome: aluno.name)
-                .opacity(aluno.isWatching ? 1 : 0.55)
+        // A linha inteira é um botão (sem vãos entre linhas); o botão da mão, por dentro, tem
+        // prioridade sobre ele: apertá-lo não abre o perfil.
+        Button { viewModel.abrirPerfil(clientId: aluno.id) } label: {
+            HStack(spacing: 16) {
+                AvatarDeIniciais(nome: aluno.name)
+                    .opacity(aluno.isWatching ? 1 : 0.55)
 
-            VStack(alignment: .leading, spacing: 0) {
-                Text(aluno.name)
-                    .m3(.bodyLarge)
-                    .foregroundColor(M3.onSurface)
-                    .lineLimit(1)
-                Text(aluno.isWatching ? "Com a aula à vista" : "Em outra janela ou aba")
-                    .m3(.bodyMedium)
-                    .foregroundColor(M3.onSurfaceVariant)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(aluno.name)
+                        .m3(.bodyLarge)
+                        .foregroundColor(M3.onSurface)
+                        .lineLimit(1)
+                    Text(aluno.isWatching ? "Com a aula à vista" : "Em outra janela ou aba")
+                        .m3(.bodyMedium)
+                        .foregroundColor(M3.onSurfaceVariant)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if aluno.isHandRaised {
+                    // A mão é o próprio botão de abaixá-la, como no Meet.
+                    M3BotaoDeIcone(
+                        icone: "back_hand",
+                        variante: .atencao,
+                        tamanho: 36,
+                        iconePreenchido: true,
+                        ajuda: "Abaixar a mão"
+                    ) { viewModel.lowerHand(clientId: aluno.id) }
+                    .transition(.scale.combined(with: .opacity))
+                }
+                M3Icone(nome: aluno.isWatching ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.isWatching)
+                    .foregroundColor(aluno.isWatching ? M3.tertiary : M3.outline)
+                    .help(aluno.ipAddress)
             }
-            Spacer(minLength: 0)
-            if aluno.isHandRaised {
-                // A mão é o próprio botão de abaixá-la, como no Meet: o professor atende o
-                // aluno e tira o pedido da fila com um clique.
-                M3BotaoDeIcone(
-                    icone: "back_hand",
-                    variante: .atencao,
-                    tamanho: 36,
-                    iconePreenchido: true,
-                    ajuda: "Abaixar a mão"
-                ) { viewModel.lowerHand(clientId: aluno.id) }
-                .transition(.scale.combined(with: .opacity))
-            }
-            M3Icone(nome: aluno.isWatching ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.isWatching)
-                .foregroundColor(aluno.isWatching ? M3.tertiary : M3.outline)
-                .help(aluno.ipAddress)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        // A linha inteira abre o painel de tempo do aluno, inclusive as áreas vazias.
-        .contentShape(Rectangle())
-        .onTapGesture { viewModel.alunoAberto = aluno.id }
-        .accessibilityElement(children: .contain)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Abre o tempo de \(aluno.name) na aula")
+        .buttonStyle(M3EstiloDeLinha())
+        .onHover { if $0 { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+        .accessibilityHint("Abre o perfil de \(aluno.name)")
     }
 
     /// Ninguém entrou ainda: o que fazer e o atalho para isso (como o "Adicionar pessoas"

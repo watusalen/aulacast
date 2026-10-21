@@ -59,6 +59,7 @@ public struct MainDashboardView: View {
         .background(M3.surfaceContainerLow)
         .ignoresSafeArea(.container, edges: .top)
         .overlay { StudentDetailOverlay(viewModel: viewModel) }
+        .overlay { M3Snackbar(viewModel: viewModel) }
         .animation(M3.Mola.padrao, value: painelAberto)
         .animation(M3.Mola.padrao, value: abaSalva)
         .task(id: chavePrevia) {

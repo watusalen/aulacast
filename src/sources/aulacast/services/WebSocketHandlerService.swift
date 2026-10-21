@@ -32,7 +32,10 @@ public final class WebSocketHandlerService {
     /// manda em cada mensagem: antes um aluno podia escrever ao professor assinando como
     /// um colega (ou como "Professor") só trocando o campo `sender`.
     private var nomes: [String: String] = [:]
-    /// Fatos estáticos do servidor mandados no `DEBUG_INFO` (só em build de depuração).
+    /// Console de métricas dos alunos (METRICS_TABLE, DEBUG_INFO, `debugConsole`): só em build de
+    /// depuração. A coleta em si é permanente. Os testes trocam o valor para cobrir os dois modos.
+    public var consoleDeMetricas: Bool = MetricasDebug.consoleAtivo
+    /// Fatos estáticos do servidor mandados no `DEBUG_INFO` (só com o console de métricas ativo).
     var infoDeDepuracao: (() -> [String: Any])?
 
     /// Último estado da transmissão anunciado à turma, repetido no CONNECTED.
@@ -48,9 +51,8 @@ public final class WebSocketHandlerService {
     private var mensagemFixada: String?
     private let lock = NSLock()
     /// Medições que cada aluno faz do próprio vídeo (`METRICS`), mostradas à turma no `METRICS_TABLE`.
-    let metricas: StudentMetricsBook
+    public let metricas: StudentMetricsBook
     /// Eventos de aluno para o arquivo da sessão (entrada, saida, visibilidade, EVENT do navegador).
-    /// Só usado no modo de depuração das métricas.
     public var onEvento: ((_ tipo: String, _ dados: [String: Any]) -> Void)?
 
     /// O que se sabe de cada conexão para o arquivo da sessão: IP, quando entrou e o navegador
@@ -158,10 +160,8 @@ public final class WebSocketHandlerService {
         let cabecalhoUA = extractHeader("User-Agent", from: request).map { String($0.prefix(200)) }
         lock.lock()
         alunoDaConexao[id] = connectedClient.id
-        if MetricasDebug.ativo {
-            let ipLimpo = clientIp.split(separator: "%").first.map(String.init) ?? clientIp
-            infoDaConexao[connectedClient.id] = InfoDaConexao(ip: ipLimpo, desde: Date(), userAgent: cabecalhoUA)
-        }
+        let ipLimpo = clientIp.split(separator: "%").first.map(String.init) ?? clientIp
+        infoDaConexao[connectedClient.id] = InfoDaConexao(ip: ipLimpo, desde: Date(), userAgent: cabecalhoUA)
         lock.unlock()
         clientObserver?.didClientConnect(connectedClient)
 
@@ -171,16 +171,7 @@ public final class WebSocketHandlerService {
         // `chatVisibleToClass`: sem ele no CONNECTED, quem entra depois do professor ligar a
         // visibilidade via o aviso fixo do chat com a versão errada até a próxima mudança.
         lock.lock()
-        var boasVindas: [String: Any] = estadoDaTransmissao
-        boasVindas["chatEnabled"] = chatLiberado
-        boasVindas["chatVisibleToClass"] = chatVisivelParaTurma
-        boasVindas["files"] = arquivos
-        // Sem este campo o navegador não mede nem escreve nada: o recurso só existe em build de depuração.
-        if MetricasDebug.ativo { boasVindas["metricas"] = "true" }
-        // Sem fixada, o campo não vai: o cliente trata ausência como "nada fixado".
-        if let mensagemFixada {
-            boasVindas["pinned"] = mensagemFixada
-        }
+        let boasVindas = payloadDeBoasVindas()
         lock.unlock()
         let welcomeDict: [String: Any] = [
             "type": "CONNECTED",
@@ -190,7 +181,7 @@ public final class WebSocketHandlerService {
             sendTextFrame(connection: connection, text: welcomeJSON)
         }
         // Só depuração: fatos estáticos do servidor para o painel de depuração do aluno, uma vez por conexão.
-        if MetricasDebug.ativo, let info = infoDeDepuracao?(),
+        if consoleDeMetricas, let info = infoDeDepuracao?(),
            let json = Self.serializar(["type": "DEBUG_INFO", "payload": info]) {
             sendTextFrame(connection: connection, text: json)
         }
@@ -337,6 +328,20 @@ public final class WebSocketHandlerService {
     }
 
     /// Volta ao estado de uma sessão nova (servidor parado e religado).
+    /// Payload do CONNECTED. Chamar com `lock` tomado. `metricas` vale em todo build (o navegador
+    /// reporta em silêncio); `debugConsole` só quando o console de métricas está ativo (ADR-006).
+    public func payloadDeBoasVindas() -> [String: Any] {
+        var boasVindas: [String: Any] = estadoDaTransmissao
+        boasVindas["chatEnabled"] = chatLiberado
+        boasVindas["chatVisibleToClass"] = chatVisivelParaTurma
+        boasVindas["files"] = arquivos
+        boasVindas["metricas"] = "true"
+        if consoleDeMetricas { boasVindas["debugConsole"] = "true" }
+        // Sem fixada, o campo não vai: o cliente trata ausência como "nada fixado".
+        if let mensagemFixada { boasVindas["pinned"] = mensagemFixada }
+        return boasVindas
+    }
+
     public func reset() {
         lock.lock()
         estadoDaTransmissao = ["stream": "live"]
@@ -354,8 +359,8 @@ public final class WebSocketHandlerService {
         let conexoes = Array(activeConnections.values)
         let copiaNomes = nomes
         lock.unlock()
-        guard MetricasDebug.ativo else { return [] }
         let linhas = metricas.linhas(nomes: copiaNomes)
+        guard consoleDeMetricas else { return linhas }
         let alunosComVideo = resumo["alunos"] as? Int ?? 0
         guard !conexoes.isEmpty, !(linhas.isEmpty && alunosComVideo == 0) else { return linhas }
 
@@ -366,7 +371,7 @@ public final class WebSocketHandlerService {
         return linhas
     }
 
-    // MARK: - Arquivo da sessão (só depuração)
+    // MARK: - Arquivo da sessão (permanente)
 
     private func agendarEntrada(clientId: String) {
         lock.lock()
@@ -516,7 +521,7 @@ public final class WebSocketHandlerService {
         lock.unlock()
 
         guard estavaAtiva else { return }
-        if MetricasDebug.ativo, let nomeQueSaiu {
+        if let nomeQueSaiu {
             var dados: [String: Any] = ["nome": nomeQueSaiu, "motivo": motivo]
             if let info {
                 dados["ip"] = info.ip
@@ -600,7 +605,7 @@ public final class WebSocketHandlerService {
     }
 
     /// Processa comandos recebidos em formato JSON do cliente web
-    private func processClientJSON(
+    public func processClientJSON(
         _ jsonString: String,
         clientId: String,
         fallbackName: String,
@@ -677,21 +682,21 @@ public final class WebSocketHandlerService {
             lock.unlock()
 
             presenceObserver?.didIdentifyStudent(clientId: clientId, name: nome)
-            if MetricasDebug.ativo { agendarEntrada(clientId: clientId) }
+            agendarEntrada(clientId: clientId)
             sendTextFrame(connection: connection, text: "{\"type\":\"IDENTIFY_ACCEPTED\"}")
 
         case "PRESENCE":
             let visivel = (payloadDict?["visible"] as? Bool) ?? true
             presenceObserver?.didChangeWatching(clientId: clientId, isWatching: visivel)
-            if MetricasDebug.ativo, let nome = nomeValidado(clientId) { onEvento?("visibilidade", ["nome": nome, "visivel": visivel]) }
+            if let nome = nomeValidado(clientId) { onEvento?("visibilidade", ["nome": nome, "visivel": visivel]) }
 
         case "METRICS":
             // Só de quem tem nome validado: a linha aparece com o nome para a turma toda.
-            guard MetricasDebug.ativo, nomeValidado(clientId) != nil else { return }
+            guard nomeValidado(clientId) != nil else { return }
             metricas.registrar(clientId: clientId, payload: payloadDict)
 
         case "ENV":
-            guard MetricasDebug.ativo, nomeValidado(clientId) != nil,
+            guard nomeValidado(clientId) != nil,
                   let amb = metricas.registrarAmbiente(clientId: clientId, payload: payloadDict) else { return }
             lock.lock()
             if let ua = amb.userAgent { infoDaConexao[clientId]?.userAgent = ua }
@@ -699,7 +704,7 @@ public final class WebSocketHandlerService {
             emitirEntrada(clientId: clientId)
 
         case "EVENT":
-            guard MetricasDebug.ativo, let nome = nomeValidado(clientId),
+            guard let nome = nomeValidado(clientId),
                   let evento = metricas.registrarEvento(clientId: clientId, payload: payloadDict) else { return }
             var dados = evento.dados
             dados["nome"] = nome

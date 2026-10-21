@@ -150,8 +150,45 @@ public final class MainViewModel: ObservableObject {
     /// Tempo de cada aluno na aula (RF-20).
     public let ledger: AttendanceLedger
 
-    /// Aluno cujo painel de tempo está aberto (id da conexão); `nil` com o painel fechado.
+    /// Pessoa cujo perfil está aberto (`pessoaId` do ledger, não o id da conexão); `nil` com o
+    /// painel fechado. Continua aberto se o aluno sair: quem já saiu ainda pode ser consultado.
     @Published public var alunoAberto: String?
+
+    public func abrirPerfil(clientId: String) {
+        if let id = ledger.pessoaId(clientId: clientId) { alunoAberto = id }
+    }
+
+    /// Abre o perfil por qualquer nome que a pessoa já usou na aula; nome desconhecido não faz nada.
+    public func abrirPerfil(nome: String) {
+        if let id = ledger.pessoaId(nome: nome) { alunoAberto = id }
+    }
+
+    /// Aviso não modal (snackbar) sobre a chamada salva ao encerrar a transmissão (RF-21).
+    public struct AvisoDaChamada: Equatable {
+        public let texto: String
+        /// Arquivo para "Mostrar no Finder"; `nil` quando falhou.
+        public let arquivo: URL?
+    }
+    @Published public var avisoDaChamada: AvisoDaChamada?
+    /// Pasta das chamadas; os testes trocam por uma temporária.
+    public var pastaDasChamadas: URL = PastasDoApp.chamadas
+    private var chamadaJaSalva = false
+
+    /// Grava o CSV da chamada se alguém se identificou (uma vez por sessão). Nunca lança.
+    @discardableResult
+    public func salvarChamada(em fim: Date = Date()) -> ResultadoDaChamada {
+        guard !chamadaJaSalva else { return .vazia }
+        let resultado = ChamadaWriter.salvar(resumos: ledger.todos(agora: fim), fimDaSessao: fim, pasta: pastaDasChamadas)
+        switch resultado {
+        case .vazia: return resultado
+        case .salva(let arquivo, let alunos):
+            chamadaJaSalva = true
+            avisoDaChamada = AvisoDaChamada(texto: alunos == 1 ? "Chamada salva (1 aluno)" : "Chamada salva (\(alunos) alunos)", arquivo: arquivo)
+        case .falhou:
+            avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a chamada", arquivo: nil)
+        }
+        return resultado
+    }
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -394,6 +431,7 @@ public final class MainViewModel: ObservableObject {
                 self.isPaused = false
                 self.pausadoPorqueAJanelaSumiu = false
                 ledger.reset()
+                chamadaJaSalva = false
                 ledger.setAccruing(true)
                 self.streamState.reset()
                 self.streamStartedAt = Date()
@@ -424,6 +462,7 @@ public final class MainViewModel: ObservableObject {
     }
 
     public func stopStream() {
+        if isSessionOpen || isStreaming { salvarChamada() }
         Task {
             await captureService.stopCapture()
             // Antes de parar o servidor: um quadro-chave em voo entre os dois resets gravaria um
@@ -671,6 +710,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // minuto depois da queda, o Mac dormia, todas as conexões caíam e os alunos iam
         // para "Reconectando" enquanto o professor ainda estava lendo o aviso do erro.
         // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
+        salvarChamada()
         ledger.setAccruing(false)
         isStreaming = false
         isPaused = false
@@ -758,7 +798,6 @@ extension MainViewModel: ClientObserverProtocol {
         Task { @MainActor in
             self.clientManager.removeClient(id: clientId)
             self.ledger.disconnected(clientId: clientId)
-            if self.alunoAberto == clientId { self.alunoAberto = nil }
         }
     }
 }

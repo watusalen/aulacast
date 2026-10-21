@@ -15,7 +15,7 @@ O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 
 
 ## Consequências
 - Menos banda por aluno para tela com pouco movimento (a confirmar), ao custo de mais complexidade (empacotador, player MSE, fila por cliente).
-- Métricas por aluno (console do navegador e arquivo `~/AulaCast-metricas/sessao-*.jsonl`, seção 3.13 do doc 04) existem **só** em build de depuração ou com `-DMETRICAS_DEBUG`; o arquivo é um JSONL autoexplicativo (legenda, amostras a cada 2 s, linha por aluno, eventos, comparação por configuração; teto de 64 MB) e grava IP e navegador de cada aluno por decisão do usuário, nunca texto de chat nem títulos de janela; os nomes ficam visíveis a toda a turma por decisão do usuário.
+- Métricas por aluno (console do navegador e arquivo `~/Documents/AulaCast/Metricas/sessao-*.jsonl`, seção 3.13 do doc 04): a coleta e o arquivo são **permanentes** (ADR-006, que substitui a cláusula "só depuração"); só o console do navegador e o `METRICS_TABLE`/`DEBUG_INFO` exigem build de depuração ou `-DMETRICAS_DEBUG`; o arquivo é um JSONL autoexplicativo (legenda, amostras a cada 2 s, linha por aluno, eventos, comparação por configuração; teto de 64 MB) e grava IP e navegador de cada aluno por decisão do usuário, nunca texto de chat nem títulos de janela; os nomes ficam visíveis a toda a turma por decisão do usuário.
 - Aluno lento perde a fila e ressincroniza no próximo quadro-chave (pedidos agrupados a no máximo 1 por segundo).
 - **Não verificado:** Chrome/Safari/iOS reais, a rede da sala, o bitrate efetivo do encoder em hardware, a legibilidade do texto na taxa escolhida. Uma falha única do teste do encoder real apareceu em 1 de 5 execuções; o rate control não foi descartado como causa.
 - Entrar durante uma pausa mostra "Aguardando" até a retomada.
@@ -28,4 +28,4 @@ O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 
 - WebRTC e WebCodecs: descartados (UDP/sinalização; WebCodecs exige HTTPS).
 - Só puxar quadros (long-poll): melhora cadência e atraso, mas não reduz bytes.
 
-- Depuração de rede (somente com `metricas`): `DEBUG_INFO` do servidor e painel "Debug" no aluno (docs/04, seção 3.13) para inspecionar o fluxo H.264/MJPEG sem alterar o comportamento normal.
+- Depuração de rede (somente com `debugConsole`): `DEBUG_INFO` do servidor e painel "Debug" no aluno (docs/04, seção 3.13) para inspecionar o fluxo H.264/MJPEG sem alterar o comportamento normal.

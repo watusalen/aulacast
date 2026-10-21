@@ -227,7 +227,7 @@ mensagem do aluno a toda a turma, sem duplicar para o autor (`WebSocketHandlerSe
 ```
 
 #### 3.13. Métricas (`METRICS` / `METRICS_TABLE`)
-**Só existe em build de depuração ou com `-DMETRICAS_DEBUG`** (`AULACAST_DEBUG_METRICS=1 scripts/build-app.sh`; `MetricasDebug.ativo`). Num build normal o `CONNECTED` não traz `metricas: "true"`, o navegador fica totalmente ocioso e o servidor ignora `METRICS`.
+**Coleta permanente (ADR-006).** Em todo build o `CONNECTED` traz `metricas: "true"`, o navegador reporta em silêncio (`METRICS`/`ENV`/`EVENT`) e o servidor valida, grava o arquivo da sessão e imprime a linha `[Métricas]`. **Só o console é temporário:** `METRICS_TABLE`, `DEBUG_INFO` e a saída no navegador exigem build de depuração ou `-DMETRICAS_DEBUG` (`AULACAST_DEBUG_METRICS=1 scripts/build-app.sh`; `MetricasDebug.consoleAtivo`) e são anunciados por `debugConsole: "true"` no `CONNECTED`.
 
 Cada 2 s o navegador manda a própria medição; o servidor (só de aluno já identificado) valida, guarda a última por conexão e, no mesmo relógio de 2 s, manda a tabela a todos. **Todos veem os números e os nomes de todos, por decisão do usuário**; aparecem só no console (DevTools), nunca na página.
 ```json
@@ -236,7 +236,7 @@ Cada 2 s o navegador manda a própria medição; o servidor (só de aluno já id
   "rows": [ { "nome": "Ana", "rota": "H.264", "fps": 29.5, "mbps": 2.25, "dropped": 2, "lagMs": 150, "reportadoHa": 1.2 } ] } }
 ```
 Validação: chaves conhecidas, `rota` em {`H.264`,`MJPEG`}, números finitos limitados (fps 0-240, mbps 0-1000, dropped >= 0, lagMs 0-3600000), 1 mensagem aceita por segundo por cliente, até 100 linhas; a linha some na desconexão. Na rota MJPEG o navegador não mede por quadro: manda só a rota e os números vão `null`.
-**Arquivo da sessão** (também só no modo de depuração): `~/AulaCast-metricas/sessao-AAAAMMDD-HHmmss.jsonl`, um único arquivo **autoexplicativo** para uma IA plotar. Toda linha tem `tipo`, `tSeg` (segundos desde o início) e `t` (ISO 8601). Teto de **64 MB** (a `legenda` não conta), com uma última linha `truncado`; o `fim` sempre sai. Algumas IAs recusam arquivos grandes: numa aula longa, mande um trecho.
+**Arquivo da sessão** (permanente): `~/Documents/AulaCast/Metricas/sessao-AAAAMMDD-HHmmss.jsonl` (`PastasDoApp.metricas`), um único arquivo **autoexplicativo** para uma IA plotar. Toda linha tem `tipo`, `tSeg` (segundos desde o início) e `t` (ISO 8601). Teto de **64 MB** (a `legenda` não conta), com uma última linha `truncado`; o `fim` sempre sai. Algumas IAs recusam arquivos grandes: numa aula longa, mande um trecho.
 - `legenda` (1ª linha): versão do esquema, dicionário de campos por tipo com unidades, 9 gráficos sugeridos (o 9º compara configurações) e um prompt pronto em português.
 - `inicio`: app e flag de debug, macOS, modelo do Mac (`sysctl hw.model`), núcleos, porta, IP e interfaces ativas, resolução, fps, taxa-alvo, **tipo** da fonte (monitor/janela, nunca títulos), limites do servidor e só a **quantidade** de apps ocultos.
 - `amostra` (a cada 2 s com aluno conectado): alunos, aVista, h264/mjpeg, telaFps, mediaFps, minFps, mbpsTotal, perdaEstimadaPct, estourosDeFila e pedidosDeQuadroChave (acumulados), bytesTotais, `cpuPct` e `memMB` do app (`getrusage` por intervalo; `phys_footprint`), pausada, `wifi` do Mac (`{rssi, ruido, taxaTxMbps, canal}` ou `null`).
@@ -249,8 +249,8 @@ Validação: chaves conhecidas, `rota` em {`H.264`,`MJPEG`}, números finitos li
 **Contrato navegador -> servidor** (só com a trava `metricas`): `METRICS` a cada 2 s `{rota, fps, mbps, dropped, droppedTotal, lagMs, rttMs, bufferS, playbackRate, visivel, conexao: {tipo, downlinkMbps, rttMs} | null}` (campos novos opcionais; 1 por segundo por cliente); `ENV` uma vez `{userAgent <=200, plataforma <=40, telaLarg, telaAlt, dpr, idioma <=16, conexao}`; `EVENT` `{tipo in [rota, video_reconexao, quota, seek, ws_reconexao], dados}` com `dados` plano de até 6 chaves (texto imprimível <=80, número finito), no máximo 5 por segundo por cliente. O servidor aceita só chaves conhecidas, limita os números, descarta o resto e apaga tudo na desconexão. `entrada` espera até 0,75 s pelo `ENV` (senão usa o `User-Agent` do handshake). `[Métricas]` no terminal segue a cada ~6 s.
 
 `METRICS_TABLE` também traz `estourosDeFila`, `pedidosDeQuadroChave` e `bytesTotais` (bytes entregues ao buffer do sistema, MJPEG + H.264).
-**`DEBUG_INFO` (mesma trava `metricas`)**: logo depois do `CONNECTED`, uma vez por conexão, `{ versao, porta, ip, h264, h264TaxaMinBps, h264TaxaMaxBps, quadroChaveMaxSeg, maxMp4PorIp, maxMp4Total, filaMaxBytes, filaMaxMs, pedidoQuadroChaveMs }`. Fps/resolução da captura, taxa-alvo exata e nome mDNS não vão (vivem no `MainViewModel`; acoplar o servidor a eles não compensa).
-**Painel de depuração do aluno** (`debug-panel.js`): botão "Debug" e gaveta (folha inferior em tela estreita), criados só com `metricas: "true"`; abre expandido uma vez ao entrar. Traz a explicação de ponta a ponta e um log ao vivo (anel de 500 linhas, ms) de WebSocket, PING/PONG com RTT, tipos de mensagem do servidor (nunca o texto do chat), rota/codec/init segment, fragmentos, MSE, buffer, atraso, `playbackRate`, seeks e visibilidade, com "Copiar log" (fallback para http) e "Baixar .txt". Os módulos chamam `globalThis.AulaCastDebug?.log(...)`, que só existe com o painel.
+**`DEBUG_INFO` (trava `debugConsole`)**: logo depois do `CONNECTED`, uma vez por conexão, `{ versao, porta, ip, h264, h264TaxaMinBps, h264TaxaMaxBps, quadroChaveMaxSeg, maxMp4PorIp, maxMp4Total, filaMaxBytes, filaMaxMs, pedidoQuadroChaveMs }`. Fps/resolução da captura, taxa-alvo exata e nome mDNS não vão (vivem no `MainViewModel`; acoplar o servidor a eles não compensa).
+**Painel de depuração do aluno** (`debug-panel.js`): botão "Debug" e gaveta (folha inferior em tela estreita), criados só com `debugConsole: "true"`; abre expandido uma vez ao entrar. Traz a explicação de ponta a ponta e um log ao vivo (anel de 500 linhas, ms) de WebSocket, PING/PONG com RTT, tipos de mensagem do servidor (nunca o texto do chat), rota/codec/init segment, fragmentos, MSE, buffer, atraso, `playbackRate`, seeks e visibilidade, com "Copiar log" (fallback para http) e "Baixar .txt". Os módulos chamam `globalThis.AulaCastDebug?.log(...)`, que só existe com o painel.
 
 ---
 
@@ -543,7 +543,8 @@ Duas suítes, ambas **sem dependências externas** — coerente com o requisito 
 
 | Suíte | Como executar | Cobre |
 | :--- | :--- | :--- |
-| Swift | `swift run AulaCastTestRunner` | Domínio (turma, chat, identificação, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
+| Swift (modo **core**, padrão) | `swift run AulaCastTestRunner` | Só lógica pura: domínio, ledger, chamada em CSV, protocolo, métricas (gate nos dois modos). **Não exercita a rede real nem o hardware H.264.** No fim imprime o modo e quantas seções pularam |
+| Swift (modo completo) | `swift run AulaCastTestRunner --tudo` | Tudo do core mais portas reais, WebSocket ponta a ponta, VideoToolbox e esperas longas. Domínio (turma, chat, identificação, presença), segurança (directory traversal), protocolo WebSocket (frames colados, partidos e malformados) e integração ponta a ponta com servidor e WebSocket reais |
 | Cliente Web | `node --test "tests/*.test.js"` | 12 arquivos: identificação do aluno, reconexão (`socket-client`, `config`), watchdog do vídeo, presença, chat (`chat-manager`), mensagens do servidor (`main-messages`), interface (`ui-controller`), lista de arquivos, links, mão levantada e manter a tela acesa |
 
 Os testes de integração sobem um `NetworkListenerService` real numa porta de teste e se

@@ -144,7 +144,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         iniciarArquivoDeMetricas()
     }
 
-    /// Pasta do arquivo da sessão (só com `MetricasDebug.ativo`); os testes trocam por uma temporária.
+    /// Pasta do arquivo da sessão (permanente, ADR-006); os testes trocam por uma temporária.
     public var diretorioDeMetricas: URL = MetricsFileLogger.diretorioPadrao
     private var arquivoDeMetricas: MetricsFileLogger?
 
@@ -165,13 +165,11 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
 
     /// Linha de evento no arquivo da sessão (`pausa`/`retomada` também ligam `pausada` nas amostras).
     public func registrarEventoDeSessao(_ tipo: String, _ dados: [String: Any]) {
-        guard MetricasDebug.ativo else { return }
         if tipo == "pausa" { pausada = true } else if tipo == "retomada" { pausada = false }
         arquivoDeMetricas?.registrar(tipo: tipo, dados: dados)
     }
 
     private func iniciarArquivoDeMetricas() {
-        guard MetricasDebug.ativo else { return }
         let arquivo = MetricsFileLogger(diretorio: diretorioDeMetricas, limiteBytes: limiteDoArquivoDeMetricas)
         var contexto = SessionEnvironment.fatosDoMac()
         let info = infoDeDepuracao()
@@ -195,7 +193,7 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
         mp4StreamerService.onEvento = { [weak arquivo] tipo, dados in arquivo?.registrar(tipo: tipo, dados: dados) }
     }
 
-    /// Caminho do arquivo `.jsonl` da sessão atual (`nil` fora do modo de depuração ou sem acesso ao disco).
+    /// Caminho do arquivo `.jsonl` da sessão atual (`nil` sem acesso ao disco).
     public var caminhoDoArquivoDeMetricas: URL? { arquivoDeMetricas?.arquivo }
 
     // MARK: - Medição do vídeo

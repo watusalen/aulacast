@@ -140,9 +140,11 @@ Depois disso o app abre normalmente e basta autorizar a Gravação de Tela em Aj
 O projeto tem duas suítes, ambas sem dependências externas.
 
 ```bash
-# Domínio, rede, segurança e ponta a ponta (Swift)
+# Swift, modo core (padrão): só lógica pura, sem rede real nem codificador H.264 de hardware
 cd src
 swift run AulaCastTestRunner
+# Swift, tudo: inclui portas reais, WebSocket ponta a ponta e H.264
+swift run AulaCastTestRunner --tudo
 
 # Cliente web (Node.js)
 cd src/web-assets
@@ -264,3 +266,7 @@ Componentes de terceiros incluídos, com as licenças junto:
 - **NoSleep.js** (os vídeos em laço que mantêm a tela do aluno acesa), © Rich Tibbett, licença MIT, no topo de `src/web-assets/js/vendor/nosleep-media.js`.
 
 As fontes foram reduzidas aos caracteres e ícones usados pelo app e servem às duas telas.
+
+## Métricas e chamada
+- A coleta de métricas por aluno e o arquivo da sessão (`~/Documents/AulaCast/Metricas/`) existem em todo build (ADR-006). `AULACAST_DEBUG_METRICS=1 scripts/build-app.sh` agora só liga o console de métricas no navegador do aluno (`METRICS_TABLE`, `DEBUG_INFO`, painel Debug).
+- Ao encerrar a transmissão, a chamada é salva em `~/Documents/AulaCast/Chamadas/chamada-AAAA-MM-DD-HHmm.csv` (RF-21).

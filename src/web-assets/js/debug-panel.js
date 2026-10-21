@@ -1,6 +1,6 @@
 /**
  * Painel de depuração do aluno (inspeção de rede). Só existe quando o servidor diz
- * `metricas: "true"` no CONNECTED (build de depuração): sem isso este módulo nunca é
+ * `debugConsole: "true"` no CONNECTED (build de depuração): sem isso este módulo nunca é
  * instanciado — nenhum nó no DOM, relógio, ouvinte nem `window.AulaCastDebug`.
  *
  * Os outros módulos só chamam `globalThis.AulaCastDebug?.log(...)`, que é inofensivo sem o painel.
@@ -92,7 +92,7 @@ export class DebugPanel {
     this.timers.push(this.setIntervalImpl(() => this.amostrarVideo(), INTERVALO_VIDEO_MS));
     this.timers.push(this.setIntervalImpl(() => this.resumirRtt(), INTERVALO_RTT_MS));
     this.doc.addEventListener('visibilitychange', () => this.log('pagina', `visibilidade: ${this.doc.visibilityState}`));
-    this.log('debug', 'depuração ativada pelo servidor (CONNECTED.metricas); só no console');
+    this.log('debug', 'depuração ativada pelo servidor (CONNECTED.debugConsole); só no console');
   }
 
   desativar() {

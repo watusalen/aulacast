@@ -160,7 +160,7 @@ export class AulaCastApp {
     }
   }
 
-  /** Painel de depuração: só nasce quando o servidor (build de depuração) liga `metricas`. */
+  /** Painel de depuração (console): só nasce quando o servidor liga `debugConsole` (build de depuração). */
   ativarDebug() {
     if (this.debug) return;
     this.debug = new DebugPanel({ video: document.getElementById('videoStreamMP4') });
@@ -172,7 +172,7 @@ export class AulaCastApp {
   }
 
   handleServerMessage(data) {
-    if (data.type === 'CONNECTED' && data.payload && data.payload.metricas === 'true') this.ativarDebug();
+    if (data.type === 'CONNECTED' && data.payload && data.payload.debugConsole === 'true') this.ativarDebug();
     // Só o tipo: o conteúdo (chat, nomes) nunca vai para o log de depuração.
     globalThis.AulaCastDebug?.log('srv', data.type);
     switch (data.type) {
@@ -183,7 +183,7 @@ export class AulaCastApp {
       // Quem entra no meio da aula precisa saber como o chat está agora, e não só
       // quando o professor mexer no botão da próxima vez.
       case 'CONNECTED':
-        // Métricas só existem em build de depuração do servidor: sem o aviso, o módulo fica ocioso.
+        // A medição é permanente (ADR-006) e silenciosa; o servidor avisa com `metricas`. Só o console depende de `debugConsole`.
         this.metricas.definirHabilitado(Boolean(data.payload) && data.payload.metricas === 'true');
         if (this.identidade) this.metricas.iniciar();
         if (this.metricas.habilitado && !this.rotaInformada) {

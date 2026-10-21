@@ -6,8 +6,9 @@
  * `METRICS_TABLE` com a turma toda, e isso também vai só para o console: nenhum nome é
  * inserido na página.
  *
- * Só de depuração: fica totalmente ocioso (sem relógio, sem envio, sem console) até o servidor
- * dizer `metricas: "true"` no CONNECTED, o que só acontece em build de depuração.
+ * Fica totalmente ocioso (sem relógio, sem envio, sem console) até o servidor
+ * dizer `metricas: "true"` no CONNECTED (todo build, ADR-006). O reporte é silencioso; o console só
+ * recebe algo se o painel de depuração existir (`debugConsole`).
  *
  * Na rota MJPEG o navegador não tem evento por quadro: informa só a rota, e o resto fica
  * `null` (nada é inventado).

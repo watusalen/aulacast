@@ -29,6 +29,8 @@ public struct ChatPanelView: View {
                 ligado: $viewModel.isChatEnabled
             )
 
+            M3Divisor(recuo: 16)
+
             // Segundo toggle, independente do de cima: só faz sentido com o chat ligado —
             // desligado, não há mensagem de aluno nenhuma para circular entre colegas.
             M3LinhaDeAlternancia(
@@ -39,6 +41,10 @@ public struct ChatPanelView: View {
                 ligado: $viewModel.isStudentChatVisibleToClass
             )
             .disabled(!viewModel.isChatEnabled)
+
+            // Separa o grupo de interruptores do aviso, em largura total.
+            M3Divisor()
+                .padding(.top, 6)
 
             // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.
             HStack(alignment: .top, spacing: 10) {
@@ -131,9 +137,23 @@ public struct ChatPanelView: View {
     private func mensagem(_ msg: ChatMessage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(msg.isProf ? "Você" : msg.sender)
-                    .m3(.titleSmall)
-                    .foregroundColor(msg.isProf ? M3.primary : M3.onSurface)
+                if msg.isProf {
+                    Text("Você").m3(.titleSmall).foregroundColor(M3.primary)
+                } else {
+                    // O nome do aluno abre o perfil dele (sem efeito se a pessoa não for conhecida).
+                    Button { viewModel.abrirPerfil(nome: msg.sender) } label: {
+                        Text(msg.sender)
+                            .m3(.titleSmall)
+                            .foregroundColor(M3.onSurface)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(M3EstiloDeLinha(canto: M3.Canto.pequeno))
+                    .padding(.horizontal, -6)
+                    .onHover { if $0 { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                    .help("Ver perfil")
+                }
                 Text(msg.timestamp, style: .time)
                     .m3(.labelMedium)
                     .foregroundColor(M3.onSurfaceVariant)
