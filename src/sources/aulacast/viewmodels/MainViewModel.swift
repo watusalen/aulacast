@@ -44,6 +44,9 @@ public final class MainViewModel: ObservableObject {
 
     /// Nome `.local` confirmado pelo mDNS para esta aula, sem a porta; `nil` até confirmar.
     @Published public private(set) var mdnsHostname: String?
+    /// Última configuração vista, para o arquivo de métricas registrar só o que mudou.
+    fileprivate var configAnterior = ConfiguracaoDeMetricas()
+    fileprivate let caixaDeConfiguracao = CaixaDeConfiguracao()
 
     /// Arquivos que a turma pode baixar agora, na ordem em que foram compartilhados.
     @Published public private(set) var sharedFiles: [SharedFile] = []
@@ -103,6 +106,7 @@ public final class MainViewModel: ObservableObject {
                 type: "CHAT_STATE",
                 payload: ["enabled": isChatEnabled ? "true" : "false"]
             )
+            registrarEventoDoChat()
         }
     }
 
@@ -117,6 +121,7 @@ public final class MainViewModel: ObservableObject {
                 type: "CHAT_VISIBILITY",
                 payload: ["visible": isStudentChatVisibleToClass ? "true" : "false"]
             )
+            registrarEventoDoChat()
         }
     }
 
@@ -217,8 +222,12 @@ public final class MainViewModel: ObservableObject {
         self.serverService.isChatEnabled = self.isChatEnabled
         self.serverService.isStudentChatVisibleToClass = self.isStudentChatVisibleToClass
         self.mdnsService.onHostnameChange = { [weak self] nome in
-            Task { @MainActor in self?.mdnsHostname = nome }
+            Task { @MainActor in
+                self?.registrarEventoDoMDNS(nome)
+                self?.mdnsHostname = nome
+            }
         }
+        observarConfiguracaoDaCaptura(captureService)
         self.serverService.onFailure = { [weak self] mensagem in
             Task { @MainActor in self?.serverDidFail(mensagem) }
         }
@@ -366,6 +375,7 @@ public final class MainViewModel: ObservableObject {
             let éSessãoNova = !isSessionOpen
 
             do {
+                prepararMetricasDaSessao()
                 try serverService.start()
                 advertiserService.startAdvertising()
                 // A taxa de bits do H.264 sai do fps escolhido; vale na criação da sessão do encoder.
@@ -443,11 +453,12 @@ public final class MainViewModel: ObservableObject {
     public func togglePause() {
         // O professor assumiu: a pausa passa a ser dele e não se desfaz sozinha.
         pausadoPorqueAJanelaSumiu = false
-        alternarPausa()
+        alternarPausa(origem: "professor")
     }
 
-    private func alternarPausa() {
+    private func alternarPausa(origem: String) {
         isPaused.toggle()
+        serverService.registrarEventoDeSessao(isPaused ? "pausa" : "retomada", ["origem": origem])
         streamState.setPaused(isPaused)
         ledger.setAccruing(!isPaused)
         // Ao retomar, o primeiro quadro tem de ser um quadro-chave: a referência dos alunos é a
@@ -459,6 +470,9 @@ public final class MainViewModel: ObservableObject {
     /// Relê o IP da máquina e, se a sessão estiver aberta, refaz o nome `.local` quando ele mudou.
     public func updateServerURL() {
         let ip = serverService.localIPAddress
+        if isSessionOpen, let registrado = ipDoNome, registrado != ip {
+            serverService.registrarEventoDeSessao("rede", ["de": registrado, "para": ip])
+        }
         self.serverURLString = "http://\(ip):\(serverService.port)"
 
         // Trocou de rede no meio da aula: o nome `.local` seguia apontando para o IP antigo, e o
@@ -553,6 +567,86 @@ public final class StreamRuntimeState: @unchecked Sendable {
     }
 }
 
+// MARK: - Arquivo de métricas da sessão (só depuração)
+extension MainViewModel {
+    /// Antes de subir o servidor: o que o `inicio` traz da captura (sem títulos de janela) e de onde
+    /// o `fim` tira os tempos por aluno.
+    fileprivate func prepararMetricasDaSessao() {
+        let res = captureService.resolution, fps = captureService.frameRate
+        let alvo = H264FrameEncoder.taxaMediaBps(largura: Int(res.width), altura: Int(res.height), fps: fps)
+        configAnterior = configuracaoAtual()
+        caixaDeConfiguracao.definir(configDeCaptura())
+        serverService.configurarSessaoDeMetricas(contexto: [
+            "resolucao": res.rawValue, "fps": fps, "taxaAlvoMbps": Double(alvo) / 1_000_000,
+            "fonte": configAnterior.fonte, "appsOcultos": configAnterior.ocultos
+        ], tempos: { [ledger] in ledger.temposPorNome() }, configuracao: { [caixa = caixaDeConfiguracao, encoder = h264EncoderService] in
+            var c = caixa.ler()
+            if let a = encoder.aplicado { c.taxaAlvoBps = a.taxaBps; c.fpsEncoder = a.fps }
+            return c
+        })
+    }
+
+    /// Genérico para abrir o `any ScreenCaptureProtocol` e alcançar o `objectWillChange` dele.
+    fileprivate func observarConfiguracaoDaCaptura<C: ScreenCaptureProtocol>(_ captura: C) {
+        captura.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.registrarMudancaDeConfiguracao() }
+            .store(in: &cancellables)
+    }
+
+    fileprivate func configuracaoAtual() -> ConfiguracaoDeMetricas {
+        let tipo = captureService.selectedSource?.type
+        return ConfiguracaoDeMetricas(resolucao: captureService.resolution.rawValue, fps: captureService.frameRate,
+                                      fonte: tipo == .window ? "janela" : "monitor", ocultos: captureService.appsOcultos.count)
+    }
+
+    fileprivate func configDeCaptura() -> ConfigDeCaptura {
+        let res = captureService.resolution, fps = captureService.frameRate
+        return ConfigDeCaptura(resolucao: res.rawValue, fpsAlvo: fps,
+                               taxaAlvoBps: H264FrameEncoder.taxaMediaBps(largura: Int(res.width), altura: Int(res.height), fps: fps),
+                               fonte: captureService.selectedSource?.type == .window ? "janela" : "monitor")
+    }
+
+    fileprivate func registrarMudancaDeConfiguracao() {
+        caixaDeConfiguracao.definir(configDeCaptura())
+        let agora = configuracaoAtual()
+        defer { configAnterior = agora }
+        guard isSessionOpen, agora != configAnterior else { return }
+        if agora.resolucao != configAnterior.resolucao || agora.fps != configAnterior.fps || agora.fonte != configAnterior.fonte {
+            // Um único evento por mudança (o bloco de configuração sobe uma vez), só com os campos que mudaram.
+            var dados: [String: Any] = [:]
+            if agora.resolucao != configAnterior.resolucao { dados["resolucaoDe"] = configAnterior.resolucao; dados["resolucaoPara"] = agora.resolucao }
+            if agora.fps != configAnterior.fps { dados["fpsDe"] = configAnterior.fps; dados["fpsPara"] = agora.fps }
+            if agora.fonte != configAnterior.fonte { dados["fonteDe"] = configAnterior.fonte; dados["fontePara"] = agora.fonte }
+            // O que o encoder usa de verdade: ele só lê fps e taxa ao criar a sessão.
+            let aplicado = h264EncoderService.aplicado
+            let escolhida = configDeCaptura()
+            dados["taxaAlvoBpsAplicada"] = aplicado?.taxaBps ?? NSNull()
+            dados["encoderAtualizado"] = aplicado != nil && aplicado?.fps == escolhida.fpsAlvo && aplicado?.taxaBps == escolhida.taxaAlvoBps
+            serverService.registrarEventoDeSessao("config", dados)
+        }
+        if agora.ocultos != configAnterior.ocultos {
+            serverService.registrarEventoDeSessao("apps", ["ocultos": agora.ocultos])
+        }
+    }
+
+    fileprivate func registrarEventoDoChat() {
+        serverService.registrarEventoDeSessao("chat", ["ligado": isChatEnabled, "alunosVeemUnsAosOutros": isStudentChatVisibleToClass])
+    }
+
+    /// `confirmado` com nome novo, `perdido` com `nil`; um nome diferente do anterior sem ter sido
+    /// perdido é o sistema renomeando por conflito (`aulacast-2.local`).
+    fileprivate func registrarEventoDoMDNS(_ nome: String?) {
+        let estado: String
+        if nome == nil { estado = "perdido" } else if let anterior = mdnsHostname, anterior != nome { estado = "conflito" } else { estado = "confirmado" }
+        serverService.registrarEventoDeSessao("mdns", ["estado": estado, "nome": nome ?? ""])
+    }
+}
+
+struct ConfiguracaoDeMetricas: Equatable {
+    var resolucao = "", fps = 0, fonte = "monitor", ocultos = 0
+}
+
 // MARK: - CaptureLifecycleObserverProtocol
 extension MainViewModel: CaptureLifecycleObserverProtocol {
     /// A captura caiu sozinha: encerra a sessão de forma limpa, avisa o professor na
@@ -560,6 +654,8 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
     public func captureDidStopUnexpectedly(reason: String) {
         guard isStreaming else { return }
 
+        // Só a categoria: o texto pode citar o título de uma janela, que não vai para o arquivo.
+        serverService.registrarEventoDeSessao("captura", ["motivo": reason.hasPrefix("A janela") ? "janela fechada" : "erro do sistema"])
         streamErrorMessage = reason
 
         // O servidor continua no ar de propósito: assim os alunos recebem o aviso,
@@ -596,7 +692,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         streamErrorMessage = "A janela “\(sourceName)” foi fechada ou minimizada, e a transmissão "
             + "foi pausada. Reabra a janela ou escolha outra fonte para continuar."
         if !isPaused {
-            alternarPausa()
+            alternarPausa(origem: "janela")
             pausadoPorqueAJanelaSumiu = true
         }
     }
@@ -604,7 +700,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
     public func captureSourceIsAvailableAgain() {
         guard pausadoPorqueAJanelaSumiu else { return }
         pausadoPorqueAJanelaSumiu = false
-        if isPaused { alternarPausa() }
+        if isPaused { alternarPausa(origem: "janela") }
         streamErrorMessage = nil
     }
 }

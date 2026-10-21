@@ -356,15 +356,15 @@ test('CONNECTED sem metricas: nenhum painel de depuração, nó, relógio nem gl
   assert.strictEqual(globalThis.document.body.filhos.length, antes);
 });
 
-test('CONNECTED com metricas:"true": o painel nasce e abre ao identificar; chat nunca é logado', () => {
+test('CONNECTED com metricas:"true": o debug nasce (só console) e explica ao identificar; chat nunca é logado', () => {
   const { app } = novoApp();
   try {
     app.handleServerMessage({ type: 'CONNECTED', payload: { metricas: 'true' } });
     assert.ok(app.debug.ativo);
     assert.strictEqual(typeof globalThis.AulaCastDebug.log, 'function');
-    assert.strictEqual(app.debug.aberto, false);
+    assert.strictEqual(app.debug.jaExplicou, false);
     app.entrarNaAula({ name: 'Ana' }, {});
-    assert.strictEqual(app.debug.aberto, true);
+    assert.strictEqual(app.debug.jaExplicou, true, 'o texto explicativo vai ao console uma vez');
     app.handleServerMessage({ type: 'CHAT_MESSAGE', payload: { sender: 'Bia', text: 'segredo', isProf: false } });
     assert.ok(app.debug.linhas.some((l) => l.includes('[srv] CHAT_MESSAGE')));
     assert.ok(!app.debug.linhas.some((l) => l.includes('segredo')));

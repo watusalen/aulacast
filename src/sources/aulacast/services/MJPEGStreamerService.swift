@@ -109,6 +109,8 @@ public final class MJPEGStreamerService {
         proximaSerie &+= 1
         serieDaConexao[ObjectIdentifier(connection)] = proximaSerie
         contadores.quadrosPorAluno[proximaSerie] = 0
+        contadores.ipPorAluno[proximaSerie] = MP4StreamerService.ip(de: connection)
+        contadores.bytesPorAluno[proximaSerie] = 0
         contadoresLock.unlock()
 
         connection.send(content: Data(headers.utf8), completion: .contentProcessed({ [weak self] erro in
@@ -150,6 +152,8 @@ public final class MJPEGStreamerService {
         contadoresLock.lock()
         if let serie = serieDaConexao.removeValue(forKey: ObjectIdentifier(connection)) {
             contadores.quadrosPorAluno.removeValue(forKey: serie)
+            contadores.ipPorAluno.removeValue(forKey: serie)
+            contadores.bytesPorAluno.removeValue(forKey: serie)
         }
         contadoresLock.unlock()
     }
@@ -231,6 +235,7 @@ public final class MJPEGStreamerService {
         contadoresLock.lock()
         defer { contadoresLock.unlock() }
         contadores.bytesEnviados &+= UInt64(bytes)
+        if let serie = serieDaConexao[ObjectIdentifier(connection)] { contadores.bytesPorAluno[serie, default: 0] &+= UInt64(bytes) }
         if quadroNovo, let serie = serieDaConexao[ObjectIdentifier(connection)],
            let quadros = contadores.quadrosPorAluno[serie] {
             contadores.quadrosPorAluno[serie] = quadros &+ 1

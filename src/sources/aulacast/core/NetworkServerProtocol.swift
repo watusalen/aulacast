@@ -40,6 +40,16 @@ public protocol NetworkServerProtocol: AnyObject {
     /// codifica H.264 deve forçar um quadro-chave no próximo quadro, para ele não ficar sem
     /// imagem até o próximo quadro-chave "de rotina".
     var onVideoViewerNeedsKeyFrame: (() -> Void)? { get set }
+    /// Só depuração (arquivo de métricas): define o que o `inicio` da sessão traz da captura
+    /// (resolução, fps, fonte...) e de onde tirar os tempos por aluno para o `fim`. Chamar antes de `start()`.
+    func configurarSessaoDeMetricas(contexto: [String: Any], tempos: (() -> [String: [String: Any]])?, configuracao: (() -> ConfigDeCaptura)?)
+    /// Só depuração: escreve uma linha de evento no arquivo de métricas (sem efeito se desligado).
+    func registrarEventoDeSessao(_ tipo: String, _ dados: [String: Any])
+}
+
+public extension NetworkServerProtocol {
+    func configurarSessaoDeMetricas(contexto: [String: Any], tempos: (() -> [String: [String: Any]])?, configuracao: (() -> ConfigDeCaptura)?) {}
+    func registrarEventoDeSessao(_ tipo: String, _ dados: [String: Any]) {}
 }
 
 /// Servidor capaz de anunciar a si mesmo via Bonjour, na própria porta.

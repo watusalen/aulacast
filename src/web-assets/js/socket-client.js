@@ -22,6 +22,15 @@ export class SocketClient {
     this.heartbeatTimer = null;
     this.manuallyStopped = false;
     this.lastMessageAt = 0;
+    /** Último RTT PING/PONG em ms; `null` até o primeiro PONG. */
+    this.ultimoRttMs = null;
+    this.ultimoAtrasoMs = null;
+    this.ultimoCodigo = null;
+  }
+
+  /** RTT mais recente medido pelo PING/PONG (`null` se ainda não houve). */
+  rttMs() {
+    return this.ultimoRttMs;
   }
 
   /**
@@ -72,6 +81,11 @@ export class SocketClient {
   }
 
   handleOpen() {
+    // Só agora há canal para contar a queda anterior (durante ela nada saía).
+    if (this.reconnectAttempts > 0) {
+      globalThis.AulaCastMetricas?.evento('ws_reconexao',
+        { atrasoMs: this.ultimoAtrasoMs, codigo: this.ultimoCodigo, tentativas: this.reconnectAttempts });
+    }
     this.reconnectAttempts = 0;
     this.lastMessageAt = Date.now();
     globalThis.AulaCastDebug?.log('ws', 'aberto');
@@ -84,7 +98,10 @@ export class SocketClient {
     try {
       const data = JSON.parse(event.data);
       if (data.type === 'PONG') {
-        if (this.pingEnviadoEm) globalThis.AulaCastDebug?.rtt(Date.now() - this.pingEnviadoEm);
+        if (this.pingEnviadoEm) {
+          this.ultimoRttMs = Date.now() - this.pingEnviadoEm;
+          globalThis.AulaCastDebug?.rtt(this.ultimoRttMs);
+        }
         this.pingEnviadoEm = 0;
       } else {
         this.onMessage(data);
@@ -96,6 +113,7 @@ export class SocketClient {
 
   handleClose(evento) {
     this.stopHeartbeat();
+    this.ultimoCodigo = evento && typeof evento.code === 'number' ? evento.code : null;
     globalThis.AulaCastDebug?.log('ws', 'fechado', evento && evento.code !== undefined
       ? { codigo: evento.code, motivo: evento.reason || '', limpo: evento.wasClean } : 'sem evento (silêncio ou erro)');
 
@@ -131,6 +149,7 @@ export class SocketClient {
   scheduleReconnect() {
     if (this.reconnectTimer) return;
     this.reconnectAttempts++;
+    this.ultimoAtrasoMs = this.nextDelay();
     globalThis.AulaCastDebug?.log('ws', `reconexão em ${this.nextDelay()} ms (tentativa ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {

@@ -203,7 +203,9 @@ export class VideoStreamPlayer {
       bytes: this.bytesRecebidos,
       quadros: qualidade ? qualidade.totalVideoFrames : null,
       perdidos: qualidade ? qualidade.droppedVideoFrames : null,
-      lagMs
+      lagMs,
+      bufferS: faixas && faixas.length ? Math.max(0, faixas.end(faixas.length - 1) - this.video.currentTime) : null,
+      playbackRate: typeof this.video.playbackRate === 'number' ? this.video.playbackRate : null
     };
   }
 
@@ -368,6 +370,7 @@ export class VideoStreamPlayer {
       globalThis.AulaCastDebug?.log('mse', `appendBuffer falhou: ${erro && erro.name}`);
       if (erro && erro.name === 'QuotaExceededError' && !this.retentouQuota && this.liberarQuota()) {
         this.retentouQuota = true;
+        globalThis.AulaCastMetricas?.evento('quota', { acao: 'liberou e retentou' });
         this.filaDePedacos.unshift(proximo);
         return;
       }
@@ -389,6 +392,7 @@ export class VideoStreamPlayer {
     const corte = fim - MARGEM_QUOTA_S;
     if (!(corte > inicio)) return false;
     try {
+      globalThis.AulaCastMetricas?.evento('quota', { acao: 'descartou buffer e foi ao vivo' });
       globalThis.AulaCastDebug?.log('seek', `quota cheia: descartando ${inicio.toFixed(2)}-${corte.toFixed(2)} s e indo à borda ao vivo`);
       sb.remove(inicio, corte);
       this.video.currentTime = fim - FOLGA_AO_VIVO_S;
@@ -438,6 +442,10 @@ export class VideoStreamPlayer {
       }
     }
     if (alvo !== null) {
+      globalThis.AulaCastMetricas?.evento('seek', {
+        motivo: this.faixaQueContem(faixas, t) >= 0 ? 'atraso' : t < faixas.start(0) ? 'antes do buffer' : 'buraco',
+        saltoS: Math.round((alvo - t) * 100) / 100
+      });
       globalThis.AulaCastDebug?.log('seek', `${t.toFixed(2)} -> ${alvo.toFixed(2)} s`,
         this.faixaQueContem(faixas, t) >= 0 ? 'atraso acima de 2 s' : t < faixas.start(0) ? 'antes do buffer (late joiner)' : 'buraco no buffer');
       this.video.currentTime = alvo;
@@ -524,6 +532,7 @@ export class VideoStreamPlayer {
       return;
     }
     this.onEstado('reconectando');
+    globalThis.AulaCastMetricas?.evento('video_reconexao', { tentativa: this.tentativas, motivo: String(motivo) });
     const espera = Math.min(
       STREAM_RETRY_BASE_MS * Math.pow(2, this.tentativas - 1),
       STREAM_RETRY_MAX_MS

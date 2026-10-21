@@ -56,6 +56,7 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     private var ultimoPixelBuffer: CVPixelBuffer?
     private var ultimoTempo: CMTime?
     private var fpsDaSessao = 30
+    private var taxaDaSessao: Int?
     /// Espera antes de re-codificar o quadro retido: se um quadro real chegar nesse intervalo,
     /// ele já cumpre o pedido e não gastamos um IDR extra.
     private static let esperaDoReenvioNs: UInt64 = 60_000_000
@@ -63,6 +64,13 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
     /// Quadros por segundo da captura (`ScreenCaptureService.frameRate`). Entra no cálculo da taxa
     /// de bits e do intervalo entre quadros-chave; vale na próxima (re)criação da sessão.
     public var framesPerSecond: Int = 30
+
+    /// fps e taxa média alvo que a sessão atual do encoder REALMENTE usa (lidos na criação da
+    /// sessão, não os escolhidos agora no painel); `nil` antes do 1º quadro. Para o arquivo de métricas.
+    public var aplicado: (fps: Int, taxaBps: Int)? {
+        vooLock.lock(); defer { vooLock.unlock() }
+        return taxaDaSessao.map { (fpsDaSessao, $0) }
+    }
 
     // MARK: - Controle de taxa
 
@@ -279,6 +287,9 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         // Controle de taxa: média alvo e teto de picos (DataRateLimits = [bytes, segundos]).
         let taxaMedia = Self.taxaMediaBps(largura: Int(largura), altura: Int(altura), fps: fps)
         VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_AverageBitRate, value: taxaMedia as CFNumber)
+        vooLock.lock()
+        taxaDaSessao = taxaMedia
+        vooLock.unlock()
         let tetoEmBytes = Int(Double(taxaMedia) * Self.multiplicadorDoTeto / 8)
         VTSessionSetProperty(novaSessao, key: kVTCompressionPropertyKey_DataRateLimits,
                               value: [tetoEmBytes, 1] as CFArray)

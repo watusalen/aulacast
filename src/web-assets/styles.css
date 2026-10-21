@@ -1819,38 +1819,3 @@ input {
     animation: none !important;
   }
 }
-
-/* ------------------------------------------------------------------
-   Painel de depuração (só existe com metricas:"true" no CONNECTED)
-   ------------------------------------------------------------------ */
-.debug-toggle {
-  position: fixed; right: 12px; bottom: 12px; z-index: 50;
-  padding: 6px 12px; border: 1px solid var(--surface-container-highest); border-radius: 16px;
-  background: var(--surface-container-high); color: var(--on-surface);
-  font: 500 12px/1 system-ui, sans-serif; cursor: pointer;
-}
-.debug-painel {
-  position: fixed; z-index: 49; right: 0; top: 0; bottom: 0; width: min(440px, 100vw);
-  display: flex; flex-direction: column; gap: 8px; padding: 12px;
-  background: var(--surface-container); color: var(--on-surface);
-  border-left: 1px solid var(--surface-container-highest); box-shadow: -4px 0 16px rgba(0, 0, 0, .25);
-  font: 12px/1.4 system-ui, sans-serif; overflow: hidden;
-}
-.debug-painel[hidden] { display: none; }
-.debug-topo, .debug-acoes { display: flex; align-items: center; gap: 8px; }
-.debug-topo strong { flex: 1; }
-.debug-btn {
-  padding: 4px 10px; border: 0; border-radius: 12px; cursor: pointer;
-  background: var(--primary-container); color: var(--on-primary-container); font: inherit;
-}
-.debug-status { color: var(--on-surface-variant); }
-.debug-sobre { max-height: 38%; overflow: auto; color: var(--on-surface-variant); }
-.debug-sobre p { margin: 0 0 4px; }
-.debug-log {
-  flex: 1; min-height: 120px; margin: 0; padding: 8px; overflow: auto; white-space: pre-wrap; word-break: break-all;
-  background: var(--surface); border-radius: 8px; font: 11px/1.35 ui-monospace, Menlo, monospace;
-}
-@media (max-width: 600px) {
-  /* Em tela estreita vira folha inferior: o vídeo continua à vista acima dela. */
-  .debug-painel { top: auto; width: 100vw; height: 60vh; border-left: 0; border-top: 1px solid var(--surface-container-highest); }
-}

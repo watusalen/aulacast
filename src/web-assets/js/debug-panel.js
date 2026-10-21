@@ -68,34 +68,37 @@ export class DebugPanel {
     this.timers = [];
     this.rtts = [];
     this.frag = { n: 0, bytes: 0, chave: 0, ultimoLog: 0, bytesDesdeLog: 0, chaveDesdeLog: 0 };
-    this.jaAbriu = false;
-    this.aberto = false;
-    this.seguirFim = true;
+    this.jaExplicou = false;
     this.ativo = false;
   }
 
-  /** Cria os nós, os relógios e o global. Idempotente. */
+  /**
+   * Liga os relógios e o global `AulaCastDebug`. Idempotente. NÃO cria nenhum elemento na página:
+   * tudo aparece no console do navegador (Inspecionar > Console).
+   */
   ativar() {
     if (this.ativo) return;
     this.ativo = true;
-    this.montar();
     this.win.AulaCastDebug = {
       log: (cat, msg, dados) => this.log(cat, msg, dados),
       rtt: (ms) => this.registrarRtt(ms),
-      fragmentos: (bytes) => this.registrarFragmentos(bytes)
+      fragmentos: (bytes) => this.registrarFragmentos(bytes),
+      // Comandos para digitar no console.
+      texto: () => this.textoDoLog(),
+      copiar: () => this.copiar(),
+      baixar: () => this.baixar(),
+      ajuda: () => this.ajuda()
     };
     this.timers.push(this.setIntervalImpl(() => this.amostrarVideo(), INTERVALO_VIDEO_MS));
     this.timers.push(this.setIntervalImpl(() => this.resumirRtt(), INTERVALO_RTT_MS));
     this.doc.addEventListener('visibilitychange', () => this.log('pagina', `visibilidade: ${this.doc.visibilityState}`));
-    this.log('painel', 'depuração ativada pelo servidor (CONNECTED.metricas)');
+    this.log('debug', 'depuração ativada pelo servidor (CONNECTED.metricas); só no console');
   }
 
   desativar() {
     if (!this.ativo) return;
     this.timers.forEach((t) => this.clearIntervalImpl(t));
     this.timers = [];
-    this.doc.body.removeChild(this.raiz);
-    this.doc.body.removeChild(this.botao);
     delete this.win.AulaCastDebug;
     this.ativo = false;
   }
@@ -107,59 +110,16 @@ export class DebugPanel {
     return e;
   }
 
-  botaoDe(classe, texto, aoClicar) {
-    const b = this.el('button', classe, texto);
-    b.setAttribute('type', 'button');
-    b.addEventListener('click', aoClicar);
-    return b;
-  }
-
-  montar() {
-    const raiz = this.el('aside', 'debug-painel');
-    raiz.setAttribute('aria-label', 'Painel de depuração');
-    raiz.hidden = true;
-    const topo = this.el('div', 'debug-topo');
-    topo.appendChild(this.el('strong', '', 'Depuração de rede'));
-    topo.appendChild(this.botaoDe('debug-btn', 'Fechar', () => this.definirAberto(false)));
-    raiz.appendChild(topo);
-
-    const sobre = this.el('div', 'debug-sobre');
-    TEXTO_EXPLICATIVO.forEach((t) => sobre.appendChild(this.el('p', '', t)));
-    raiz.appendChild(sobre);
-
-    const acoes = this.el('div', 'debug-acoes');
-    this.status = this.el('span', 'debug-status', '');
-    acoes.appendChild(this.botaoDe('debug-btn', 'Copiar log', () => this.copiar()));
-    acoes.appendChild(this.botaoDe('debug-btn', 'Baixar .txt', () => this.baixar()));
-    acoes.appendChild(this.status);
-    raiz.appendChild(acoes);
-
-    this.areaLog = this.el('pre', 'debug-log');
-    this.areaLog.addEventListener('scroll', () => {
-      const a = this.areaLog;
-      // Rolou para cima: pausa o auto-scroll; voltou ao fim: retoma.
-      this.seguirFim = a.scrollHeight - a.scrollTop - a.clientHeight < 24;
-    });
-    raiz.appendChild(this.areaLog);
-
-    this.botao = this.botaoDe('debug-toggle', 'Debug', () => this.definirAberto(!this.aberto));
-    this.raiz = raiz;
-    this.doc.body.appendChild(raiz);
-    this.doc.body.appendChild(this.botao);
-  }
-
-  definirAberto(aberto) {
-    this.aberto = aberto;
-    this.raiz.hidden = !aberto;
-    this.botao.setAttribute('aria-expanded', String(aberto));
-    if (aberto) this.rolarParaOFim();
-  }
-
-  /** Abre expandido na primeira vez em que o aluno entra; depois só o botão abre/fecha. */
+  /** Uma vez, quando o aluno entra: explica o sistema no console e diz como copiar o log. */
   aoIdentificar() {
-    if (!this.ativo || this.jaAbriu) return;
-    this.jaAbriu = true;
-    this.definirAberto(true);
+    if (!this.ativo || this.jaExplicou) return;
+    this.jaExplicou = true;
+    this.cons.info(`[AulaCast debug] Como o sistema funciona:\n${TEXTO_EXPLICATIVO.map((t) => `• ${t}`).join('\n')}`);
+    this.ajuda();
+  }
+
+  ajuda() {
+    this.cons.info('[AulaCast debug] Comandos: AulaCastDebug.texto() mostra o log, .copiar() copia, .baixar() salva um .txt, .ajuda() repete esta mensagem.');
   }
 
   log(categoria, msg, dados) {
@@ -168,16 +128,7 @@ export class DebugPanel {
     const linha = `${carimbo(this.agora())} [${categoria}] ${msg}${extra ? ` ${extra}` : ''}`;
     this.cons.log(`[AulaCast debug] ${linha}`);
     this.linhas.push(linha);
-    this.areaLog.appendChild(this.doc.createTextNode(`${linha}\n`));
-    if (this.linhas.length > MAX_LINHAS_LOG) {
-      this.linhas.shift();
-      this.areaLog.removeChild(this.areaLog.firstChild);
-    }
-    if (this.aberto && this.seguirFim) this.rolarParaOFim();
-  }
-
-  rolarParaOFim() {
-    this.areaLog.scrollTop = this.areaLog.scrollHeight;
+    if (this.linhas.length > MAX_LINHAS_LOG) this.linhas.shift();
   }
 
   registrarRtt(ms) {
@@ -236,8 +187,8 @@ export class DebugPanel {
     if (clip?.writeText && this.win.isSecureContext) {
       try {
         await clip.writeText(texto);
-        this.status.textContent = 'copiado';
-        return;
+        this.cons.info('[AulaCast debug] log copiado');
+        return true;
       } catch (_) { /* cai no plano B */ }
     }
     const ta = this.el('textarea');
@@ -250,7 +201,8 @@ export class DebugPanel {
     let ok = false;
     try { ok = Boolean(this.doc.execCommand('copy')); } catch (_) { ok = false; }
     this.doc.body.removeChild(ta);
-    this.status.textContent = ok ? 'copiado (modo http)' : 'não foi possível copiar';
+    this.cons.info(ok ? '[AulaCast debug] log copiado (modo http)' : '[AulaCast debug] não foi possível copiar; use AulaCastDebug.baixar()');
+    return ok;
   }
 
   baixar() {

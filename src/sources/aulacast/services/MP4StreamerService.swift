@@ -71,7 +71,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
     private static let janelaSemKeyFrameNs: UInt64 = 2_000_000_000
     private var ultimoKeyFramePublicado: DispatchTime?
 
-    private static func ip(de connection: NWConnection) -> String {
+    static func ip(de connection: NWConnection) -> String {
         if case .hostPort(let host, _) = connection.endpoint {
             return "\(host)".split(separator: "%").first.map(String.init) ?? "\(host)"
         }
@@ -95,7 +95,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
 
     /// Pede um quadro-chave, no máximo um por janela. Um pedido dentro da janela é adiado para o
     /// fim dela (não se perde). O(1).
-    private func pedirKeyFrame() {
+    private func pedirKeyFrame(origem: String) {
         keyFrameLock.lock()
         let agora = DispatchTime.now()
         if let ultimo = ultimoPedidoDeKeyFrame {
@@ -114,6 +114,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         ultimoPedidoDeKeyFrame = agora
         pedidosAtendidos += 1
         keyFrameLock.unlock()
+        onEvento?("quadroChave", ["origem": origem])
         onNeedsKeyFrame?()
     }
 
@@ -123,8 +124,14 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         ultimoPedidoDeKeyFrame = DispatchTime.now()
         pedidosAtendidos += 1
         keyFrameLock.unlock()
+        onEvento?("quadroChave", ["origem": "pedido adiado"])
         onNeedsKeyFrame?()
     }
+
+    /// Eventos para o arquivo de métricas de depuração (`fila`, `quadroChave`). Chamado de
+    /// qualquer thread (`fila` sai com o lock das conexões tomado: o ouvinte só grava uma
+    /// linha e nunca deve chamar de volta o serviço).
+    public var onEvento: ((_ tipo: String, _ dados: [String: Any]) -> Void)?
 
     private var pedidosAtendidos = 0
     private var estourosDaFila = 0
@@ -162,16 +169,28 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         contadoresLock.lock()
         defer { contadoresLock.unlock() }
         contadores.bytesEnviados &+= UInt64(bytes)
-        if fragmentoDeMidia, let serie = serieDaConexao[ObjectIdentifier(connection)],
-           let quadros = contadores.quadrosPorAluno[serie] {
+        guard let serie = serieDaConexao[ObjectIdentifier(connection)] else { return }
+        contadores.bytesPorAluno[serie, default: 0] &+= UInt64(bytes)
+        if fragmentoDeMidia, let quadros = contadores.quadrosPorAluno[serie] {
             contadores.quadrosPorAluno[serie] = quadros &+ 1
         }
+    }
+
+    private func contarEstouro(de connection: NWConnection) {
+        contadoresLock.lock()
+        if let serie = serieDaConexao[ObjectIdentifier(connection)] {
+            contadores.estourosPorAluno[serie, default: 0] &+= 1
+        }
+        contadoresLock.unlock()
     }
 
     private func esquecerSerie(de connection: NWConnection) {
         contadoresLock.lock()
         if let serie = serieDaConexao.removeValue(forKey: ObjectIdentifier(connection)) {
             contadores.quadrosPorAluno.removeValue(forKey: serie)
+            contadores.ipPorAluno.removeValue(forKey: serie)
+            contadores.bytesPorAluno.removeValue(forKey: serie)
+            contadores.estourosPorAluno.removeValue(forKey: serie)
         }
         contadoresLock.unlock()
     }
@@ -235,9 +254,11 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         proximaSerie &+= 1
         serieDaConexao[ObjectIdentifier(connection)] = proximaSerie
         contadores.quadrosPorAluno[proximaSerie] = 0
+        contadores.ipPorAluno[proximaSerie] = estado.ip
+        contadores.bytesPorAluno[proximaSerie] = 0
         contadoresLock.unlock()
 
-        pedirKeyFrame()
+        pedirKeyFrame(origem: "aluno novo")
 
         connection.send(content: cabecalho, completion: .contentProcessed({ [weak self] erro in
             guard let self else { return }
@@ -368,6 +389,8 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
                     keyFrameLock.lock()
                     estourosDaFila += 1
                     keyFrameLock.unlock()
+                    contarEstouro(de: estado.connection)
+                    onEvento?("fila", ["ip": estado.ip])
                     if !isKeyFrame {
                         estado.aguardandoKeyFrame = true
                         precisaDeKeyFrame = true
@@ -383,7 +406,7 @@ public final class MP4StreamerService: FMP4FragmentReceiverProtocol {
         } ?? false
         lock.unlock()
 
-        if precisaDeKeyFrame && !keyFrameRecente { pedirKeyFrame() }
+        if precisaDeKeyFrame && !keyFrameRecente { pedirKeyFrame(origem: "aluno perdeu a fila") }
         for estado in alvos {
             bombear(estado.connection)
         }
