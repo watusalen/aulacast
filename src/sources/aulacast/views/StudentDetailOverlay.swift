@@ -14,7 +14,7 @@ struct StudentDetailOverlay: View {
                     .accessibilityHidden(true)
                     .transition(.opacity.animation(M3.Mola.efeito))
 
-                StudentDetailCard(viewModel: viewModel, clientId: id, fechar: fechar)
+                StudentDetailCard(viewModel: viewModel, pessoaId: id, fechar: fechar)
                     .transition(.scale(scale: 0.92).combined(with: .opacity).animation(M3.Mola.lenta))
             }
         }
@@ -26,8 +26,10 @@ struct StudentDetailOverlay: View {
 
 private struct StudentDetailCard: View {
     @ObservedObject var viewModel: MainViewModel
-    let clientId: String
+    let pessoaId: String
     let fechar: () -> Void
+
+    @State private var nomesAbertos = false
 
     private static let hora: DateFormatter = {
         let f = DateFormatter()
@@ -38,7 +40,7 @@ private struct StudentDetailCard: View {
     var body: some View {
         // Um quadro por segundo basta: os números só mudam em segundos.
         TimelineView(.periodic(from: .now, by: 1)) { contexto in
-            if let resumo = viewModel.ledger.resumo(clientId: clientId, agora: contexto.date) {
+            if let resumo = viewModel.ledger.resumo(pessoaId: pessoaId, agora: contexto.date) {
                 conteudo(resumo)
             }
         }
@@ -58,7 +60,7 @@ private struct StudentDetailCard: View {
     }
 
     private func conteudo(_ r: AttendanceSummary) -> some View {
-        let nome = r.nome ?? viewModel.clientManager.clients.first { $0.id == clientId }?.name ?? "Aluno"
+        let nome = r.nome ?? "Aluno"
         let porcentagem = Int((r.fracaoAVista * 100).rounded())
         return VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 14) {
@@ -90,9 +92,73 @@ private struct StudentDetailCard: View {
                 linha("Saídas da aula (aba ou janela)", "\(r.saidas)")
                 linha("Maior trecho sem sair", formatarDuracao(r.maiorTrecho))
                 linha("Desconexões e voltas", "\(r.desconexoes)")
+                if r.nomes.count > 1 { nomesUsados(r.nomes) }
             }
         }
         .padding(24)
+    }
+
+    /// Última linha: "Nomes usados (N)" expande uma linha do tempo, do primeiro nome ao atual.
+    private func nomesUsados(_ nomes: [NomeUsado]) -> some View {
+        VStack(spacing: 0) {
+            M3Divisor()
+            Button { withAnimation(M3.Mola.padrao) { nomesAbertos.toggle() } } label: {
+                HStack {
+                    Text("Nomes usados (\(nomes.count))").m3(.bodyMedium).foregroundColor(M3.onSurfaceVariant)
+                    Spacer(minLength: 8)
+                    M3Icone(nome: "expand_more", tamanho: 20)
+                        .foregroundColor(M3.onSurfaceVariant)
+                        .rotationEffect(.degrees(nomesAbertos ? 180 : 0))
+                }
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(nomesAbertos ? "Expandido" : "Recolhido")
+
+            if nomesAbertos {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(nomes.enumerated()), id: \.offset) { i, n in
+                            itemDaLinhaDoTempo(n, ultimo: i == nomes.count - 1)
+                        }
+                    }
+                    .padding(.top, 4).padding(.bottom, 8)
+                }
+                .frame(maxHeight: 180)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .clipped()
+        .animation(M3.Mola.padrao, value: nomesAbertos)
+    }
+
+    private func itemDaLinhaDoTempo(_ n: NomeUsado, ultimo: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                Circle().fill(n.atual ? M3.primary : M3.outline).frame(width: 10, height: 10).padding(.top, 4)
+                if !ultimo { Rectangle().fill(M3.outlineVariant).frame(width: 2).frame(maxHeight: .infinity) }
+            }
+            .frame(width: 10)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
+                    if n.atual { etiqueta("nome atual", M3.primaryContainer, M3.onPrimaryContainer) }
+                    if n.viaIP { etiqueta("mesmo IP", M3.secondaryContainer, M3.onSecondaryContainer) }
+                }
+                Text("\(Self.hora.string(from: n.primeiraVez)) – \(Self.hora.string(from: n.ultimaVez))")
+                    .m3(.bodySmall).foregroundColor(M3.onSurfaceVariant).monospacedDigit()
+            }
+            .padding(.bottom, ultimo ? 0 : 12)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func etiqueta(_ texto: String, _ fundo: Color, _ frente: Color) -> some View {
+        Text(texto).m3(.labelSmall).foregroundColor(frente)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(fundo))
     }
 
     private func destaque(_ titulo: String, _ valor: String) -> some View {

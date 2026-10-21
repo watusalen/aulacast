@@ -32,7 +32,7 @@ fi
 # A versão vem do Info.plist recém-escrito, e não de uma cópia aqui: dois lugares guardando
 # o mesmo número acabam discordando, e aí o nome do arquivo mente sobre o que há dentro.
 VERSAO="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
-# Build com as métricas de depuração (AULACAST_DEBUG_METRICS=1) leva "-debug" no nome: não é
+# Build com o console de métricas (AULACAST_DEBUG_METRICS=1: só o console/broadcast; a coleta é permanente) leva "-debug" no nome: não é
 # o arquivo para distribuir a alunos.
 SUFIXO=""
 [ "${AULACAST_DEBUG_METRICS:-}" = "1" ] && SUFIXO="-debug"

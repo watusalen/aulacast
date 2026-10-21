@@ -5,9 +5,9 @@ Itens **Proposto** ainda esperam aprovação do usuário.
 
 | Documento | Conteúdo |
 | :--- | :--- |
-| [01-especificacao-requisitos.md](01-especificacao-requisitos.md) | RF-01..RF-20 (RF-12 descartado), RNF-01..RNF-10, perguntas em aberto |
-| [02-casos-de-uso.md](02-casos-de-uso.md) | UC-01..UC-10 |
-| [03-historias-de-usuario.md](03-historias-de-usuario.md) | US-01..US-14 |
+| [01-especificacao-requisitos.md](01-especificacao-requisitos.md) | RF-01..RF-21 (RF-12 descartado), RNF-01..RNF-10, perguntas em aberto |
+| [02-casos-de-uso.md](02-casos-de-uso.md) | UC-01..UC-11 |
+| [03-historias-de-usuario.md](03-historias-de-usuario.md) | US-01..US-15 |
 | [04-arquitetura-e-design.md](04-arquitetura-e-design.md) | Componentes, protocolo WebSocket, medições, limite de escala (4.1.1), estrutura de arquivos |
 | [padroes.md](padroes.md) | Padrões de projeto presentes no código |
 | [feedback-tela-do-aluno.md](feedback-tela-do-aluno.md) | Feedback da turma e o que foi feito |
@@ -19,6 +19,7 @@ Itens **Proposto** ainda esperam aprovação do usuário.
 - **RNF-10** Escala da transmissão: Proposto, metas **a definir**.
 - **RF-20** Tempo de cada aluno na aula, **UC-10**, **US-14**, **ADR-005**: Proposto.
 - **UC-09** Ocultar apps. **US-11**, **US-12**, **US-13** (esta liga ao RNF-10).
+- **RF-21** Chamada em CSV ao encerrar, **UC-11**, **US-15**, **ADR-006** Métricas permanentes: Proposto. ADR-005 ganhou os nomes usados; ADR-004 ganhou nota de substituição parcial.
 
 ## ADR (decisões de arquitetura)
 Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Substituído por".
@@ -30,3 +31,4 @@ Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Su
 | [ADR-003](adr/ADR-003-chat-entre-alunos-opcional.md) | Chat entre alunos opcional, desligado por padrão | Proposto (retroativo) |
 | [ADR-004](adr/ADR-004-h264-fmp4-transmissao-principal.md) | H.264/fMP4 como transmissão principal; MJPEG como compatibilidade | Proposto |
 | [ADR-005](adr/ADR-005-tempo-do-aluno-na-aula.md) | Tempo do aluno: identidade por IP/nome, pausa excluída, "à vista" = aba visível e em foco | Proposto |
+| [ADR-006](adr/ADR-006-metricas-permanentes.md) | Métricas permanentes em todo build; console/broadcast só em depuração | Proposto |

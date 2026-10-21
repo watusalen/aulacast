@@ -24,11 +24,11 @@ IDENTIFICADOR="com.aulacast"
 VERSAO="2.0.0"
 MACOS_MINIMO="13.0"
 
-# Opt-in: métricas por aluno (console do navegador + arquivo ~/AulaCast-metricas). Fora disso o
-# app distribuído não contém esse comportamento.
+# A coleta de métricas e o arquivo ~/Documents/AulaCast/Metricas existem em TODO build (ADR-006).
+# Opt-in: só o CONSOLE no navegador do aluno (METRICS_TABLE, DEBUG_INFO, painel Debug).
 EXTRA_SWIFT=()
 if [ "${AULACAST_DEBUG_METRICS:-}" = "1" ]; then
-  echo "==> AULACAST_DEBUG_METRICS=1: compilando COM as métricas por aluno (-DMETRICAS_DEBUG)"
+  echo "==> AULACAST_DEBUG_METRICS=1: compilando COM o console de métricas no navegador do aluno (-DMETRICAS_DEBUG)"
   EXTRA_SWIFT=(-Xswiftc -DMETRICAS_DEBUG)
 fi
 

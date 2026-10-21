@@ -71,4 +71,9 @@ O aplicativo principal é um app nativo para macOS escrito em **Swift / SwiftUI*
 ---
 
 ### RF-20: Tempo de cada aluno na aula (Proposto)
-O professor clica na linha de um aluno na aba Alunos e vê um painel com: tempo **na aula**, tempo **com a aula à vista** (aba visível e em foco, não é rastreio do olhar), porcentagem, saídas da aula, maior trecho sem sair e desconexões e voltas. O tempo conta só com a transmissão no ar e sem pausa; abas simultâneas da mesma pessoa contam uma vez. Regras de identidade: ADR-005.
+O professor clica na linha de um aluno na aba Alunos e vê um painel com: tempo **na aula**, tempo **com a aula à vista** (aba visível e em foco, não é rastreio do olhar), porcentagem, saídas da aula, maior trecho sem sair e desconexões e voltas. O tempo conta só com a transmissão no ar e sem pausa; abas simultâneas da mesma pessoa contam uma vez. Regras de identidade: ADR-005. O perfil também lista os **nomes usados** pela pessoa (linha do tempo, com a marca "mesmo IP") e continua abrindo depois que o aluno sai; clicar no nome do aluno no chat abre o mesmo perfil.
+
+---
+
+### RF-21: Chamada em CSV ao encerrar (Proposto)
+Ao encerrar a transmissão (Parar, queda da captura ou falha do servidor), se ao menos uma pessoa se identificou, o app grava `~/Documents/AulaCast/Chamadas/chamada-AAAA-MM-DD-HHmm.csv` (hora local, nunca sobrescreve: sufixo `-2`, `-3`). Formato: separador `;`, UTF-8 com BOM, CRLF, decimais com vírgula; colunas `Nome;Presença;Entrou;Saiu;Minutos na aula;Minutos com a aula à vista;Percentual à vista`. Uma linha por **pessoa** (a identidade do ADR-005 junta reconexões e nomes ligados pelo IP; Nome = o mais recente), em ordem alfabética; quem se identificou é "Presente"; quem nunca se identificou não entra. Nomes digitados por alunos são escapados (aspas RFC 4180) e fórmulas neutralizadas (`=`, `+`, `-`, `@`, tab, CR no início ganham apóstrofo). Sem diálogo: um aviso (snackbar) "Chamada salva (N alunos)" com "Mostrar no Finder", que some em ~8 s; falha de disco mostra "Não foi possível salvar a chamada" e não derruba o app.

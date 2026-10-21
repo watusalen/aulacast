@@ -356,10 +356,18 @@ test('CONNECTED sem metricas: nenhum painel de depuração, nó, relógio nem gl
   assert.strictEqual(globalThis.document.body.filhos.length, antes);
 });
 
-test('CONNECTED com metricas:"true": o debug nasce (só console) e explica ao identificar; chat nunca é logado', () => {
+test('CONNECTED só com metricas:"true" (release): reporta em silêncio, sem painel nem console', () => {
+  const { app } = novoApp();
+  app.handleServerMessage({ type: 'CONNECTED', payload: { metricas: 'true' } });
+  assert.strictEqual(app.metricas.habilitado, true);
+  assert.strictEqual(app.debug, null);
+  assert.strictEqual(globalThis.AulaCastDebug, undefined);
+});
+
+test('CONNECTED com debugConsole:"true": o debug nasce (só console) e explica ao identificar; chat nunca é logado', () => {
   const { app } = novoApp();
   try {
-    app.handleServerMessage({ type: 'CONNECTED', payload: { metricas: 'true' } });
+    app.handleServerMessage({ type: 'CONNECTED', payload: { metricas: 'true', debugConsole: 'true' } });
     assert.ok(app.debug.ativo);
     assert.strictEqual(typeof globalThis.AulaCastDebug.log, 'function');
     assert.strictEqual(app.debug.jaExplicou, false);

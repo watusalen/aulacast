@@ -188,6 +188,7 @@ struct M3Icone: View {
         "chevron_right": 0xE5CC,
         "circle": 0xEF4A,
         "close": 0xE5CD,
+        "expand_more": 0xE5CF,
         "cloud_off": 0xE2C1,
         "co_present": 0xEAF0,
         "content_copy": 0xE14D,
@@ -440,23 +441,40 @@ struct M3LinhaDeAlternancia: View {
                     .labelsHidden()
                     .allowsHitTesting(false)
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(Estilo())
-        .padding(.horizontal, 24)
-        .padding(.vertical, 8)
+        .buttonStyle(M3EstiloDeLinha())
+        .padding(.horizontal, 8)
     }
+}
 
-    /// Mesma camada de estado (hover/toque) dos outros controles do M3 nesta janela — só
-    /// que sobre a linha inteira, retangular, em vez da forma arredondada de um botão.
-    private struct Estilo: ButtonStyle {
-        @Environment(\.isEnabled) private var ativo
+/// Estilo de botão de linha/texto com a camada de estado arredondada (hover 8%, clique 10%).
+/// Usado nas linhas de interruptor, na lista de alunos e no nome do aluno no chat.
+struct M3EstiloDeLinha: ButtonStyle {
+    var canto: CGFloat = M3.Canto.grande
+    @Environment(\.isEnabled) private var ativo
 
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .modifier(M3CamadaDeEstado(cor: M3.onSurface, formato: AnyShape(Rectangle()), pressionado: configuration.isPressed))
-                .opacity(ativo ? 1 : 0.38)
-        }
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .modifier(M3CamadaDeEstado(cor: M3.onSurface,
+                                       formato: AnyShape(RoundedRectangle(cornerRadius: canto, style: .continuous)),
+                                       pressionado: configuration.isPressed))
+            .opacity(ativo ? 1 : 0.38)
+    }
+}
+
+// MARK: - Divisor
+
+/// Linha de 1 pt em `outlineVariant`. `recuo` 0 = largura total; 16 = recuada dos dois lados.
+struct M3Divisor: View {
+    var recuo: CGFloat = 0
+
+    var body: some View {
+        Rectangle().fill(M3.outlineVariant).frame(height: 1)
+            .padding(.horizontal, recuo)
+            .accessibilityHidden(true)
     }
 }
 

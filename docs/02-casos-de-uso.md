@@ -171,4 +171,15 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
   1. O professor clica em qualquer parte da linha do aluno na aba **Alunos**.
   2. O sistema abre um painel centrado na janela, atualizado a cada segundo.
   3. O professor fecha com Esc, clicando fora ou no botão de fechar.
-- **Regra de negócio:** o painel fecha sozinho se o aluno desconectar. Regras de contagem e identidade: ADR-005.
+- **Regra de negócio:** o painel NÃO fecha se o aluno desconectar (quem saiu continua consultável). A última linha "Nomes usados (N)", visível com N > 1, expande a linha do tempo dos nomes. O nome do aluno no chat abre o mesmo painel. Regras de contagem e identidade: ADR-005.
+
+---
+
+### UC-11: Salvar a chamada ao encerrar (Proposto)
+- **Ator Principal:** Professor
+- **Pré-condição:** transmissão no ar e ao menos um aluno identificado (RF-21).
+- **Fluxo Principal:**
+  1. O professor para a transmissão (ou a captura/servidor cai).
+  2. O sistema grava o CSV em `~/Documents/AulaCast/Chamadas/`.
+  3. Um aviso não modal mostra "Chamada salva (N alunos)" e "Mostrar no Finder"; some sozinho em ~8 s.
+- **Fluxo Alternativo:** sem aluno identificado, nada é gravado; com erro de disco, o aviso é "Não foi possível salvar a chamada".

@@ -1,8 +1,9 @@
-/// As métricas por aluno (METRICS, METRICS_TABLE e o arquivo da sessão) só existem em build de
-/// depuração ou com `-Xswiftc -DMETRICAS_DEBUG` (ver `scripts/build-app.sh`). Num build normal
-/// o servidor não avisa o navegador, que fica quieto, e ignora qualquer METRICS recebida.
+/// Coleta de métricas por aluno (METRICS/ENV/EVENT, arquivo da sessão, linha `[Métricas]`) é
+/// PERMANENTE e existe em todo build (ADR-006). Só a EXIBIÇÃO no console do navegador do aluno
+/// (METRICS_TABLE, DEBUG_INFO, painel de depuração) é temporária: exige build de depuração ou
+/// `-Xswiftc -DMETRICAS_DEBUG` (ver `scripts/build-app.sh`). Os testes trocam o valor por instância.
 public enum MetricasDebug {
-    public static let ativo: Bool = {
+    public static let consoleAtivo: Bool = {
         #if DEBUG || METRICAS_DEBUG
         return true
         #else

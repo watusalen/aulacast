@@ -1,10 +1,10 @@
 import Foundation
 
-/// Grava a sessão em `~/AulaCast-metricas/sessao-AAAAMMDD-HHmmss.jsonl`: um objeto JSON por
+/// Grava a sessão em `~/Documents/AulaCast/Metricas/sessao-AAAAMMDD-HHmmss.jsonl`: um objeto JSON por
 /// linha, autoexplicativo para uma IA plotar. A 1ª linha é a `legenda` (dicionário de campos,
 /// gráficos sugeridos e um prompt pronto); depois `inicio`, `amostra`/`aluno` a cada 2 s,
 /// eventos e `fim`. Toda linha tem `tipo`, `tSeg` (segundos desde o início) e `t` (ISO 8601).
-/// Só para depuração (`MetricasDebug`).
+/// Permanente em todo build (ADR-006).
 ///
 /// Nunca derruba nem trava o chamador: erro de disco é avisado uma vez e o arquivo é abandonado.
 /// Limite de `limiteBytes` por arquivo (a legenda não conta); ao estourar, uma última linha `truncado`.
@@ -14,7 +14,7 @@ public final class MetricsFileLogger {
     static let maxAlunosNoResumo = 500
 
     public static var diretorioPadrao: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("AulaCast-metricas", isDirectory: true)
+        PastasDoApp.metricas
     }
 
     public let limiteBytes: Int

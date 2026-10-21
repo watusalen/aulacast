@@ -263,3 +263,15 @@ Cenário: Painel do aluno
   Então vê "Na aula", "Com a aula à vista", a porcentagem, as saídas, o maior trecho sem sair e as desconexões e voltas
   E durante uma pausa os tempos não avançam.
 ```
+
+---
+
+### US-15: Chamada em CSV (Proposto)
+Como professor, quero uma planilha de presença ao encerrar a aula, para lançar a chamada sem digitar. Liga a RF-21 e UC-11.
+```gherkin
+Cenário: Encerrar com alunos identificados
+  Dado que Ana e Bia se identificaram na aula
+  Quando o professor para a transmissão
+  Então o arquivo chamada-AAAA-MM-DD-HHmm.csv aparece em ~/Documents/AulaCast/Chamadas
+  E um aviso mostra "Chamada salva (2 alunos)" com o botão "Mostrar no Finder".
+```

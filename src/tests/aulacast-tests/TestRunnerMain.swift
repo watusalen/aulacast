@@ -8,7 +8,7 @@ import AulaCastCore
 /// Descarta o CONNECTED e, em build de depuração, o DEBUG_INFO que vem logo depois.
 func descartarBoasVindas(_ socket: URLSessionWebSocketTask) async {
     _ = try? await socket.receive()
-    if MetricasDebug.ativo { _ = try? await socket.receive() }
+    if MetricasDebug.consoleAtivo { _ = try? await socket.receive() }
 }
 
 @main
@@ -24,6 +24,36 @@ struct AulaCastTestRunner {
         final class Placar {
             var passou = 0
             var falhou = 0
+            var puladas: [String] = []
+        }
+        // Modo padrão = CORE (só lógica pura, sem portas, sem codificador de hardware, sem esperas longas).
+        // `--tudo` roda também as seções de rede real e H.264 (ver docs/04, seção 6).
+        let executarTudo = CommandLine.arguments.contains("--tudo")
+
+        // Auxiliares usados por seções core e não-core: ficam fora dos blocos `if executarTudo`.
+        final class ColetorDeChat: ChatObserverProtocol, @unchecked Sendable {
+            private let trava = NSLock()
+            private var _recebidas: [ChatMessage] = []
+            var recebidas: [ChatMessage] { trava.lock(); defer { trava.unlock() }; return _recebidas }
+            func didReceiveChatMessage(_ message: ChatMessage) {
+                trava.lock(); _recebidas.append(message); trava.unlock()
+            }
+        }
+
+        func montarVM(permissao: Bool, capturaFalha: Bool = false) -> (MainViewModel, FakeCaptureService, FakeServer) {
+            let captura = FakeCaptureService()
+            captura.falhaAoIniciar = capturaFalha
+            let servidor = FakeServer()
+            let vm = MainViewModel(
+                captureService: captura,
+                encoderService: FakeEncoder(),
+                serverService: servidor,
+                advertiserService: FakeAdvertiser(),
+                systemActivity: FakeSystemActivity(),
+                permission: FakePermission(concedida: permissao),
+                hostnameService: FakeHostname()
+            )
+            return (vm, captura, servidor)
         }
         let placar = Placar()
 
@@ -176,6 +206,7 @@ struct AulaCastTestRunner {
         // (A entrega de arquivos de verdade é testada abaixo, com requisições reais.)
         try? FileManager.default.removeItem(at: tempAssetsDir)
 
+        if executarTudo {
         // TESTE 5: Servidor de Rede Local (NetworkListenerService)
         print("\n--- [4/12] Testes de Rede: NetworkListenerService ---")
         let serverService = NetworkListenerService(port: 8089, webAssetsPath: FileManager.default.temporaryDirectory)
@@ -293,6 +324,8 @@ struct AulaCastTestRunner {
 
         try? FileManager.default.removeItem(at: iconAssetsDir)
 
+        } else { placar.puladas.append("T5-T6 rede/HTTP") }
+
         // TESTE 7: Frames WebSocket colados/partidos e comprimento absurdo.
         // O TCP não respeita fronteira de mensagem: tratar cada leitura como exatamente
         // um frame descartava mensagens de chat em silêncio.
@@ -396,6 +429,7 @@ struct AulaCastTestRunner {
             "Comprimento absurdo é rejeitado sem derrubar o app"
         )
 
+        if executarTudo {
         // TESTE 8: WebSocket real ponta a ponta contra o servidor do app.
         // Cobre o handshake, a identificação e a presença pelo decodificador real.
         print("\n--- [8/12] Testes E2E: WebSocket real ---")
@@ -584,6 +618,8 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste E2E de WebSocket: \(error.localizedDescription)")
         }
 
+        } else { placar.puladas.append("T8 WebSocket E2E") }
+
         // TESTE 10: Identificação do aluno e presença na tela.
         print("\n--- [9/12] Testes de Domínio: identificação e presença ---")
 
@@ -616,6 +652,7 @@ struct AulaCastTestRunner {
             "Identificação de conexão desconhecida é ignorada"
         )
 
+        if executarTudo {
         // TESTE 10: Prévia local do professor.
         // Ela mostra o último quadro realmente transmitido; se parar de atualizar, o professor
         // perde a única confirmação visual de que os alunos estão vendo alguma coisa.
@@ -672,14 +709,6 @@ struct AulaCastTestRunner {
         // circulam pela turma.
         print("\n--- [11/12] Testes E2E: privacidade do chat ---")
 
-        final class ColetorDeChat: ChatObserverProtocol, @unchecked Sendable {
-            private let trava = NSLock()
-            private var _recebidas: [ChatMessage] = []
-            var recebidas: [ChatMessage] { trava.lock(); defer { trava.unlock() }; return _recebidas }
-            func didReceiveChatMessage(_ message: ChatMessage) {
-                trava.lock(); _recebidas.append(message); trava.unlock()
-            }
-        }
 
         let coletorChat = ColetorDeChat()
         let servidorChat = NetworkListenerService(port: 8101, webAssetsPath: FileManager.default.temporaryDirectory)
@@ -790,21 +819,6 @@ struct AulaCastTestRunner {
         // imagem vazia. Erro que não parece erro é o que mais custa caro na aula.
         print("\n--- [12/13] Testes de Domínio: permissão de Gravação de Tela ---")
 
-        func montarVM(permissao: Bool, capturaFalha: Bool = false) -> (MainViewModel, FakeCaptureService, FakeServer) {
-            let captura = FakeCaptureService()
-            captura.falhaAoIniciar = capturaFalha
-            let servidor = FakeServer()
-            let vm = MainViewModel(
-                captureService: captura,
-                encoderService: FakeEncoder(),
-                serverService: servidor,
-                advertiserService: FakeAdvertiser(),
-                systemActivity: FakeSystemActivity(),
-                permission: FakePermission(concedida: permissao),
-                hostnameService: FakeHostname()
-            )
-            return (vm, captura, servidor)
-        }
 
         let (vmSemPermissao, capturaSemPermissao, servidorSemPermissao) = montarVM(permissao: false)
         vmSemPermissao.startStream()
@@ -1006,6 +1020,8 @@ struct AulaCastTestRunner {
             "Depois de cair e voltar, um único 'Parar' libera a proteção (nada acumulado)"
         )
 
+        } else { placar.puladas.append("T10b-T13 prévia/chat/permissão/App Nap (sleeps)") }
+
         // TESTE 14: Mensagem partida em vários frames e mensagem longa demais.
         //
         // O navegador parte mensagens grandes em vários frames (o primeiro com FIN=0, os
@@ -1084,6 +1100,7 @@ struct AulaCastTestRunner {
             "Pong é frame de controle (opcode 0xA), e não texto"
         )
 
+        if executarTudo {
         // TESTE 15: O servidor que precisa continuar de pé entre uma queda e a volta da aula.
         print("\n--- [15/16] Testes de Rede: reinício e requisição partida ---")
 
@@ -1407,6 +1424,8 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste do stream de vídeo: \(error.localizedDescription)")
         }
 
+        } else { placar.puladas.append("T15-T17 reinício/retomada/turma cheia") }
+
         // TESTE 18: Qual endereço o professor passa para a turma.
         //
         // O painel lia o IP uma única vez, na abertura, e só olhava en0/en1. Quem abrisse o
@@ -1487,6 +1506,7 @@ struct AulaCastTestRunner {
             "O endereço do painel é consultado na hora, e não congelado na abertura"
         )
 
+        if executarTudo {
         // TESTE 19: O quadro sai assim que fica pronto.
         //
         // A conexão de vídeo fica parada esperando o próximo quadro. Antes essa espera era
@@ -1648,6 +1668,8 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste da aba fechada: \(error.localizedDescription)")
         }
 
+        } else { placar.puladas.append("T19-T20 quadros/porta ocupada") }
+
         // TESTE 21: A janela transmitida some.
         print("\n--- [21/21] Testes de Domínio: janela transmitida fechada ou minimizada ---")
 
@@ -1697,6 +1719,7 @@ struct AulaCastTestRunner {
         vmJanela.captureSourceIsAvailableAgain()
         assertTest(vmJanela.isPaused, "Com a aula já pausada pelo professor, a janela voltar não retoma")
 
+        if executarTudo {
         // TESTE 22: Otimizações medidas contra as práticas consolidadas.
         print("\n--- [22/22] Testes: tamanho da captura, codificador e confirmação do quadro ---")
 
@@ -1871,6 +1894,8 @@ struct AulaCastTestRunner {
         }
         try? FileManager.default.removeItem(at: pastaDeArquivos)
 
+        } else { placar.puladas.append("T22-T23 codificador/arquivos") }
+
         // TESTE 24: Porta fixa, também no Bonjour.
         print("\n--- [24/24] Testes de Rede: anúncio Bonjour na porta do servidor ---")
 
@@ -1900,6 +1925,7 @@ struct AulaCastTestRunner {
         )
         assertTest(vmPadrao.serverService.port == 8114, "A porta da turma é a que foi fixada")
 
+        if executarTudo {
         // TESTE 25: O professor acompanha os downloads de cada arquivo.
         print("\n--- [25/25] Testes: acompanhamento dos downloads ---")
 
@@ -1977,6 +2003,8 @@ struct AulaCastTestRunner {
                    "Download que termina depois de o arquivo sair da lista não o traz de volta")
         try? FileManager.default.removeItem(at: pastaContagem)
 
+        } else { placar.puladas.append("T25 downloads") }
+
         // TESTE 26: Endereço que o professor escreve na lousa.
         print("\n--- [26/26] Testes de Domínio: endereço para a turma digitar ---")
         let servidorDaLousa = FakeServer()
@@ -2047,6 +2075,7 @@ struct AulaCastTestRunner {
         assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 1120) == 5, "Painel fechado: as fontes ganham colunas")
         assertTest(SourcePickerView<ScreenCaptureService>.colunas(paraLargura: 3000) == 6, "Nunca passa de 6 colunas")
 
+        if executarTudo {
         // TESTE 28: Mão levantada.
         // A turma pediu de volta. A mão é estado da conexão, o nome sai do IDENTIFY e a lista
         // do professor põe quem pediu primeiro no topo, como no Meet.
@@ -2484,6 +2513,8 @@ struct AulaCastTestRunner {
             assertTest(false, "Falha no teste E2E do chat visível entre alunos: \(error.localizedDescription)")
         }
 
+        } else { placar.puladas.append("T28-T30 mão/fixada/chat turma") }
+
         // TESTE 31: Nome mDNS por tentativa (sem tocar a rede).
         print("\n--- [31/33] Testes de Domínio: nome mDNS por tentativa ---")
         assertTest(MDNSHostnameService.hostname(attempt: 1) == "aulacast.local.", "Tentativa 1 usa o nome sem número")
@@ -2564,6 +2595,7 @@ struct AulaCastTestRunner {
         assertTest(taxasRecuo?.fpsDaTela == 0 && taxasRecuo?.megabitsPorSegundo == 0,
                    "Contadores de tela e bytes que recuaram contam como zero, não como uma volta de 2^64")
 
+        if executarTudo {
         // TESTE 33: Contadores reais do vídeo, com o servidor de verdade.
         print("\n--- [33/33] Testes de Rede: contadores de quadros por aluno ---")
         let servidorContadores = NetworkListenerService(
@@ -3344,7 +3376,7 @@ struct AulaCastTestRunner {
                 return nil
             }
             let ana = await abrir()
-            assertTest(MetricasDebug.ativo, "Build de depuração (o do runner): MetricasDebug.ativo é verdadeiro")
+            assertTest(MetricasDebug.consoleAtivo, "Build de depuração (o do runner): MetricasDebug.consoleAtivo é verdadeiro")
             assertTest(boasVindasMetricas.contains("\"metricas\":\"true\""), "CONNECTED avisa o navegador de que as métricas estão ligadas")
             let intruso = await abrir()
             let saida = await abrir()
@@ -3422,6 +3454,8 @@ struct AulaCastTestRunner {
         } catch {
             assertTest(false, "Falha no teste de métricas: \(error.localizedDescription)")
         }
+
+        } else { placar.puladas.append("T33-T35 + DEBUG_INFO + Métricas (H.264/rede)") }
 
         // TESTE 36: Onde o app procura o frontend (web-assets).
         print("\n--- [36/36] Testes de Domínio: caminho do web-assets ---")
@@ -3545,11 +3579,11 @@ struct AulaCastTestRunner {
         let alunoPainel = ConnectedClient(id: "painel-1", name: "Aluno", ipAddress: "10.0.0.50")
         vmLedger.didClientConnect(alunoPainel)
         try? await Task.sleep(nanoseconds: 200_000_000)
-        vmLedger.alunoAberto = "painel-1"
+        vmLedger.abrirPerfil(clientId: "painel-1")
         assertTest(vmLedger.ledger.resumo(clientId: "painel-1")?.ip == "10.0.0.50", "O ledger do ViewModel recebe a conexão")
         vmLedger.didClientDisconnect(clientId: "painel-1")
         try? await Task.sleep(nanoseconds: 200_000_000)
-        assertTest(vmLedger.alunoAberto == nil, "Quando o aluno desconecta, o painel dele fecha")
+        assertTest(vmLedger.alunoAberto != nil, "Quando o aluno desconecta, o perfil dele continua aberto")
 
         // ---- Apps ocultos lembrados entre execuções (RF-19) ----
         let suiteOcultos = "aulacast.teste.ocultos.\(UUID().uuidString)"
@@ -3596,12 +3630,15 @@ struct AulaCastTestRunner {
                    "deveRefazerFiltro: bundle vazio = não")
 
         await testesMetricasRicas(assertTest)
+        await testesPerfilEChamada(assertTest)
 
         // SUMÁRIO FINAL
         print("\n==========================================")
         print("RESULTADO FINAL DOS TESTES:")
         print("  Passaram: \(placar.passou)")
         print("  Falharam: \(placar.falhou)")
+        print("  Modo: \(executarTudo ? "TUDO" : "CORE") | seções puladas: \(placar.puladas.count)")
+        placar.puladas.forEach { print("    pulada: \($0)") }
         print("==========================================")
         
         if placar.falhou > 0 {
