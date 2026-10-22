@@ -106,9 +106,11 @@ private struct StudentDetailCard: View {
                 HStack {
                     Text("Nomes usados (\(nomes.count))").m3(.bodyMedium).foregroundColor(M3.onSurfaceVariant)
                     Spacer(minLength: 8)
-                    M3Icone(nome: "expand_more", tamanho: 20)
+                    // `expand_more` não está na fonte reduzida de ícones (nunca apareceu):
+                    // o `chevron_right` está, e gira para baixo (fechado) e para cima (aberto).
+                    M3Icone(nome: "chevron_right", tamanho: 22)
                         .foregroundColor(M3.onSurfaceVariant)
-                        .rotationEffect(.degrees(nomesAbertos ? 180 : 0))
+                        .rotationEffect(.degrees(nomesAbertos ? -90 : 90))
                 }
                 .padding(.vertical, 10)
                 .contentShape(Rectangle())
@@ -141,24 +143,15 @@ private struct StudentDetailCard: View {
             }
             .frame(width: 10)
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
-                    if n.atual { etiqueta("nome atual", M3.primaryContainer, M3.onPrimaryContainer) }
-                    if n.viaIP { etiqueta("mesmo IP", M3.secondaryContainer, M3.onSecondaryContainer) }
-                }
-                Text("\(Self.hora.string(from: n.primeiraVez)) – \(Self.hora.string(from: n.ultimaVez))")
+                Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
+                // Só quando entrou com esse nome: quanto tempo ficou, o professor calcula.
+                Text("entrou às \(Self.hora.string(from: n.primeiraVez))")
                     .m3(.bodySmall).foregroundColor(M3.onSurfaceVariant).monospacedDigit()
             }
             .padding(.bottom, ultimo ? 0 : 12)
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private func etiqueta(_ texto: String, _ fundo: Color, _ frente: Color) -> some View {
-        Text(texto).m3(.labelSmall).foregroundColor(frente)
-            .padding(.horizontal, 6).padding(.vertical, 1)
-            .background(Capsule().fill(fundo))
     }
 
     private func destaque(_ titulo: String, _ valor: String) -> some View {

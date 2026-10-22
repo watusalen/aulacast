@@ -27,9 +27,6 @@ public struct QualitySettingsView: View {
                     opcoes: VideoResolution.allCases.map { ($0, $0.rawValue) },
                     selecao: $captureService.resolution
                 )
-                Text("720p é recomendado para PCs antigos do laboratório.")
-                    .m3(.bodySmall)
-                    .foregroundColor(M3.onSurfaceVariant)
             }
 
             VStack(alignment: .leading, spacing: 10) {

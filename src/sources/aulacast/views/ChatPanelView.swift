@@ -29,8 +29,6 @@ public struct ChatPanelView: View {
                 ligado: $viewModel.isChatEnabled
             )
 
-            M3Divisor(recuo: 16)
-
             // Segundo toggle, independente do de cima: só faz sentido com o chat ligado —
             // desligado, não há mensagem de aluno nenhuma para circular entre colegas.
             M3LinhaDeAlternancia(
@@ -42,8 +40,9 @@ public struct ChatPanelView: View {
             )
             .disabled(!viewModel.isChatEnabled)
 
-            // Separa o grupo de interruptores do aviso, em largura total.
-            M3Divisor()
+            // Um único divisor, depois dos dois interruptores (nenhum entre eles), no formato com
+            // recuo: é o que o professor achou melhor que o de largura total.
+            M3Divisor(recuo: 16)
                 .padding(.top, 6)
 
             // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.
