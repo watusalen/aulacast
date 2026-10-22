@@ -282,10 +282,44 @@ public final class MainViewModel: ObservableObject {
             Task { @MainActor in self?.updateServerURL() }
         }
         monitorDeRede.start(queue: filaDoMonitor)
+
+        // Ao voltar dos Ajustes do Sistema, confere de novo sem exigir outro clique.
+        observadorDeAtivacao = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in await self?.reverificarPermissao() }
+        }
     }
+
+    private var observadorDeAtivacao: NSObjectProtocol?
+
+    /// Se o banner de permissão está de pé e a permissão já vale (preflight ou captura real),
+    /// limpa banner e mensagem. Devolve se está liberada.
+    @discardableResult
+    public func reverificarPermissao() async -> Bool {
+        guard needsScreenRecordingPermission else { return true }
+        let liberada = permission.isGranted() ? true : await permission.probe()
+        if liberada { liberarPermissao() }
+        return liberada
+    }
+
+    private func liberarPermissao() {
+        needsScreenRecordingPermission = false
+        streamErrorMessage = nil
+    }
+
+    /// Falha ao reabrir: o app continua aberto e o professor recebe o recado no banner.
+    public func avisarFalhaAoReabrir() {
+        needsScreenRecordingPermission = true
+        streamErrorMessage = PermissaoDeTela.mensagemFalhaAoReabrir
+    }
+
+    /// Verdadeiro depois de uma tentativa de pedir a permissão (usado pelo banner).
+    public var jaTentouPermissao: Bool { jaPediuPermissao }
 
     deinit {
         monitorDeRede.cancel()
+        if let o = observadorDeAtivacao { NotificationCenter.default.removeObserver(o) }
     }
 
     /// Disponibiliza arquivos para a turma baixar. Qualquer tipo serve; pastas ficam de fora
@@ -370,7 +404,8 @@ public final class MainViewModel: ObservableObject {
             // um painel próprio que disparava o aviso nativo, e o professor acabava em dois
             // pedidos empilhados que reapareciam em looping. Aqui só fica um recado no painel,
             // para o caso de ele ter escolhido "Negar" ou "Mais Tarde".
-            guard permission.isGranted() else {
+            let liberada = permission.isGranted() ? true : await permission.probe()
+            guard liberada else {
                 self.needsScreenRecordingPermission = true
 
                 if jaPediuPermissao {
@@ -382,14 +417,13 @@ public final class MainViewModel: ObservableObject {
                 } else {
                     jaPediuPermissao = true
                     permission.request()
-                    self.streamErrorMessage =
-                        "Autorize o AulaCast em Gravação de Tela e reabra o aplicativo."
+                    self.streamErrorMessage = PermissaoDeTela.mensagemNegada
                 }
                 return
             }
 
             // A tentativa vingou: se a tela ainda estava pedindo autorização, não pede mais.
-            self.needsScreenRecordingPermission = false
+            liberarPermissao()
 
             await captureService.startCapture()
 
@@ -399,6 +433,9 @@ public final class MainViewModel: ObservableObject {
             // "TRANSMITINDO AO VIVO" com o cronômetro correndo enquanto a turma via uma
             // imagem vazia — o pior erro possível, porque não parece erro nenhum.
             guard captureService.isRecording else {
+                if captureService.errorMessage == PermissaoDeTela.mensagemNegada {
+                    self.needsScreenRecordingPermission = true
+                }
                 self.streamErrorMessage = captureService.errorMessage
                     ?? "Não foi possível iniciar a captura da tela."
                 return

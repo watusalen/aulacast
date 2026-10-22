@@ -221,7 +221,9 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "Falha ao iniciar captura: \(error.localizedDescription)"
+                self.errorMessage = PermissaoDeTela.ehNegada(error)
+                    ? PermissaoDeTela.mensagemNegada
+                    : "Falha ao iniciar captura: \(error.localizedDescription)"
             }
         }
     }
@@ -291,11 +293,16 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
     /// Duas tentativas: logo depois de abrir o app a primeira consulta às vezes falha.
     private func conteudoCompartilhavel() async -> SCShareableContent? {
         for tentativa in 0..<2 {
-            if let conteudo = try? await SCShareableContent.excludingDesktopWindows(
-                false,
-                onScreenWindowsOnly: false
-            ) {
-                return conteudo
+            do {
+                return try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: false
+                )
+            } catch {
+                if PermissaoDeTela.ehNegada(error) {
+                    await MainActor.run { self.errorMessage = PermissaoDeTela.mensagemNegada }
+                    return nil
+                }
             }
             if tentativa == 0 {
                 try? await Task.sleep(nanoseconds: 200_000_000)

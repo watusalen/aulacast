@@ -3631,6 +3631,7 @@ struct AulaCastTestRunner {
 
         await testesMetricasRicas(assertTest)
         await testesPerfilEChamada(assertTest)
+        await testesPermissaoDeTela(assertTest, { montarVM(permissao: $0, capturaFalha: $1) })
 
         // SUMÁRIO FINAL
         print("\n==========================================")

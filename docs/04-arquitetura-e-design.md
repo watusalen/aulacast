@@ -438,6 +438,11 @@ turma, triado de forma enxuta em `docs/feedback-tela-do-aluno.md`):
   e custa 3 a 4 pontos de CPU no Chrome. No celular, por ter trilha de áudio (silenciosa), pode
   pausar a música de outro app.
 
+#### Permissão de Gravação de Tela
+- A decisão não usa só `CGPreflightScreenCaptureAccess`: se ele der falso, `probe()` tenta uma consulta real ao ScreenCaptureKit antes de bloquear.
+- Ao voltar ao app (`didBecomeActive`), `reverificarPermissao()` limpa o banner sozinho; `userDeclined` (-3801) vira o estado "falta autorização".
+- `relaunch()` só encerra o app se o novo abriu; o banner mostra `tccutil reset ScreenCapture <bundleId>` após a primeira tentativa.
+
 ### 5. Estrutura de Arquivos e Módulos do Código Fonte
 
 O projeto usa **Swift Package Manager** (sem `.xcodeproj`), com o núcleo isolado na biblioteca

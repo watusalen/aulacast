@@ -180,6 +180,17 @@ public struct MainDashboardView: View {
                 Text(mensagem)
                     .m3(.bodyMedium)
                     .fixedSize(horizontal: false, vertical: true)
+                if viewModel.needsScreenRecordingPermission && viewModel.jaTentouPermissao {
+                    Text("Ligou a chave e continua negado? Esta cópia do app pode ter mudado de assinatura. "
+                         + "Remova a linha do AulaCast em Gravação de Tela e reabra; ou no Terminal: \(PermissaoDeTela.comandoReset)")
+                        .m3(.bodySmall)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    M3Botao(titulo: "Copiar comando", variante: .tonal, altura: 32) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(PermissaoDeTela.comandoReset, forType: .string)
+                    }
+                }
             }
             .foregroundColor(M3.onErrorContainer)
 
@@ -192,7 +203,7 @@ public struct MainDashboardView: View {
                     ScreenRecordingPermissionService.openSystemSettings()
                 }
                 M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
-                    ScreenRecordingPermissionService.relaunch()
+                    ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
                 }
             } else {
                 M3Botao(titulo: "Dispensar", variante: .texto) {

@@ -14,6 +14,8 @@ final class FakePermission: ScreenRecordingPermissionProtocol {
 
     init(concedida: Bool) { self.concedida = concedida }
 
+    var probeOk = false
+    func probe() async -> Bool { probeOk }
     func isGranted() -> Bool { concedida }
     func request() { pedidosFeitos += 1 }
 }
