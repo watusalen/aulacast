@@ -1,13 +1,26 @@
 import Foundation
+import AppKit
 
 /// Onde o app grava seus arquivos para o professor. Um só lugar para trocar a raiz.
 public enum PastasDoApp {
-    /// `~/Documents/AulaCast`
+    /// `Documents/AulaCast` do usuário. Sem sandbox é `~/Documents/AulaCast`; com o App Sandbox
+    /// (Mac App Store) o sistema devolve o Documents do contêiner do app
+    /// (`~/Library/Containers/<id>/Data/Documents`), por isso nunca se monta o caminho à mão.
     public static var raiz: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/AulaCast", isDirectory: true)
+        let documentos = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        return documentos.appendingPathComponent("AulaCast", isDirectory: true)
     }
     /// Arquivo da sessão (`sessao-*.jsonl`), RF-20 / ADR-006.
     public static var metricas: URL { raiz.appendingPathComponent("Metricas", isDirectory: true) }
     /// Chamada em CSV ao encerrar a transmissão, RF-21.
     public static var chamadas: URL { raiz.appendingPathComponent("Chamadas", isDirectory: true) }
+
+    /// Abre a pasta de dados no Finder (cria se não existir). No sandbox o caminho do contêiner
+    /// é escondido, então o professor precisa deste atalho para achar métricas e chamadas.
+    @discardableResult
+    public static func mostrarNoFinder() -> Bool {
+        try? FileManager.default.createDirectory(at: raiz, withIntermediateDirectories: true)
+        return NSWorkspace.shared.open(raiz)
+    }
 }

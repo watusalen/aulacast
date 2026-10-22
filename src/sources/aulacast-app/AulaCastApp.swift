@@ -14,5 +14,11 @@ public struct AulaCastApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 800)
+        .commands {
+            CommandGroup(after: .newItem) {
+                Button("Mostrar pasta de dados no Finder") { PastasDoApp.mostrarNoFinder() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+        }
     }
 }
