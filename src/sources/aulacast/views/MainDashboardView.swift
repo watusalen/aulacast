@@ -178,34 +178,25 @@ public struct MainDashboardView: View {
         .fixedSize(horizontal: false, vertical: true)
         .foregroundColor(M3.onErrorContainer)
 
-        // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho: o texto
-        // ocupa a largura toda e as duas saídas ficam na linha de baixo (lado a lado ficava
-        // espremido). No aviso comum, o botão continua ao lado.
-        return Group {
-            if precisaDePermissao {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 14) {
-                        M3Icone(nome: "error", tamanho: 24, preenchido: true)
-                            .foregroundColor(M3.onErrorContainer)
-                        textos
-                        Spacer(minLength: 0)
+        // Em todo alerta o texto ocupa a largura toda e as saídas ficam na linha de baixo
+        // (lado a lado ficava espremido). Sem autorização o banner vira o caminho: duas saídas.
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
+                M3Icone(nome: "error", tamanho: 24, preenchido: true)
+                    .foregroundColor(M3.onErrorContainer)
+                textos
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                if precisaDePermissao {
+                    M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
+                        ScreenRecordingPermissionService.openSystemSettings()
                     }
-                    HStack(spacing: 8) {
-                        Spacer(minLength: 0)
-                        M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
-                            ScreenRecordingPermissionService.openSystemSettings()
-                        }
-                        M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
-                            ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
-                        }
+                    M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
+                        ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
                     }
-                }
-            } else {
-                HStack(alignment: .center, spacing: 14) {
-                    M3Icone(nome: "error", tamanho: 24, preenchido: true)
-                        .foregroundColor(M3.onErrorContainer)
-                    textos
-                    Spacer(minLength: 8)
+                } else {
                     M3Botao(titulo: "Fechar aviso", variante: .texto) {
                         viewModel.streamErrorMessage = nil
                     }
