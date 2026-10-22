@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// Snackbar do Material 3, não modal, no pé da janela: texto, uma ação opcional e fechamento
+/// Snackbar do Material 3, não modal, no pé da janela: texto e fechamento
 /// automático. Usado para avisar que a chamada foi salva (RF-21).
 struct M3Snackbar: View {
     @ObservedObject var viewModel: MainViewModel
@@ -16,20 +16,6 @@ struct M3Snackbar: View {
                         .m3(.bodyMedium)
                         .foregroundColor(M3.surface)
                         .padding(.leading, 16)
-                    if let arquivo = aviso.arquivo {
-                        Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([arquivo])
-                            viewModel.avisoDaChamada = nil
-                        } label: {
-                            Text("Mostrar no Finder")
-                                .font(M3Tipo.fonte(tamanho: 14, peso: 500))
-                                .foregroundColor(M3.primaryContainer)
-                                .padding(.horizontal, 12)
-                                .frame(height: 40)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
                     M3BotaoDeIcone(icone: "close", tamanho: 32, ajuda: "Fechar") { viewModel.avisoDaChamada = nil }
                         .foregroundColor(M3.surface)
                 }

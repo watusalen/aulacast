@@ -334,14 +334,6 @@ public struct MainDashboardView: View {
                 QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
             }
 
-            // A captura caiu, mas os participantes seguem conectados: além de tentar de novo, o
-            // anfitrião precisa de um jeito de encerrar a transmissão e liberar o Mac.
-            if viewModel.isSessionOpen && !viewModel.isStreaming {
-                M3BotaoDeIcone(icone: "stop", variante: .perigo, ajuda: "Encerrar a transmissão e desconectar os participantes") {
-                    viewModel.stopStream()
-                }
-            }
-
             if viewModel.isStreaming {
                 M3Botao(titulo: "Encerrar transmissão", icone: "stop", variante: .perigo, altura: 48, larguraMinima: 140) {
                     viewModel.stopStream()
