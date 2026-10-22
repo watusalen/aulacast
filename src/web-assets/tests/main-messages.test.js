@@ -265,7 +265,7 @@ test('Arquivo novo aparece na lista e soma no contador de Arquivos', () => {
   // E o chat ganha um cartão baixável (redundância com a aba Arquivos), não só um aviso.
   const cartao = elementos.chatMessages.filhos.at(-1);
   assert.strictEqual(cartao.className, 'chat-arquivo');
-  const [, link] = cartao.filhos;
+  const [link] = cartao.filhos;
   assert.strictEqual(link.href, '/arquivos/f1');
   assert.strictEqual(link.filhos[1].filhos[0].textContent, 'Lista 1.pdf');
 });

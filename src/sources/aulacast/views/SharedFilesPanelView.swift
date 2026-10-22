@@ -151,12 +151,9 @@ public struct SharedFilesPanelView: View {
             default: frase = "Disponível para \(alunos) alunos"
             }
         }
-        return HStack(spacing: 6) {
-            M3Icone(nome: concluidos > 0 ? "download" : "check_circle", tamanho: 16, preenchido: concluidos == 0)
-                .foregroundColor(concluidos > 0 ? M3.onSurfaceVariant : M3.tertiary)
-            Text(frase)
-                .foregroundColor(M3.onSurfaceVariant)
-        }
+        // Só o texto: sem ícone ao lado do "x de y baixaram".
+        return Text(frase)
+            .foregroundColor(M3.onSurfaceVariant)
         .m3(.labelMedium)
         .lineLimit(1)
         .padding(.top, 2)

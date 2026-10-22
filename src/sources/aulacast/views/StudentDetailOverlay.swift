@@ -119,20 +119,35 @@ private struct StudentDetailCard: View {
             .accessibilityValue(nomesAbertos ? "Expandido" : "Recolhido")
 
             if nomesAbertos {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(nomes.enumerated()), id: \.offset) { i, n in
-                            itemDaLinhaDoTempo(n, ultimo: i == nomes.count - 1)
-                        }
+                // A altura é a dos nomes, nem um ponto a mais: um `ScrollView` ocupa sempre o
+                // máximo que lhe derem e deixava sobra de espaço com poucos nomes. Só rola
+                // quando passa de `limiteSemRolagem` nomes.
+                Group {
+                    if nomes.count > Self.limiteSemRolagem {
+                        ScrollView { listaDeNomes(nomes) }
+                            .frame(height: Self.alturaComRolagem)
+                    } else {
+                        listaDeNomes(nomes)
                     }
-                    .padding(.top, 4).padding(.bottom, 8)
                 }
-                .frame(maxHeight: 180)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .clipped()
         .animation(M3.Mola.padrao, value: nomesAbertos)
+    }
+
+    /// Até quantos nomes cabem sem rolar, e a altura da área quando passa disso.
+    private static let limiteSemRolagem = 4
+    private static let alturaComRolagem: CGFloat = 4 * 48
+
+    private func listaDeNomes(_ nomes: [NomeUsado]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(nomes.enumerated()), id: \.offset) { i, n in
+                itemDaLinhaDoTempo(n, ultimo: i == nomes.count - 1)
+            }
+        }
+        .padding(.top, 4)
     }
 
     private func itemDaLinhaDoTempo(_ n: NomeUsado, ultimo: Bool) -> some View {

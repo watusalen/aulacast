@@ -101,53 +101,24 @@ export class ChatManager {
   }
 
   /**
-   * Aviso de arquivo novo no chat — com download direto ao tocar, redundante com a aba
-   * Arquivos (que continua sendo o lugar de conferir tudo que já chegou na aula). Cada
-   * arquivo reaproveita o mesmo item de lista do Material da aba Arquivos
-   * (`criarLinkDeArquivo`, em `files-list.js`): o cartão inteiro é o link, exatamente
-   * como um seletor do M3 — não um texto com um botãozinho dentro.
-   *
-   * Vem precedido de um divisor: é outro tipo de conteúdo dentro da conversa, um cartão
-   * de sistema, não uma fala — o divisor abre essa seção, o mesmo raciocínio de separar
-   * grupos de controles que fazem coisas diferentes.
+   * O arquivo que o professor compartilhou aparece no chat como uma mensagem: o item de lista
+   * do Material da aba Arquivos (`criarLinkDeArquivo`, em `files-list.js`), com download direto
+   * ao tocar. Sem divisor e sem aviso de "novo arquivo": só o cartão, no mesmo ritmo das
+   * mensagens (o espaçamento é o `gap` da lista `.messages`). A aba Arquivos continua sendo o
+   * lugar de conferir tudo que já chegou na aula.
    */
   mostrarArquivosNovos(arquivos) {
     const lista = Array.isArray(arquivos) ? arquivos : [];
     if (lista.length === 0) return;
 
-    this.mostrarDivisor();
-
     for (const arquivo of lista) {
       const linha = document.createElement('div');
       linha.className = 'chat-arquivo';
-
-      const cabeca = document.createElement('div');
-      cabeca.className = 'chat-arquivo-cabeca';
-      const rotulo = document.createElement('span');
-      rotulo.textContent = 'Novo arquivo';
-      const hora = document.createElement('span');
-      hora.textContent = horaAgora();
-      cabeca.appendChild(rotulo);
-      cabeca.appendChild(hora);
-
-      linha.appendChild(cabeca);
       linha.appendChild(criarLinkDeArquivo(arquivo, { novo: true, onBaixar: (id) => this.onFileDownload(id) }));
       this.chatMessages.appendChild(linha);
     }
 
     this.rolarParaOFim();
-  }
-
-  /**
-   * Divisor do Material: linha fina que abre uma seção de conteúdo diferente da que
-   * vinha antes. Aqui, marca a entrada de um cartão de sistema (arquivo pra baixar) em
-   * meio à conversa — as duas coisas são diferentes, e o divisor é como o M3 diz isso.
-   */
-  mostrarDivisor() {
-    const divisor = document.createElement('hr');
-    divisor.className = 'divisor';
-    divisor.setAttribute('aria-hidden', 'true');
-    this.chatMessages.appendChild(divisor);
   }
 
   /** O professor abaixou a mão do aluno: uma linha curta, no mesmo tom das de sistema. */

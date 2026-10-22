@@ -277,20 +277,18 @@ test('O aviso fixo do chat muda de texto conforme a visibilidade para a turma', 
   );
 });
 
-test('Arquivo novo vira um cartão precedido de divisor, com download direto ao tocar', () => {
+test('Arquivo novo vira só o cartão no chat (sem divisor nem aviso), com download direto ao tocar', () => {
   const baixados = [];
   const chat = new ChatManager(() => true, () => 'Ana', (id) => baixados.push(id));
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([{ id: 'x1', name: 'Lista 3.pdf', size: 184000 }]);
 
-  const [divisor, cartao] = elementos.chatMessages.filhos.slice(antes);
-  assert.strictEqual(divisor.className, 'divisor', 'abre a seção de conteúdo diferente da conversa');
-  assert.strictEqual(divisor.attrs['aria-hidden'], 'true');
-
+  const novos = elementos.chatMessages.filhos.slice(antes);
+  assert.strictEqual(novos.length, 1, 'só o cartão: nenhum divisor antes dele');
+  const [cartao] = novos;
   assert.strictEqual(cartao.className, 'chat-arquivo');
-  const [cabeca, link] = cartao.filhos;
-  assert.strictEqual(cabeca.filhos[0].textContent, 'Novo arquivo');
-  assert.match(cabeca.filhos[1].textContent, /^\d{2}:\d{2}$/);
+  assert.strictEqual(cartao.filhos.length, 1, 'sem cabeçalho "Novo arquivo"');
+  const [link] = cartao.filhos;
 
   assert.strictEqual(link.className, 'file-link');
   assert.strictEqual(link.href, '/arquivos/x1');
@@ -313,8 +311,8 @@ test('Vários arquivos: cada um vira o próprio cartão, todos baixáveis por aq
 
   const cartoes = elementos.chatMessages.filhos.slice(antes).filter((el) => el.className === 'chat-arquivo');
   assert.strictEqual(cartoes.length, 2, 'um cartão por arquivo, não um resumo só');
-  const [linkA] = cartoes[0].filhos.slice(1);
-  const [linkB] = cartoes[1].filhos.slice(1);
+  const [linkA] = cartoes[0].filhos;
+  const [linkB] = cartoes[1].filhos;
   assert.strictEqual(linkA.href, '/arquivos/a');
   assert.strictEqual(linkB.href, '/arquivos/b');
 
@@ -327,8 +325,8 @@ test('Nome com HTML aparece como texto no cartão do chat, igual na aba Arquivos
   const antes = elementos.chatMessages.filhos.length;
   chat.mostrarArquivosNovos([{ id: 'h', name: '<img src=x onerror=alert(1)>', size: 1 }]);
 
-  const [, cartao] = elementos.chatMessages.filhos.slice(antes);
-  const [, link] = cartao.filhos;
+  const [cartao] = elementos.chatMessages.filhos.slice(antes);
+  const [link] = cartao.filhos;
   const nome = link.querySelector ? link.querySelector('.file-name') : null;
   assert.strictEqual(nome.textContent, '<img src=x onerror=alert(1)>');
 });
