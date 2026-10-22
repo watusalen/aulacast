@@ -168,35 +168,47 @@ public struct MainDashboardView: View {
     /// A transmissão caiu sozinha, ou falta autorização: o anfitrião precisa ver isso,
     /// não descobrir pelos participantes. É um "banner" do Material: aviso e as saídas possíveis.
     private func bannerDeErro(_ mensagem: String) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            M3Icone(nome: "error", tamanho: 24, preenchido: true)
-                .foregroundColor(M3.onErrorContainer)
+        let precisaDePermissao = viewModel.needsScreenRecordingPermission
+        let textos = VStack(alignment: .leading, spacing: 2) {
+            Text(precisaDePermissao ? "O AulaCast precisa de permissão para gravar a tela" : "Atenção")
+                .m3(.titleSmall)
+            Text(mensagem)
+                .m3(.bodyMedium)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .foregroundColor(M3.onErrorContainer)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.needsScreenRecordingPermission
-                     ? "O AulaCast precisa de permissão para gravar a tela"
-                     : "Atenção")
-                    .m3(.titleSmall)
-                Text(mensagem)
-                    .m3(.bodyMedium)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundColor(M3.onErrorContainer)
-
-            Spacer(minLength: 8)
-
-            // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho:
-            // são exatamente as duas saídas possíveis, sem competir com o aviso do macOS.
-            if viewModel.needsScreenRecordingPermission {
-                M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
-                    ScreenRecordingPermissionService.openSystemSettings()
-                }
-                M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
-                    ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
+        // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho: o texto
+        // ocupa a largura toda e as duas saídas ficam na linha de baixo (lado a lado ficava
+        // espremido). No aviso comum, o botão continua ao lado.
+        return Group {
+            if precisaDePermissao {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 14) {
+                        M3Icone(nome: "error", tamanho: 24, preenchido: true)
+                            .foregroundColor(M3.onErrorContainer)
+                        textos
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
+                            ScreenRecordingPermissionService.openSystemSettings()
+                        }
+                        M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
+                            ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
+                        }
+                    }
                 }
             } else {
-                M3Botao(titulo: "Fechar aviso", variante: .texto) {
-                    viewModel.streamErrorMessage = nil
+                HStack(alignment: .center, spacing: 14) {
+                    M3Icone(nome: "error", tamanho: 24, preenchido: true)
+                        .foregroundColor(M3.onErrorContainer)
+                    textos
+                    Spacer(minLength: 8)
+                    M3Botao(titulo: "Fechar aviso", variante: .texto) {
+                        viewModel.streamErrorMessage = nil
+                    }
                 }
             }
         }

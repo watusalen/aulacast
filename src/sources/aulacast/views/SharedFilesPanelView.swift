@@ -41,7 +41,7 @@ public struct SharedFilesPanelView: View {
                     Text("Nenhum arquivo ainda")
                         .m3(.titleMedium)
                         .foregroundColor(M3.onSurface)
-                    Text("Arraste arquivos para cá. Os participantes baixam pelo mesmo link da transmissão.")
+                    Text("Arraste arquivos para cá.")
                         .m3(.bodyMedium)
                         .foregroundColor(M3.onSurfaceVariant)
                         .multilineTextAlignment(.center)
