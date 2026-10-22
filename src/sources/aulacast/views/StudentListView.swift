@@ -14,7 +14,7 @@ public struct StudentListView: View {
     }
 
     public var body: some View {
-        if clientManager.identifiedClients.isEmpty {
+        if alunos.isEmpty {
             vazio
         } else {
             VStack(alignment: .leading, spacing: 8) {
@@ -57,29 +57,29 @@ public struct StudentListView: View {
         }
     }
 
-    private var alunos: [ConnectedClient] { clientManager.identifiedClientsInListOrder }
-    private var maos: Int { clientManager.handRaisedCount }
+    private var alunos: [LinhaDoAluno] { viewModel.linhasDosAlunos }
+    private var maos: Int { alunos.filter(\.maoLevantada).count }
 
-    private func linha(_ aluno: ConnectedClient) -> some View {
+    private func linha(_ aluno: LinhaDoAluno) -> some View {
         // A linha inteira é um botão (sem vãos entre linhas); o botão da mão, por dentro, tem
         // prioridade sobre ele: apertá-lo não abre o perfil.
-        Button { viewModel.abrirPerfil(clientId: aluno.id) } label: {
+        Button { viewModel.alunoAberto = aluno.pessoaId } label: {
             HStack(spacing: 16) {
-                AvatarDeIniciais(nome: aluno.name)
-                    .opacity(aluno.isWatching ? 1 : 0.55)
+                AvatarDeIniciais(nome: aluno.nome)
+                    .opacity(aluno.aVista ? 1 : 0.55)
 
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(aluno.name)
+                    Text(aluno.nome)
                         .m3(.bodyLarge)
                         .foregroundColor(M3.onSurface)
                         .lineLimit(1)
-                    Text(aluno.isWatching ? "Com a aula à vista" : "Em outra janela ou aba")
+                    Text(apoio(aluno))
                         .m3(.bodyMedium)
                         .foregroundColor(M3.onSurfaceVariant)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                if aluno.isHandRaised {
+                if aluno.maoLevantada {
                     // A mão é o próprio botão de abaixá-la, como no Meet.
                     M3BotaoDeIcone(
                         icone: "back_hand",
@@ -87,12 +87,12 @@ public struct StudentListView: View {
                         tamanho: 36,
                         iconePreenchido: true,
                         ajuda: "Abaixar a mão"
-                    ) { viewModel.lowerHand(clientId: aluno.id) }
+                    ) { viewModel.lowerHand(conexoes: aluno.conexoesComMao) }
                     .transition(.scale.combined(with: .opacity))
                 }
-                M3Icone(nome: aluno.isWatching ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.isWatching)
-                    .foregroundColor(aluno.isWatching ? M3.tertiary : M3.outline)
-                    .help(aluno.ipAddress)
+                M3Icone(nome: aluno.aVista ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.aVista)
+                    .foregroundColor(aluno.aVista ? M3.tertiary : M3.outline)
+                    .help(aluno.ip)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -100,7 +100,7 @@ public struct StudentListView: View {
         }
         .buttonStyle(M3EstiloDeLinha())
         .onHover { if $0 { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
-        .accessibilityHint("Abre o perfil de \(aluno.name)")
+        .accessibilityHint("Abre o perfil de \(aluno.nome)")
     }
 
     /// Ninguém entrou ainda: o que fazer e o atalho para isso (como o "Adicionar pessoas"
@@ -130,9 +130,14 @@ public struct StudentListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func apoio(_ aluno: LinhaDoAluno) -> String {
+        let base = aluno.aVista ? "Com a aula à vista" : "Em outra janela ou aba"
+        return aluno.conexoes > 1 ? "\(base) · \(aluno.conexoes) conexões" : base
+    }
+
     private var resumoDePresenca: String {
-        let total = clientManager.identifiedClients.count
-        let vendo = clientManager.watchingCount
+        let total = alunos.count
+        let vendo = alunos.filter(\.aVista).count
         if vendo == total {
             return total == 1 ? "1 aluno, com a aula à vista" : "Todos os \(total) com a aula à vista"
         }

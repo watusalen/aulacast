@@ -158,6 +158,18 @@ public final class MainViewModel: ObservableObject {
         if let id = ledger.pessoaId(clientId: clientId) { alunoAberto = id }
     }
 
+    /// A lista de alunos por pessoa (uma linha por pessoa, não por conexão).
+    public var linhasDosAlunos: [LinhaDoAluno] {
+        agruparPorPessoa(
+            clientes: clientManager.identifiedClients,
+            pessoaId: { [ledger] in ledger.pessoaId(clientId: $0) },
+            nomeDaPessoa: { [ledger] in ledger.resumo(pessoaId: $0)?.nome }
+        )
+    }
+
+    /// Abaixa a mão de todas as conexões da pessoa.
+    public func lowerHand(conexoes ids: [String]) { ids.forEach(lowerHand(clientId:)) }
+
     /// Abre o perfil por qualquer nome que a pessoa já usou na aula; nome desconhecido não faz nada.
     public func abrirPerfil(nome: String) {
         if let id = ledger.pessoaId(nome: nome) { alunoAberto = id }

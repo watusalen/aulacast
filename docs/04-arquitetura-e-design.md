@@ -75,6 +75,7 @@ flowchart TB
 - `SourceThumbnailProvider`: miniaturas da grade de fontes.
 - `WebSocketFrameEncoder`: monta frames RFC 6455 de saída (par do `WebSocketFrameDecoder`).
 - `FileDownloadService` e `SharedFile`: arquivos compartilhados (RF-17).
+- `agruparPorPessoa` / `LinhaDoAluno`: a lista de alunos é **por pessoa**, não por conexão. Conexões da mesma pessoa (ledger: mesmo IP, depois nome) viram uma linha; ela sai só quando a última conexão fecha, está à vista se alguma estiver, e a mão mais antiga mantém a vez na fila. Contadores (conectados, mãos, à vista) contam pessoas. O servidor segue por conexão.
 
 ---
 

@@ -255,7 +255,7 @@ Cenário: Aluno com sinal fraco
 ---
 
 ### US-14: Tempo do aluno na aula (Proposto)
-Como professor, quero ver quanto tempo cada aluno ficou na aula e com ela à vista, para saber quem acompanhou. Liga a RF-20 e UC-10.
+Como professor, quero ver quanto tempo cada aluno ficou na aula e com ela à vista, para saber quem acompanhou. Liga a RF-20 e UC-10. Um segundo navegador ou aba do mesmo IP é a mesma pessoa: uma linha só na lista, com "N conexões" na linha de apoio.
 ```gherkin
 Cenário: Painel do aluno
   Dado que o aluno Ana está conectada e a transmissão corre

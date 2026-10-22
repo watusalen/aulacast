@@ -365,7 +365,8 @@ public struct MainDashboardView: View {
         .animation(M3.Mola.padrao, value: viewModel.isStreaming)
     }
 
-    private var maos: Int { viewModel.clientManager.handRaisedCount }
+    private var linhas: [LinhaDoAluno] { viewModel.linhasDosAlunos }
+    private var maos: Int { linhas.filter(\.maoLevantada).count }
 
     // Direita: um botão por painel, com contadores.
     private var botoesDosPaineis: some View {
@@ -376,7 +377,7 @@ public struct MainDashboardView: View {
                 icone: "group",
                 variante: .padrao,
                 selecionado: painelAberto && aba.wrappedValue == .alunos,
-                contador: maos > 0 ? maos : viewModel.clientManager.identifiedClients.count,
+                contador: maos > 0 ? maos : linhas.count,
                 contadorNeutro: maos == 0,
                 contadorDeAtencao: maos > 0,
                 ajuda: maos == 0 ? "Alunos" : maos == 1 ? "Alunos — 1 mão levantada" : "Alunos — \(maos) mãos levantadas"

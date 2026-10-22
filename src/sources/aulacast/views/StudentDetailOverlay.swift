@@ -142,7 +142,7 @@ private struct StudentDetailCard: View {
     private static let alturaComRolagem: CGFloat = 4 * 48
 
     private func listaDeNomes(_ nomes: [NomeUsado]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(nomes.enumerated()), id: \.offset) { i, n in
                 itemDaLinhaDoTempo(n, ultimo: i == nomes.count - 1)
             }
@@ -150,21 +150,25 @@ private struct StudentDetailCard: View {
         .padding(.top, 4)
     }
 
+    /// Altura própria do item; o conector é um fundo que desce até o próximo ponto (item + 12 pt
+    /// de vão), então não há espaço sobrando nem depois do último.
     private func itemDaLinhaDoTempo(_ n: NomeUsado, ultimo: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 0) {
-                Circle().fill(n.atual ? M3.primary : M3.outline).frame(width: 10, height: 10).padding(.top, 4)
-                if !ultimo { Rectangle().fill(M3.outlineVariant).frame(width: 2).frame(maxHeight: .infinity) }
-            }
-            .frame(width: 10)
+            Circle().fill(n.atual ? M3.primary : M3.outline).frame(width: 10, height: 10).padding(.top, 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
                 // Só quando entrou com esse nome: quanto tempo ficou, o professor calcula.
                 Text("entrou às \(Self.hora.string(from: n.primeiraVez))")
                     .m3(.bodySmall).foregroundColor(M3.onSurfaceVariant).monospacedDigit()
             }
-            .padding(.bottom, ultimo ? 0 : 12)
             Spacer(minLength: 0)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .background(alignment: .topLeading) {
+            if !ultimo {
+                Rectangle().fill(M3.outlineVariant).frame(width: 2)
+                    .padding(.top, 14).padding(.leading, 4).padding(.bottom, -12)
+            }
         }
         .accessibilityElement(children: .combine)
     }

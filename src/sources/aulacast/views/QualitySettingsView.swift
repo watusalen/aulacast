@@ -38,11 +38,6 @@ public struct QualitySettingsView: View {
                     opcoes: [(15, "15"), (30, "30"), (45, "45")],
                     selecao: $captureService.frameRate
                 )
-                Text("Mais quadros deixam o movimento mais macio, mas multiplicam o tráfego na "
-                     + "rede: se a turma começar a travar, é o primeiro a baixar.")
-                    .m3(.bodySmall)
-                    .foregroundColor(M3.onSurfaceVariant)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(24)
