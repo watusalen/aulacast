@@ -43,11 +43,11 @@ public struct ScreenRecordingPermissionService: ScreenRecordingPermissionProtoco
     public static func relaunch() {
         let caminho = Bundle.main.bundleURL
 
-        let processo = Process()
-        processo.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        processo.arguments = ["-n", caminho.path]
-        try? processo.run()
-
-        NSApplication.shared.terminate(nil)
+        // NSWorkspace em vez de `Process` + /usr/bin/open: funciona dentro do App Sandbox.
+        let configuracao = NSWorkspace.OpenConfiguration()
+        configuracao.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: caminho, configuration: configuracao) { _, _ in
+            DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        }
     }
 }

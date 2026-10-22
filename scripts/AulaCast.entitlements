@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Obrigatório na Mac App Store. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Aceitar conexões de entrada: servidor HTTP/WebSocket do AulaCast (NWListener) na rede local. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Conexões de saída. Necessário a validar com um build assinado: o app não abre conexões
+         externas, mas Bonjour/dns_sd pode exigir. Remover se o teste sandbox passar sem. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Arquivos que o professor escolhe no NSOpenPanel / arrasta para compartilhar com a turma
+         (somente leitura). Métricas e chamadas ficam no contêiner e não precisam de chave. -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+</dict>
+</plist>

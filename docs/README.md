@@ -32,3 +32,4 @@ Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Su
 | [ADR-004](adr/ADR-004-h264-fmp4-transmissao-principal.md) | H.264/fMP4 como transmissão principal; MJPEG como compatibilidade | Proposto |
 | [ADR-005](adr/ADR-005-tempo-do-aluno-na-aula.md) | Tempo do aluno: identidade por IP/nome, pausa excluída, "à vista" = aba visível e em foco | Proposto |
 | [ADR-006](adr/ADR-006-metricas-permanentes.md) | Métricas permanentes em todo build; console/broadcast só em depuração | Proposto |
+| [ADR-007](adr/ADR-007-distribuicao-mac-app-store-sandbox.md) | Distribuição pela Mac App Store (sandbox); checklist em [app-store-checklist.md](app-store-checklist.md) | Proposto |

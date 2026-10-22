@@ -64,6 +64,8 @@ Ao iniciar a transmissão, o app mostra o endereço para passar à turma.
 ```bash
 ./scripts/build-app.sh    # monta build/AulaCast.app
 ./scripts/gerar-dmg.sh    # monta o .app e o embala em build/AulaCast-1.0.0.dmg
+AULACAST_SANDBOX_TESTE=1 ./scripts/gerar-appstore.sh /tmp/aulacast-sandbox  # app ad-hoc COM App Sandbox, para testar localmente
+./scripts/gerar-appstore.sh   # pacote .pkg para a Mac App Store (variáveis e passos em docs/app-store-checklist.md)
 ```
 
 O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos — quem recebe só arrasta um

@@ -20,7 +20,10 @@ SAIDA="${1:-$RAIZ/build}"
 SAIDA="$(mkdir -p "$SAIDA" && cd "$SAIDA" && pwd)"
 APP="$SAIDA/AulaCast.app"
 
-IDENTIFICADOR="com.aulacast"
+# Na Mac App Store o identificador PRECISA ser igual ao App ID registrado pelo titular da conta.
+IDENTIFICADOR="${AULACAST_BUNDLE_ID:-com.aulacast}"
+COPYRIGHT="${AULACAST_COPYRIGHT:-Copyright © 2026 AulaCast. Todos os direitos reservados.}"
+ENTITLEMENTS="$RAIZ/scripts/AulaCast.entitlements"
 VERSAO="1.0.0"
 # Número de compilação (CFBundleVersion): a App Store exige que cresça a cada envio, mesmo
 # com a mesma versão. Suba este número a cada build enviado.
@@ -120,6 +123,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>  <string>$MACOS_MINIMO</string>
     <key>NSHighResolutionCapable</key> <true/>
+    <key>LSApplicationCategoryType</key> <string>public.app-category.education</string>
+    <key>NSHumanReadableCopyright</key> <string>$COPYRIGHT</string>
+    <!-- Só usa HTTP/WebSocket na rede local, sem criptografia própria: resposta de exportação. -->
+    <key>ITSAppUsesNonExemptEncryption</key> <false/>
 
     <!-- Exigido pelo macOS recente para servir na rede local da sala. -->
     <key>NSLocalNetworkUsageDescription</key>
@@ -148,7 +155,14 @@ echo "==> Assinando"
 # O README explica como criar o certificado.
 IDENTIDADE="${AULACAST_CODESIGN_ID:-AulaCast Local}"
 
-if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$IDENTIDADE"; then
+if [ "${AULACAST_APPSTORE:-}" = "1" ]; then
+  # A assinatura de distribuição (e o perfil de provisionamento) são feitos por gerar-appstore.sh.
+  echo "    AULACAST_APPSTORE=1: sem assinatura aqui (gerar-appstore.sh assina)"
+elif [ "${AULACAST_SANDBOX_TESTE:-}" = "1" ]; then
+  # O sandbox é imposto também a builds ad-hoc com entitlements: serve para testar localmente.
+  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP"
+  echo "    assinatura ad-hoc COM App Sandbox (teste local da Mac App Store)"
+elif security find-identity -v -p codesigning 2>/dev/null | grep -qF "$IDENTIDADE"; then
   codesign --force --deep --sign "$IDENTIDADE" "$APP" >/dev/null 2>&1
   echo "    assinado com \"$IDENTIDADE\" (a permissão sobrevive a recompilações)"
 else
