@@ -20,9 +20,9 @@ extension ScreenRecordingPermissionProtocol {
 /// Regras puras da permissão (testáveis sem ScreenCaptureKit nem Ajustes do Sistema).
 public enum PermissaoDeTela {
     public static let mensagemNegada =
-        "Autorize o AulaCast em Gravação de Tela e reabra o aplicativo."
+        "Autorize o AulaCast em Gravação de Tela e reabra o app."
     public static let mensagemFalhaAoReabrir =
-        "Não foi possível reabrir o AulaCast. Feche e abra o aplicativo manualmente."
+        "Não foi possível reabrir. Feche e abra o AulaCast."
 
     /// `SCStreamError.userDeclined` (-3801): o usuário negou a Gravação de Tela.
     public static func ehNegada(_ erro: Error) -> Bool {
@@ -34,9 +34,6 @@ public enum PermissaoDeTela {
     public static func deveEncerrarAposRelancar(app: AnyObject?, error: Error?) -> Bool {
         app != nil && error == nil
     }
-
-    public static var bundleId: String { Bundle.main.bundleIdentifier ?? "com.aulacast.AulaCast" }
-    public static var comandoReset: String { "tccutil reset ScreenCapture \(bundleId)" }
 }
 
 public func deveEncerrarAposRelancar(app: AnyObject?, error: Error?) -> Bool {

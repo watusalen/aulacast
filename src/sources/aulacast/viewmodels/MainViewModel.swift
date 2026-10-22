@@ -326,9 +326,6 @@ public final class MainViewModel: ObservableObject {
         streamErrorMessage = PermissaoDeTela.mensagemFalhaAoReabrir
     }
 
-    /// Verdadeiro depois de uma tentativa de pedir a permissão (usado pelo banner).
-    public var jaTentouPermissao: Bool { jaPediuPermissao }
-
     deinit {
         monitorDeRede.cancel()
         if let o = observadorDeAtivacao { NotificationCenter.default.removeObserver(o) }
@@ -423,9 +420,7 @@ public final class MainViewModel: ObservableObject {
                 if jaPediuPermissao {
                     // O aviso do macOS já apareceu nesta execução. Repeti-lo não muda nada:
                     // daqui em diante só reabrir o aplicativo resolve.
-                    self.streamErrorMessage =
-                        "Se você já autorizou o AulaCast, reabra o aplicativo para valer. "
-                        + "O macOS não aplica essa permissão a um app que já estava aberto."
+                    self.streamErrorMessage = "Já autorizou? Reabra o app para valer."
                 } else {
                     jaPediuPermissao = true
                     permission.request()
