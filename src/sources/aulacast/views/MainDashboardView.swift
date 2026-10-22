@@ -196,7 +196,7 @@ public struct MainDashboardView: View {
                             ScreenRecordingPermissionService.openSystemSettings()
                         }
                     } else {
-                        M3Botao(titulo: "Fechar aviso", variante: .texto) {
+                        M3Botao(titulo: "Fechar aviso", variante: .preenchido) {
                             viewModel.streamErrorMessage = nil
                         }
                     }
