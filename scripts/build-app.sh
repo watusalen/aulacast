@@ -21,7 +21,10 @@ SAIDA="$(mkdir -p "$SAIDA" && cd "$SAIDA" && pwd)"
 APP="$SAIDA/AulaCast.app"
 
 IDENTIFICADOR="com.aulacast"
-VERSAO="2.0.0"
+VERSAO="1.0.0"
+# Número de compilação (CFBundleVersion): a App Store exige que cresça a cada envio, mesmo
+# com a mesma versão. Suba este número a cada build enviado.
+BUILD="${AULACAST_BUILD:-1}"
 MACOS_MINIMO="13.0"
 
 # A coleta de métricas e o arquivo ~/Documents/AulaCast/Metricas existem em TODO build (ADR-006).
@@ -113,7 +116,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>      <string>$IDENTIFICADOR</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleShortVersionString</key> <string>$VERSAO</string>
-    <key>CFBundleVersion</key>         <string>$VERSAO</string>
+    <key>CFBundleVersion</key>         <string>$BUILD</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>  <string>$MACOS_MINIMO</string>
     <key>NSHighResolutionCapable</key> <true/>
