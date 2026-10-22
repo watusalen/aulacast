@@ -188,7 +188,6 @@ public struct MainDashboardView: View {
                 Spacer(minLength: 0)
             }
             HStack(spacing: 8) {
-                Spacer(minLength: 0)
                 if precisaDePermissao {
                     M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
                         ScreenRecordingPermissionService.openSystemSettings()
@@ -201,6 +200,7 @@ public struct MainDashboardView: View {
                         viewModel.streamErrorMessage = nil
                     }
                 }
+                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 20)
