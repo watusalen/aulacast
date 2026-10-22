@@ -180,31 +180,29 @@ public struct MainDashboardView: View {
 
         // Em todo alerta o texto ocupa a largura toda e as saídas ficam na linha de baixo
         // (lado a lado ficava espremido). Sem autorização o banner vira o caminho: duas saídas.
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 14) {
-                M3Icone(nome: "error", tamanho: 24, preenchido: true)
-                    .foregroundColor(M3.onErrorContainer)
+        // O ícone fica à esquerda, no meio da altura do banner todo; o texto e os botões
+        // formam uma coluna, então os botões começam na borda esquerda do texto.
+        return HStack(alignment: .center, spacing: 14) {
+            M3Icone(nome: "error", tamanho: 24, preenchido: true)
+                .foregroundColor(M3.onErrorContainer)
+            VStack(alignment: .leading, spacing: 12) {
                 textos
-                Spacer(minLength: 0)
-            }
-            // Os botões começam na borda esquerda do texto (ícone 24 + espaço 14), a ação
-            // principal primeiro.
-            HStack(spacing: 8) {
-                if precisaDePermissao {
-                    M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
-                        ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
-                    }
-                    M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
-                        ScreenRecordingPermissionService.openSystemSettings()
-                    }
-                } else {
-                    M3Botao(titulo: "Fechar aviso", variante: .texto) {
-                        viewModel.streamErrorMessage = nil
+                HStack(spacing: 8) {
+                    if precisaDePermissao {
+                        M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
+                            ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
+                        }
+                        M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
+                            ScreenRecordingPermissionService.openSystemSettings()
+                        }
+                    } else {
+                        M3Botao(titulo: "Fechar aviso", variante: .texto) {
+                            viewModel.streamErrorMessage = nil
+                        }
                     }
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.leading, 38)
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
