@@ -17,10 +17,6 @@ public struct QualitySettingsView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Qualidade da transmissão")
-                .m3(.titleLarge)
-                .foregroundColor(M3.onSurface)
-
             VStack(alignment: .leading, spacing: 10) {
                 Text("Resolução").m3(.labelLarge).foregroundColor(M3.onSurfaceVariant)
                 M3GrupoConectado(
