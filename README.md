@@ -1,8 +1,8 @@
 # AulaCast
 
-Transmissão de tela em rede local para salas de aula, criada para o **Instituto Federal do Piauí — Campus Piripiri**.
+Transmissão de tela em rede local, para qualquer pessoa. Criada para o **Instituto Federal do Piauí — Campus Piripiri**.
 
-O professor transmite a própria tela e os alunos assistem pelo navegador, **sem instalar nada** e **sem depender da internet**. Tudo trafega pela rede local da sala.
+O anfitrião transmite a própria tela e os participantes assistem pelo navegador, **sem instalar nada** e **sem depender da internet**. Tudo trafega pela rede local.
 
 ## O problema
 
@@ -28,20 +28,20 @@ O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em p
         Bonjour (_aulacast._tcp) na rede local
 ```
 
-- **Professor:** app nativo macOS em Swift/SwiftUI.
-- **Alunos:** página web servida pelo próprio Mac do professor — basta digitar `aulacast.local:8080` no navegador (o `http://` é opcional). Durante a sessão o painel mostra só esse nome; o IP (`<ip-do-professor>:8080`), para quem não resolve `.local`, sai pelo botão "Copiar link".
+- **Anfitrião:** app nativo macOS em Swift/SwiftUI.
+- **Participantes:** página web servida pelo próprio Mac do anfitrião — basta digitar `aulacast.local:8080` no navegador (o `http://` é opcional). Durante a sessão o painel mostra só esse nome; o IP (`<ip-do-anfitriao>:8080`), para quem não resolve `.local`, sai pelo botão "Copiar link".
 
 ## Funcionalidades
 
-- Transmissão do monitor inteiro ou de uma janela específica, **trocável durante a aula** sem derrubar a transmissão
+- Transmissão do monitor inteiro ou de uma janela específica, **trocável durante a transmissão** sem derrubar a transmissão
 - Qualidade ajustável ao vivo (720p/1080p, 15/30/45 fps)
 - Pausar a transmissão sem encerrar a sessão
-- Entrada identificada: o aluno informa o **nome** antes de assistir
-- Lista de presença mostrando quem está **realmente com a aula à vista** (não apenas conectado)
-- Compartilhamento de arquivos de qualquer tipo: o professor escolhe (ou arrasta) e a turma baixa pela página da aula, sem internet
-- Conversa reservada entre cada aluno e o professor (alunos não veem mensagens uns dos outros), com links clicáveis e uma **mensagem fixada** pelo professor no topo
-- **Levantar a mão** pelo chat; o professor vê quem levantou primeiro e pode abaixar
-- Página do aluno em Material 3, no desenho do Google Meet, feita para computador e celular: tela cheia pela tecla **F**, "Adicionar à Tela de Início" no iPhone, e a tela do aluno não apaga durante a aula
+- Entrada identificada: o participante informa o **nome** antes de assistir
+- Lista de presença mostrando quem está **realmente vendo a transmissão** (não apenas conectado)
+- Compartilhamento de arquivos de qualquer tipo: o anfitrião escolhe (ou arrasta) e os participantes baixam pelo mesmo link da transmissão, sem internet
+- Conversa reservada entre cada participante e o anfitrião (participantes não veem mensagens uns dos outros), com links clicáveis e uma **mensagem fixada** pelo anfitrião no topo
+- **Levantar a mão** pelo chat; o anfitrião vê quem levantou primeiro e pode abaixar
+- Página do participante em Material 3, no desenho do Google Meet, feita para computador e celular: tela cheia pela tecla **F**, "Adicionar à Tela de Início" no iPhone, e a tela do participante não apaga durante a transmissão
 - Reconexão automática do vídeo e do chat quando a rede oscila, com o último quadro na tela (sem tela preta)
 
 ## Requisitos
@@ -57,7 +57,7 @@ cd src
 swift run AulaCast
 ```
 
-Ao iniciar a transmissão, o app mostra o endereço para passar à turma.
+Ao iniciar a transmissão, o app mostra o endereço para passar aos participantes.
 
 ## Gerando o aplicativo e o instalador
 
@@ -73,7 +73,7 @@ para o outro.
 
 O aplicativo sai **universal** (Apple Silicon e Intel). O `swift build` sozinho gera apenas a
 arquitetura da máquina que compilou, e um `.dmg` feito num Mac Apple Silicon não abria num
-Intel — o que numa sala de aula acontece o tempo todo. O script compila as duas fatias e as
+Intel — o que em muitos lugares acontece o tempo todo. O script compila as duas fatias e as
 junta com `lipo`; se a segunda não compilar, ele avisa e segue com a arquitetura local.
 Para conferir o que saiu:
 
@@ -269,6 +269,6 @@ Componentes de terceiros incluídos, com as licenças junto:
 
 As fontes foram reduzidas aos caracteres e ícones usados pelo app e servem às duas telas.
 
-## Métricas e chamada
+## Métricas e lista de presença
 - A coleta de métricas por aluno e o arquivo da sessão (`~/Documents/AulaCast/Metricas/`) existem em todo build (ADR-006). `AULACAST_DEBUG_METRICS=1 scripts/build-app.sh` agora só liga o console de métricas no navegador do aluno (`METRICS_TABLE`, `DEBUG_INFO`, painel Debug).
-- Ao encerrar a transmissão, a chamada é salva em `~/Documents/AulaCast/Chamadas/chamada-AAAA-MM-DD-HHmm.csv` (RF-21).
+- Ao encerrar a transmissão, a lista de presença é salva em `~/Documents/AulaCast/Listas de presença/lista-de-presenca-AAAA-MM-DD-HHmm.csv` (RF-21).

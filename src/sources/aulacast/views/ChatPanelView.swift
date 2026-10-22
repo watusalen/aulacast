@@ -22,20 +22,20 @@ public struct ChatPanelView: View {
             // o professor procura quando quer silenciar a conversa. Antes ficava escondido
             // no popover de qualidade.
             M3LinhaDeAlternancia(
-                titulo: "Alunos podem escrever",
+                titulo: "Participantes podem escrever",
                 legenda: viewModel.isChatEnabled
-                    ? "O campo de mensagem aparece para a turma"
-                    : "O campo fica inativo na tela dos alunos",
+                    ? "O campo de mensagem aparece para os participantes"
+                    : "O campo fica inativo na tela dos participantes",
                 ligado: $viewModel.isChatEnabled
             )
 
             // Segundo toggle, independente do de cima: só faz sentido com o chat ligado —
             // desligado, não há mensagem de aluno nenhuma para circular entre colegas.
             M3LinhaDeAlternancia(
-                titulo: "Alunos veem as mensagens uns dos outros",
+                titulo: "Participantes veem as mensagens uns dos outros",
                 legenda: viewModel.isStudentChatVisibleToClass
-                    ? "As mensagens dos alunos vão para toda a turma, além de você"
-                    : "As mensagens dos alunos chegam só para você, como hoje",
+                    ? "As mensagens dos participantes vão para todos, além de você"
+                    : "As mensagens dos participantes chegam só para você",
                 ligado: $viewModel.isStudentChatVisibleToClass
             )
             .disabled(!viewModel.isChatEnabled)
@@ -49,8 +49,8 @@ public struct ChatPanelView: View {
             HStack(alignment: .top, spacing: 10) {
                 M3Icone(nome: "info", tamanho: 18)
                 Text(viewModel.isStudentChatVisibleToClass
-                    ? "Suas mensagens vão para toda a turma. As dos alunos também."
-                    : "Suas mensagens vão para toda a turma. As dos alunos chegam só para você.")
+                    ? "Suas mensagens vão para todos os participantes. As deles também."
+                    : "Suas mensagens vão para todos os participantes. As deles chegam só para você.")
                     .m3(.bodySmall)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -73,7 +73,7 @@ public struct ChatPanelView: View {
                     Text("Nenhuma mensagem ainda")
                         .m3(.titleMedium)
                         .foregroundColor(M3.onSurface)
-                    Text("As perguntas dos alunos aparecem aqui.")
+                    Text("As perguntas dos participantes aparecem aqui.")
                         .m3(.bodyMedium)
                         .foregroundColor(M3.onSurfaceVariant)
                 }
@@ -119,7 +119,7 @@ public struct ChatPanelView: View {
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(fixada.text)
-                .accessibilityLabel("Fixada para a turma: \(fixada.text)")
+                .accessibilityLabel("Fixada para os participantes: \(fixada.text)")
             M3BotaoDeIcone(icone: "keep_off", variante: .padrao, tamanho: 32, ajuda: "Desafixar") {
                 viewModel.unpinMessage()
             }
@@ -159,7 +159,7 @@ public struct ChatPanelView: View {
                 if estaFixada(msg) {
                     M3Icone(nome: "push_pin", tamanho: 14, preenchido: true)
                         .foregroundColor(M3.onSurfaceVariant)
-                        .help("Fixada para a turma")
+                        .help("Fixada para os participantes")
                 }
             }
             Text(msg.text)
@@ -179,7 +179,7 @@ public struct ChatPanelView: View {
                     icone: fixada ? "keep_off" : "keep",
                     variante: .padrao,
                     tamanho: 32,
-                    ajuda: fixada ? "Desafixar" : "Fixar para a turma"
+                    ajuda: fixada ? "Desafixar" : "Fixar para os participantes"
                 ) {
                     if fixada { viewModel.unpinMessage() } else { viewModel.pinMessage(msg) }
                 }
@@ -205,7 +205,7 @@ public struct ChatPanelView: View {
 
     private var campoDeMensagem: some View {
         HStack(spacing: 8) {
-            TextField("Mensagem para toda a turma", text: $messageText)
+            TextField("Mensagem para todos os participantes", text: $messageText)
                 .textFieldStyle(.plain)
                 .m3(.bodyLarge)
                 .foregroundColor(M3.onSurface)

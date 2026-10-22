@@ -131,7 +131,7 @@ public struct MainDashboardView: View {
                             M3Icone(nome: "pause_circle", tamanho: 48, preenchido: true)
                             Text("Pausada")
                                 .m3(.titleLarge)
-                            Text("A turma vê a imagem congelada")
+                            Text("Os participantes veem a imagem congelada")
                                 .m3(.bodyMedium)
                                 .opacity(0.8)
                         }
@@ -153,11 +153,11 @@ public struct MainDashboardView: View {
         VStack(spacing: 14) {
             M3Icone(nome: "present_to_all", tamanho: 48)
                 .foregroundColor(Color(white: 0.75))
-            Text(viewModel.isStreaming ? "Preparando a imagem…" : "Escolha o que a turma vai ver")
+            Text(viewModel.isStreaming ? "Preparando a imagem…" : "Escolha o que os participantes vão ver")
                 .m3(.titleLarge)
                 .foregroundColor(.white)
             if !viewModel.isStreaming {
-                M3Botao(titulo: "Apresentar", icone: "present_to_all", variante: .tonal) {
+                M3Botao(titulo: "Escolher tela", icone: "present_to_all", variante: .tonal) {
                     aba.wrappedValue = .apresentar
                     painelAberto = true
                 }
@@ -165,8 +165,8 @@ public struct MainDashboardView: View {
         }
     }
 
-    /// A transmissão caiu sozinha, ou falta autorização: o professor precisa ver isso,
-    /// não descobrir pelos alunos. É um "banner" do Material: aviso e as saídas possíveis.
+    /// A transmissão caiu sozinha, ou falta autorização: o anfitrião precisa ver isso,
+    /// não descobrir pelos participantes. É um "banner" do Material: aviso e as saídas possíveis.
     private func bannerDeErro(_ mensagem: String) -> some View {
         HStack(alignment: .center, spacing: 14) {
             M3Icone(nome: "error", tamanho: 24, preenchido: true)
@@ -174,8 +174,8 @@ public struct MainDashboardView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.needsScreenRecordingPermission
-                     ? "Falta a autorização do macOS"
-                     : "A transmissão foi interrompida")
+                     ? "O AulaCast precisa de permissão para gravar a tela"
+                     : "Atenção")
                     .m3(.titleSmall)
                 Text(mensagem)
                     .m3(.bodyMedium)
@@ -188,14 +188,14 @@ public struct MainDashboardView: View {
             // Quando falta autorização, o banner deixa de ser só aviso e vira o caminho:
             // são exatamente as duas saídas possíveis, sem competir com o aviso do macOS.
             if viewModel.needsScreenRecordingPermission {
-                M3Botao(titulo: "Abrir Ajustes", variante: .texto) {
+                M3Botao(titulo: "Abrir Ajustes do Sistema", variante: .texto) {
                     ScreenRecordingPermissionService.openSystemSettings()
                 }
                 M3Botao(titulo: "Reabrir o AulaCast", variante: .preenchido) {
                     ScreenRecordingPermissionService.relaunch { viewModel.avisarFalhaAoReabrir() }
                 }
             } else {
-                M3Botao(titulo: "Dispensar", variante: .texto) {
+                M3Botao(titulo: "Fechar aviso", variante: .texto) {
                     viewModel.streamErrorMessage = nil
                 }
             }
@@ -254,7 +254,7 @@ public struct MainDashboardView: View {
                     icone: enderecoCopiado ? "check" : "content_copy",
                     variante: .padrao,
                     tamanho: 36,
-                    ajuda: enderecoCopiado ? "Link copiado" : "Copiar o link da turma"
+                    ajuda: enderecoCopiado ? "Link copiado" : "Copiar o link dos participantes"
                 ) { copiarEndereco() }
             }
         }
@@ -312,13 +312,13 @@ public struct MainDashboardView: View {
             M3BotaoDeIcone(
                 icone: "present_to_all",
                 selecionado: painelAberto && aba.wrappedValue == .apresentar,
-                ajuda: "Escolher o que a turma vê"
+                ajuda: "Escolher tela ou janela"
             ) { alternarPainel(.apresentar) }
 
             M3BotaoDeIcone(
                 icone: viewModel.isPaused ? "play_arrow" : "pause",
                 selecionado: viewModel.isPaused,
-                ajuda: viewModel.isPaused ? "Retomar a transmissão" : "Pausar (a turma vê a imagem congelada)"
+                ajuda: viewModel.isPaused ? "Retomar a transmissão" : "Pausar (os participantes veem a imagem congelada)"
             ) { viewModel.togglePause() }
             .disabled(!viewModel.isStreaming)
 
@@ -331,19 +331,19 @@ public struct MainDashboardView: View {
                 QualitySettingsView(viewModel: viewModel, captureService: resolvedCaptureService)
             }
 
-            // A captura caiu, mas a turma segue conectada: além de tentar de novo, o
-            // professor precisa de um jeito de encerrar a sessão e liberar o Mac.
+            // A captura caiu, mas os participantes seguem conectados: além de tentar de novo, o
+            // anfitrião precisa de um jeito de encerrar a transmissão e liberar o Mac.
             if viewModel.isSessionOpen && !viewModel.isStreaming {
-                M3BotaoDeIcone(icone: "stop", variante: .perigo, ajuda: "Encerrar a sessão e desconectar a turma") {
+                M3BotaoDeIcone(icone: "stop", variante: .perigo, ajuda: "Encerrar a transmissão e desconectar os participantes") {
                     viewModel.stopStream()
                 }
             }
 
             if viewModel.isStreaming {
-                M3Botao(titulo: "Encerrar", icone: "stop", variante: .perigo, altura: 48, larguraMinima: 140) {
+                M3Botao(titulo: "Encerrar transmissão", icone: "stop", variante: .perigo, altura: 48, larguraMinima: 140) {
                     viewModel.stopStream()
                 }
-                .help("Parar a transmissão")
+                .help("Encerrar transmissão")
             } else {
                 M3Botao(titulo: "Iniciar transmissão", icone: "play_arrow", variante: .preenchido, altura: 48) {
                     viewModel.startStream()
@@ -369,7 +369,7 @@ public struct MainDashboardView: View {
                 contador: maos > 0 ? maos : linhas.count,
                 contadorNeutro: maos == 0,
                 contadorDeAtencao: maos > 0,
-                ajuda: maos == 0 ? "Alunos" : maos == 1 ? "Alunos — 1 mão levantada" : "Alunos — \(maos) mãos levantadas"
+                ajuda: maos == 0 ? "Participantes" : maos == 1 ? "Participantes — 1 mão levantada" : "Participantes — \(maos) mãos levantadas"
             ) { alternarPainel(.alunos) }
 
             M3BotaoDeIcone(
@@ -377,7 +377,7 @@ public struct MainDashboardView: View {
                 variante: .padrao,
                 selecionado: chatVisivel,
                 contador: naoLidas,
-                ajuda: naoLidas > 0 ? "Chat — \(naoLidas) mensagem(ns) nova(s)" : "Chat"
+                ajuda: naoLidas > 0 ? "Chat — \(naoLidas == 1 ? "1 mensagem nova" : "\(naoLidas) mensagens novas")" : "Chat"
             ) { alternarPainel(.chat) }
 
             M3BotaoDeIcone(
@@ -386,7 +386,7 @@ public struct MainDashboardView: View {
                 selecionado: painelAberto && aba.wrappedValue == .arquivos,
                 contador: viewModel.sharedFiles.count,
                 contadorNeutro: true,
-                ajuda: "Arquivos da aula"
+                ajuda: "Arquivos da transmissão"
             ) { alternarPainel(.arquivos) }
         }
         // ⌥⌘I, o atalho de "Mostrar Inspetor" dos apps da Apple, abre e fecha o painel.

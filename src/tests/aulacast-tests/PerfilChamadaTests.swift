@@ -81,7 +81,7 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     let resumos = l.todos(agora: fim)
     let utc = TimeZone(identifier: "UTC")!
     let csv = ChamadaCSV.gerar(resumos: resumos, fimDaSessao: fim, fuso: utc)
-    let esperado = "\u{FEFF}Nome;Presença;Entrou;Saiu;Minutos na aula;Minutos com a aula à vista;Percentual à vista\r\n"
+    let esperado = "\u{FEFF}Nome;Presença;Entrou;Saiu;Minutos na transmissão;Minutos vendo;Percentual vendo\r\n"
         + "\"'=cmd;x\";Presente;14/11/2023 22:13;14/11/2023 22:13;0,0;0,0;0,0\r\n"
         + "ANA;Presente;14/11/2023 22:13;14/11/2023 22:26;11,0;11,0;100,0\r\n"
         + "Élio;Presente;14/11/2023 22:14;14/11/2023 22:26;12,3;1,0;8,1\r\n"
@@ -95,14 +95,14 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     // MARK: Escritor
     let base = FileManager.default.temporaryDirectory.appendingPathComponent("chamada-teste-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: base) }
-    let pasta = base.appendingPathComponent("Chamadas")
+    let pasta = base.appendingPathComponent("Listas de presença")
     assertTest(ChamadaWriter.salvar(resumos: [], fimDaSessao: fim, pasta: pasta, fuso: utc) == .vazia
                && !FileManager.default.fileExists(atPath: pasta.path), "Escritor: sessão sem identificados não cria arquivo nem pasta")
     let r1 = ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta, fuso: utc)
     let r2 = ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta, fuso: utc)
     let r3 = ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta, fuso: utc)
     func nome(_ r: ResultadoDaChamada) -> String? { if case .salva(let u, _) = r { return u.lastPathComponent } else { return nil } }
-    assertTest(nome(r1) == "chamada-2023-11-14-2226.csv" && nome(r2) == "chamada-2023-11-14-2226-2.csv" && nome(r3) == "chamada-2023-11-14-2226-3.csv",
+    assertTest(nome(r1) == "lista-de-presenca-2023-11-14-2226.csv" && nome(r2) == "lista-de-presenca-2023-11-14-2226-2.csv" && nome(r3) == "lista-de-presenca-2023-11-14-2226-3.csv",
                "Escritor: nome pela hora local e sufixo -2, -3 sem sobrescrever")
     if case .salva(let u, let n) = r1 { assertTest(n == 3 && (try? Data(contentsOf: u)) == csv, "Escritor: conteúdo gravado é o CSV e conta 3 alunos") }
     let arquivoComum = base.appendingPathComponent("arquivo.txt")
@@ -131,7 +131,7 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     assertTest(vm.alunoAberto == nil, "VM: abrirPerfil(clientId:) de conexão que saiu não faz nada (o perfil abre pela linha ativa)")
     let resultadoVM = vm.salvarChamada(em: fim)
     assertTest({ if case .salva = resultadoVM { return true } else { return false } }()
-               && vm.avisoDaChamada?.texto == "Chamada salva (1 aluno)" && vm.avisoDaChamada?.arquivo != nil, "VM: chamada salva mostra o aviso com o arquivo")
+               && vm.avisoDaChamada?.texto == "Lista de presença salva (1 participante)" && vm.avisoDaChamada?.arquivo != nil, "VM: chamada salva mostra o aviso com o arquivo")
     vm.avisoDaChamada = nil
     assertTest(vm.salvarChamada(em: fim) == .vazia && vm.avisoDaChamada == nil, "VM: a chamada é salva uma vez por sessão")
     let vmRuim = MainViewModel(captureService: FakeCaptureService(), encoderService: FakeEncoder(), serverService: FakeServer(),
@@ -141,7 +141,7 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     vmRuim.ledger.connected(clientId: "w", ip: "1.2.3.4")
     vmRuim.ledger.identified(clientId: "w", name: "Dani")
     vmRuim.salvarChamada(em: fim)
-    assertTest(vmRuim.avisoDaChamada?.texto == "Não foi possível salvar a chamada" && vmRuim.avisoDaChamada?.arquivo == nil, "VM: falha de disco vira aviso, sem travar")
+    assertTest(vmRuim.avisoDaChamada?.texto == "Não foi possível salvar a lista de presença. Verifique o espaço em disco." && vmRuim.avisoDaChamada?.arquivo == nil, "VM: falha de disco vira aviso, sem travar")
 
     // MARK: Métricas permanentes: dois modos (injetável)
     let conexao = NWConnection(host: "127.0.0.1", port: 9, using: .tcp) // nunca iniciada: sem rede

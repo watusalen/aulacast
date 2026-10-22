@@ -60,14 +60,14 @@ private struct StudentDetailCard: View {
     }
 
     private func conteudo(_ r: AttendanceSummary) -> some View {
-        let nome = r.nome ?? "Aluno"
+        let nome = r.nome ?? "Participante"
         let porcentagem = Int((r.fracaoAVista * 100).rounded())
         return VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 14) {
                 AvatarDeIniciais(nome: nome)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(nome).m3(.titleMedium).foregroundColor(M3.onSurface).lineLimit(1)
-                    Text("\(r.ip) · entrou às \(Self.hora.string(from: r.entrouAs))")
+                    Text("IP \(r.ip) · entrou às \(Self.hora.string(from: r.entrouAs))")
                         .m3(.bodyMedium).foregroundColor(M3.onSurfaceVariant).lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -75,22 +75,22 @@ private struct StudentDetailCard: View {
             }
 
             HStack(alignment: .top, spacing: 16) {
-                destaque("Na aula", formatarDuracao(r.naAula))
-                destaque("Com a aula à vista", formatarDuracao(r.aVista))
+                destaque("Na transmissão", formatarDuracao(r.naAula))
+                destaque("Vendo a transmissão", formatarDuracao(r.aVista))
             }
 
             VStack(alignment: .leading, spacing: 6) {
                 WavyProgress(fracao: r.fracaoAVista)
                     .frame(height: 12)
-                Text("\(porcentagem)% do tempo com a aula à vista")
+                Text("\(porcentagem)% do tempo vendo a transmissão")
                     .m3(.labelLarge).foregroundColor(M3.onSurfaceVariant)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Com a aula à vista em \(porcentagem)% do tempo")
+            .accessibilityLabel("Vendo a transmissão em \(porcentagem)% do tempo")
 
             VStack(spacing: 0) {
-                linha("Saídas da aula (aba ou janela)", "\(r.saidas)")
-                linha("Maior trecho sem sair", formatarDuracao(r.maiorTrecho))
+                linha("Saídas (aba ou janela)", "\(r.saidas)")
+                linha("Maior tempo seguido", formatarDuracao(r.maiorTrecho))
                 linha("Desconexões e voltas", "\(r.desconexoes)")
                 if r.nomes.count > 1 { nomesUsados(r.nomes) }
             }

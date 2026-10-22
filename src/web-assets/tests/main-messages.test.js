@@ -133,7 +133,7 @@ test('STREAM_STARTED devolve o vídeo a quem já estava conectado', () => {
   app.handleServerMessage({ type: 'STREAM_STARTED' });
 
   assert.strictEqual(vigia.chamadas.at(-1), 'start', 'o vídeo volta a ser pedido');
-  assert.strictEqual(elementos.placeholder.querySelector('.placeholder-title').textContent, 'Aguardando transmissão');
+  assert.strictEqual(elementos.placeholder.querySelector('.placeholder-title').textContent, 'Aguardando o anfitrião');
 });
 
 test('CONNECTED sem payload não derruba o cliente', () => {
@@ -146,7 +146,7 @@ test('CONNECTED leva o estado atual da visibilidade para a turma ao aviso do cha
   app.handleServerMessage({ type: 'CONNECTED', payload: { chatVisibleToClass: true, stream: 'live' } });
   assert.strictEqual(
     elementos.chatVisibilityText.textContent,
-    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+    'Chat visível para os participantes. Os outros participantes veem as mensagens que você manda.'
   );
 });
 
@@ -157,13 +157,13 @@ test('O professor liga/desliga a visibilidade no meio da aula: o aviso do chat m
   app.handleServerMessage({ type: 'CHAT_VISIBILITY', payload: { visible: 'true' } });
   assert.strictEqual(
     elementos.chatVisibilityText.textContent,
-    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+    'Chat visível para os participantes. Os outros participantes veem as mensagens que você manda.'
   );
 
   app.handleServerMessage({ type: 'CHAT_VISIBILITY', payload: { visible: 'false' } });
   assert.strictEqual(
     elementos.chatVisibilityText.textContent,
-    'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.'
+    'Conversa privada com o anfitrião. Suas mensagens não são vistas pelos outros participantes.'
   );
 });
 
@@ -236,7 +236,7 @@ test('HAND_LOWERED volta o botão ao normal e deixa uma linha curta no chat', ()
   assert.strictEqual(elementos.raiseHandBtn.attrs['aria-pressed'], 'false');
   assert.strictEqual(elementos.raiseHandBtn.attrs['aria-label'], 'Levantar a mão');
   const linha = elementos.chatMessages.filhos.at(-1);
-  assert.strictEqual(linha.filhos[0].textContent, 'O professor abaixou sua mão');
+  assert.strictEqual(linha.filhos[0].textContent, 'O anfitrião abaixou sua mão');
 
   app.handleServerMessage({ type: 'HAND_LOWERED' });
   assert.strictEqual(elementos.chatMessages.filhos.length, antes + 1, 'repetido não repete a linha');

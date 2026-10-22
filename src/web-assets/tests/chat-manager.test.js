@@ -267,13 +267,13 @@ test('O aviso fixo do chat muda de texto conforme a visibilidade para a turma', 
   chat.setVisibleToClass(true);
   assert.strictEqual(
     elementos.chatVisibilityText.textContent,
-    'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
+    'Chat visível para os participantes. Os outros participantes veem as mensagens que você manda.'
   );
 
   chat.setVisibleToClass(false);
   assert.strictEqual(
     elementos.chatVisibilityText.textContent,
-    'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.'
+    'Conversa privada com o anfitrião. Suas mensagens não são vistas pelos outros participantes.'
   );
 });
 
@@ -342,7 +342,7 @@ test('Mão abaixada pelo professor vira uma linha de sistema com o ícone da mã
   const chat = new ChatManager(() => true, () => 'Ana');
   chat.mostrarMaoAbaixada();
   assert.strictEqual(ultima().className, 'chat-event mao');
-  assert.strictEqual(ultima().filhos[0].textContent, 'O professor abaixou sua mão');
+  assert.strictEqual(ultima().filhos[0].textContent, 'O anfitrião abaixou sua mão');
 });
 
 // MARK: - Mensagem fixada

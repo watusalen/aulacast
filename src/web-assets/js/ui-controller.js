@@ -11,7 +11,7 @@ const CHAVE_AREA = 'aulacast.areaDoPainel';
 /** Os controles da imagem (e, na tela cheia, o cursor) somem depois deste tempo parado. */
 const OCIOSIDADE_DOS_CONTROLES_MS = 2500;
 
-/** As áreas do painel: uma de cada vez, como no professor. */
+/** As áreas do painel: uma de cada vez, como no app do anfitrião. */
 const TITULOS = { chat: 'Chat', arquivos: 'Arquivos' };
 
 /** O que o chip da barra diz em cada estado. */
@@ -106,7 +106,7 @@ export class UIController {
       arquivos: document.getElementById('filesArea')
     };
 
-    /** Estado da conexão (WebSocket) e da transmissão (o que o professor está fazendo). */
+    /** Estado da conexão (WebSocket) e da transmissão (o que o anfitrião está fazendo). */
     this.conexao = ConnectionState.CONNECTING;
     this.transmissao = 'ao-vivo';
     /** Já chegou algum quadro desde que o vídeo foi pedido: há o que congelar. */
@@ -117,11 +117,13 @@ export class UIController {
     this.streamWatchdog = criar(this.videoStream, {
       onRetry: (attempt, reason) => {
         console.warn(`Stream de vídeo interrompido (${reason}); tentativa ${attempt}.`);
+        // MJPEG é a última rota: se a imagem nem abre, o navegador não consegue exibir a tela.
+        if (!this.teveQuadro && !this.mjpegSuprimido && attempt >= 3 && reason === 'error') this.mostrarSemSuporteDeVideo();
       },
       onEstado: (estado) => this.aoMudarEstadoDoVideo(estado)
     });
     // O `load` de um multipart dispara quando chega o primeiro quadro (Chrome e Safari):
-    // é a hora de trocar o "Aguardando transmissão" pela imagem.
+    // é a hora de trocar o "Aguardando o anfitrião" pela imagem.
     this.videoStream.addEventListener('load', () => this.aoChegarQuadro());
 
     // Painel: qual área, e se está aberto no computador. Na folha do celular ele sempre
@@ -202,11 +204,11 @@ export class UIController {
 
   /**
    * Reconectando: congela o último quadro e põe só um chip por cima. Antes a imagem era
-   * escondida atrás de uma tela escura a cada oscilação da rede, e a turma via a aula
+   * escondida atrás de uma tela escura a cada oscilação da rede, e os participantes viam a transmissão
    * "apagar e piscar".
    */
   showReconnecting(attempts) {
-    this.reconnectAttemptText.textContent = attempts > 1 ? `tentativa ${attempts}` : '';
+    this.reconnectAttemptText.textContent = attempts >= 3 ? 'Sua rede pode estar instável. Aguarde um instante.' : '';
     this.reconnectOverlay.hidden = false;
     this.congelarVideo();
   }
@@ -260,8 +262,14 @@ export class UIController {
   }
 
   mostrarAguardando() {
-    this.definirPalcoVazio(ICONE_AGUARDANDO, 'Aguardando transmissão',
-      'A tela do professor aparecerá aqui automaticamente.', true);
+    this.definirPalcoVazio(ICONE_AGUARDANDO, 'Aguardando o anfitrião',
+      'Assim que ele começar a transmitir, a tela aparece aqui. Não precisa recarregar a página.', true);
+  }
+
+  /** Nem H.264 nem MJPEG abriram neste navegador. */
+  mostrarSemSuporteDeVideo() {
+    this.definirPalcoVazio(ICONE_AGUARDANDO, 'Não foi possível exibir a tela',
+      'Seu navegador não conseguiu exibir a tela. Tente o Chrome ou o Safari.', false);
   }
 
   /** Mantido com o nome antigo: é o palco vazio de "aguardando". */
@@ -284,8 +292,8 @@ export class UIController {
     this.placeholder.hidden = false;
   }
 
-  /** A transmissão terminou do lado do professor: congelar não ajuda, é preciso dizer o motivo. */
-  showStreamEnded(reason) {
+  /** A transmissão terminou do lado do anfitrião: congelar não ajuda, é preciso avisar. */
+  showStreamEnded() {
     this.transmissao = 'encerrada';
     this.reconnectOverlay.hidden = true;
     this.pausedOverlay.hidden = true;
@@ -293,7 +301,7 @@ export class UIController {
     this.videoStream.classList.remove('active');
     this.teveQuadro = false;
     this.definirPalcoVazio(ICONE_ENCERRADA, 'Transmissão encerrada',
-      reason || 'O professor encerrou a transmissão.', false);
+      'O anfitrião encerrou a transmissão. Esta página volta sozinha se ele transmitir de novo.', false);
     this.atualizarChip();
   }
 
@@ -302,7 +310,7 @@ export class UIController {
    *
    * Depois de um `showStreamEnded` o vigia do vídeo está parado e o palco vazio ocupa a
    * tela. Como a conexão continuou de pé o tempo todo, nada disparava `updateState` de
-   * novo: o aluno ficava olhando "Transmissão encerrada" com a aula já rolando.
+   * novo: o participante ficava olhando "Transmissão encerrada" com a transmissão já rolando.
    */
   showStreaming() {
     this.transmissao = 'ao-vivo';
@@ -474,7 +482,7 @@ export class UIController {
   }
 
   /**
-   * Conta o que chega com a área fechada: mensagens do professor e fixadas no Chat,
+   * Conta o que chega com a área fechada: mensagens do anfitrião e fixadas no Chat,
    * arquivos novos em Arquivos.
    */
   marcarNovidade(area = 'chat', quantidade = 1) {
@@ -567,11 +575,11 @@ export class UIController {
 
   atualizarBotaoDeTelaCheia() {
     const cheia = this.emTelaCheia();
-    const rotulo = cheia ? 'Sair da tela cheia (F)' : 'Tela cheia (F)';
+    const rotulo = cheia ? 'Sair da tela cheia' : 'Tela cheia';
     this.fullscreenBtn.setAttribute('aria-pressed', String(cheia));
     this.fullscreenBtn.setAttribute('aria-label', rotulo);
-    this.fullscreenBtn.title = rotulo;
-    // Ao entrar e ao sair, os controles aparecem por um instante: o aluno vê onde sair.
+    this.fullscreenBtn.title = `${rotulo} (F)`;
+    // Ao entrar e ao sair, os controles aparecem por um instante: o participante vê onde sair.
     this.mostrarControlesDoVideo();
   }
 

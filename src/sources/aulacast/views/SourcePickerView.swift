@@ -27,7 +27,7 @@ public struct SourcePickerView<CaptureService: ScreenCaptureProtocol>: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("O que a turma vai ver")
+                Text("O que os participantes vão ver")
                     .m3(.bodyMedium)
                     .foregroundColor(M3.onSurfaceVariant)
                 Spacer()

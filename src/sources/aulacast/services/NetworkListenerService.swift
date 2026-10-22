@@ -120,16 +120,15 @@ public final class NetworkListenerService: NetworkServerProtocol, BonjourHostPro
             // o servidor morto. Quem cuida da tela precisa ser avisado.
             let mensagem: String
             if case .posix(let codigo) = erro, codigo == .EADDRINUSE {
-                mensagem = "A porta \(self.port) já está em uso por outro aplicativo. "
-                    + "Feche-o e inicie a transmissão de novo."
+                mensagem = "Outro aplicativo está usando a conexão necessária (porta \(self.port)). Feche-o e tente de novo."
             } else {
-                mensagem = "O servidor da aula parou de funcionar (\(erro.localizedDescription))."
+                mensagem = "A conexão com os participantes foi interrompida. Encerre e inicie a transmissão de novo."
             }
             self.onFailure?(mensagem)
         }
 
         listener.service = anuncio
-        // Um nome repetido na rede (dois professores com o AulaCast na mesma sala) não
+        // Um nome repetido na rede (dois anfitriões com o AulaCast na mesma rede) não
         // derruba nada: o sistema renomeia o anúncio, e só isso é registrado.
         listener.serviceRegistrationUpdateHandler = { mudanca in
             if case .add(let endpoint) = mudanca {

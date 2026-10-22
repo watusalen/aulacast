@@ -3,6 +3,14 @@
 Índice. Abra os documentos pelo ID. As histórias usam o prefixo **US** (não HU).
 Itens **Proposto** ainda esperam aprovação do usuário.
 
+## Glossário (vocabulário neutro, ADR-008)
+- **Anfitrião**: quem transmite a tela (antes "professor").
+- **Participante**: quem assiste pelo navegador (antes "aluno"; "turma" e "colegas" viram "participantes").
+- **Transmissão**: o que o anfitrião mostra (antes "aula"). **Sessão**: o período todo, do início ao fim.
+- **Lista de presença**: o CSV de quem entrou (antes "chamada"; "chamada" também pode ser chamada de vídeo).
+- **Vendo** / "Vendo a transmissão": aba visível e em foco (antes "com a aula à vista").
+- Nota: os documentos de requisitos, casos de uso e histórias mantêm os atores com a redação original (professor/aluno). Os nomes internos no código e as chaves do protocolo também não mudaram. Só o texto que o usuário vê mudou.
+
 | Documento | Conteúdo |
 | :--- | :--- |
 | [01-especificacao-requisitos.md](01-especificacao-requisitos.md) | RF-01..RF-21 (RF-12 descartado), RNF-01..RNF-10, perguntas em aberto |
@@ -33,3 +41,4 @@ Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Su
 | [ADR-005](adr/ADR-005-tempo-do-aluno-na-aula.md) | Tempo do aluno: identidade por IP/nome, pausa excluída, "à vista" = aba visível e em foco | Proposto |
 | [ADR-006](adr/ADR-006-metricas-permanentes.md) | Métricas permanentes em todo build; console/broadcast só em depuração | Proposto |
 | [ADR-007](adr/ADR-007-distribuicao-mac-app-store-sandbox.md) | Distribuição pela Mac App Store (sandbox); checklist em [app-store-checklist.md](app-store-checklist.md) | Proposto |
+| [ADR-008](adr/ADR-008-vocabulario-neutro.md) | Vocabulário neutro: anfitrião e participante, sem termos de escola | Proposto |

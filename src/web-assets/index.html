@@ -22,7 +22,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <!-- "Adicionar à Tela de Início": a aula abre como app, sem a barra do navegador. É o
+  <!-- "Adicionar à Tela de Início": a transmissão abre como app, sem a barra do navegador. É o
        único jeito de ter tela cheia no iPhone, cujo Safari só põe <video> em tela cheia
        (a transmissão é uma imagem MJPEG). O manifesto cobre o Android; as metas da Apple,
        o iPhone e o iPad. -->
@@ -36,7 +36,7 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Portaria: o aluno só vê a aula depois de se identificar. -->
+  <!-- Portaria: o participante só vê a transmissão depois de se identificar. -->
   <div id="entryGate" class="entry-gate">
     <form id="entryForm" class="entry-card" novalidate>
       <div class="entry-brand">
@@ -47,31 +47,30 @@
         </svg>
         <span>AulaCast</span>
       </div>
-      <h1 class="entry-title">Entrar na aula</h1>
-      <p class="entry-sub">Diga seu nome para o professor saber quem está assistindo.</p>
+      <h1 class="entry-title">Entrar na transmissão</h1>
+      <p class="entry-sub">Escreva seu nome para o anfitrião saber quem está na transmissão.</p>
 
       <!-- Campo contornado do Material 3: o rótulo mora dentro do campo e sobe para a borda
-           quando o aluno toca nele. O input vem antes do rótulo porque o CSS usa o seletor
+           quando o participante toca nele. O input vem antes do rótulo porque o CSS usa o seletor
            de irmão (`input:focus + label`), que funciona até em navegador antigo. -->
       <div class="campo">
         <input type="text" id="entryName" class="campo-input" autocomplete="name"
-               placeholder="Ex.: Ana Beatriz Sousa" maxlength="40" required>
-        <label class="campo-rotulo" for="entryName">Seu nome completo</label>
+               placeholder="Ex.: Ana Beatriz" maxlength="40" required>
+        <label class="campo-rotulo" for="entryName">Seu nome</label>
       </div>
 
       <p id="entryError" class="entry-error" role="alert" hidden></p>
 
-      <button type="submit" id="entrySubmit" class="botao botao-preenchido botao-grande">Entrar na aula</button>
+      <button type="submit" id="entrySubmit" class="botao botao-preenchido botao-grande">Entrar na transmissão</button>
     </form>
   </div>
 
   <div id="app" class="app">
     <main class="content">
-      <!-- Palco: a tela do professor sobre fundo quase preto, nos dois temas, como o palco
-           do Meet e o da tela do professor. -->
-      <section id="stage" class="stage" aria-label="Tela do professor">
+      <!-- Palco: a tela do anfitrião sobre fundo quase preto, nos dois temas. -->
+      <section id="stage" class="stage" aria-label="Tela do anfitrião">
         <div class="video-wrap">
-          <img id="videoStream" alt="Tela do professor" class="stream">
+          <img id="videoStream" alt="Tela do anfitrião" class="stream">
           <!-- O vigia do vídeo insere aqui, logo depois da imagem, o `.stream-congelado`
                que segura o último quadro quando a conexão cai. -->
 
@@ -79,24 +78,24 @@
                acima, então mesma caixa e o mesmo mecanismo de mostrar (`.active`). Fica depois
                do <img> no HTML de propósito — com os dois marcados `.active`, este cobre o
                MJPEG por trás, sem precisar escondê-lo. Sem áudio (a transmissão é só tela),
-               daí `muted` para o autoplay funcionar sem gesto do aluno. -->
+               daí `muted` para o autoplay funcionar sem gesto do participante. -->
           <video id="videoStreamMP4" class="stream" muted playsinline autoplay></video>
 
           <div id="placeholder" class="placeholder">
             <span class="icone placeholder-icon" aria-hidden="true">&#xE0DF;</span>
-            <p class="placeholder-title">Aguardando transmissão</p>
-            <p class="placeholder-sub">A tela do professor aparecerá aqui automaticamente.</p>
+            <p class="placeholder-title">Aguardando o anfitrião</p>
+            <p class="placeholder-sub">Assim que ele começar a transmitir, a tela aparece aqui. Não precisa recarregar a página.</p>
             <svg class="spinner progresso" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20"/></svg>
           </div>
 
           <div id="pausedOverlay" class="paused-overlay" hidden>
             <span class="icone icone-cheio paused-icon" aria-hidden="true">&#xE1A2;</span>
-            <p class="paused-title">Pausada</p>
-            <p class="paused-sub">O professor pausou a transmissão por um instante.</p>
+            <p class="paused-title">Transmissão pausada</p>
+            <p class="paused-sub">O anfitrião pausou. A tela volta sozinha quando ele continuar.</p>
           </div>
 
           <!-- Reconectando: só um aviso pequeno por cima do último quadro. Antes a imagem
-               sumia atrás de uma tela escura a cada oscilação da rede, e a turma via a aula
+               sumia atrás de uma tela escura a cada oscilação da rede, e os participantes viam a transmissão
                "apagar e piscar". -->
           <div id="reconnectOverlay" class="reconnect-overlay" role="status" hidden>
             <svg class="progresso progresso-pequeno" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="20"/></svg>
@@ -107,8 +106,8 @@
           <div id="disconnectedState" class="disconnected-state" hidden>
             <div class="aviso-cartao" role="alert">
               <span class="icone disconnected-icon" aria-hidden="true">&#xE648;</span>
-              <p class="disconnected-title">Sem conexão com o professor</p>
-              <p class="disconnected-sub">Confira se você está na rede do laboratório.</p>
+              <p class="disconnected-title">Sem conexão com o anfitrião</p>
+              <p class="disconnected-sub">Confira se você está no mesmo Wi-Fi do anfitrião e toque em Tentar de novo.</p>
               <button id="retryConnectionBtn" class="botao botao-preenchido" type="button">
                 <span class="icone" aria-hidden="true">&#xE5D5;</span>Tentar de novo
               </button>
@@ -121,14 +120,14 @@
              (na tela cheia, com o cursor junto); no celular fica sempre à vista. -->
         <div id="videoControls" class="controles-video">
           <button id="fullscreenBtn" class="botao-icone botao-palco" type="button"
-                  aria-label="Tela cheia (F)" title="Tela cheia (F)">
+                  aria-label="Tela cheia" title="Tela cheia (F)">
             <span class="icone fs-icon-enter" aria-hidden="true">&#xE5D0;</span>
             <span class="icone fs-icon-exit" aria-hidden="true">&#xE5D1;</span>
           </button>
         </div>
       </section>
 
-      <!-- Painel lateral no desenho do professor: um cartão de cantos grandes com uma área
+      <!-- Painel lateral no desenho do app do anfitrião: um cartão de cantos grandes com uma área
            de cada vez (Chat OU Arquivos), título e botão de fechar. No celular vira folha
            por cima do vídeo. -->
       <aside id="sidebar" class="sidebar" aria-labelledby="panelTitle">
@@ -139,8 +138,8 @@
           </button>
         </div>
 
-        <section id="chatArea" class="area area-chat" aria-label="Chat com o professor">
-          <!-- Mensagem fixada pelo professor (link do portal, recado da aula): fica à vista
+        <section id="chatArea" class="area area-chat" aria-label="Chat com o anfitrião">
+          <!-- Mensagem fixada pelo anfitrião (link, recado da transmissão): fica à vista
                mesmo com a conversa andando. -->
           <div id="chatPinned" class="fixada" hidden>
             <div class="fixada-cabeca">
@@ -154,23 +153,23 @@
           <div id="chatMessages" class="messages" role="log" aria-live="polite">
             <div class="sys-msg">
               <span class="icone" aria-hidden="true">&#xE88E;</span>
-              <!-- Texto trocado por chat-manager.js conforme o professor liga/desliga a
-                   visibilidade para a turma (CONNECTED e CHAT_VISIBILITY) — o que está aqui
+              <!-- Texto trocado por chat-manager.js conforme o anfitrião liga/desliga a
+                   visibilidade para os participantes (CONNECTED e CHAT_VISIBILITY) — o que está aqui
                    é só o valor inicial, antes do primeiro estado chegar do servidor. -->
-              <span id="chatVisibilityText">Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.</span>
+              <span id="chatVisibilityText">Conversa privada com o anfitrião. Suas mensagens não são vistas pelos outros participantes.</span>
             </div>
           </div>
 
           <form id="chatForm" class="chat-form">
             <!-- Levantar a mão fica aqui, pequeno, ao lado do campo: é um jeito de chamar o
-                 professor sem escrever, e continua valendo com o chat desligado. -->
+                 anfitrião sem escrever, e continua valendo com o chat desligado. -->
             <button id="raiseHandBtn" class="botao-icone botao-mao" type="button" aria-pressed="false"
                     aria-label="Levantar a mão" title="Levantar a mão">
               <span class="icone" aria-hidden="true">&#xE764;</span>
             </button>
             <div class="pilula">
-              <input type="text" id="chatMessageInput" placeholder="Escreva para o professor" maxlength="1000"
-                     required autocomplete="off" enterkeyhint="send" class="input-msg" aria-label="Mensagem para o professor">
+              <input type="text" id="chatMessageInput" placeholder="Escreva para o anfitrião" maxlength="1000"
+                     required autocomplete="off" enterkeyhint="send" class="input-msg" aria-label="Mensagem para o anfitrião">
               <button type="submit" id="chatSendBtn" class="botao-icone btn-send" aria-label="Enviar" title="Enviar">
                 <span class="icone" aria-hidden="true">&#xE163;</span>
               </button>
@@ -178,12 +177,12 @@
           </form>
         </section>
 
-        <section id="filesArea" class="area area-arquivos" aria-label="Arquivos da aula" hidden>
+        <section id="filesArea" class="area area-arquivos" aria-label="Arquivos da transmissão" hidden>
           <ul id="filesList" class="files-list" hidden></ul>
           <div id="filesEmpty" class="vazio">
             <span class="icone" aria-hidden="true">&#xE2C7;</span>
             <p class="vazio-titulo">Nenhum arquivo ainda</p>
-            <p class="vazio-sub">Os arquivos que o professor compartilhar aparecem aqui para baixar.</p>
+            <p class="vazio-sub">Os arquivos que o anfitrião compartilhar aparecem aqui para baixar.</p>
           </div>
         </section>
       </aside>
@@ -205,12 +204,12 @@
 
       <div class="barra-paineis">
         <button id="chatToggleBtn" class="botao-icone botao-barra" type="button" aria-controls="sidebar"
-                aria-expanded="false" aria-label="Chat" title="Chat">
+                aria-expanded="false" aria-label="Abrir chat" title="Chat">
           <span class="icone" aria-hidden="true">&#xE0C9;</span>
           <span id="chatBadge" class="contador" aria-hidden="true" hidden></span>
         </button>
         <button id="filesToggleBtn" class="botao-icone botao-barra" type="button" aria-controls="sidebar"
-                aria-expanded="false" aria-label="Arquivos" title="Arquivos">
+                aria-expanded="false" aria-label="Abrir arquivos" title="Arquivos">
           <span class="icone" aria-hidden="true">&#xE226;</span>
           <span id="filesBadge" class="contador contador-neutro" aria-hidden="true" hidden></span>
         </button>

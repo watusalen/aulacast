@@ -168,7 +168,7 @@ public final class FileDownloadService {
     }
 
     private func enviarNaoEncontrado(_ connection: NWConnection) {
-        let corpo = "Arquivo não disponível. O professor pode tê-lo removido."
+        let corpo = "Arquivo não disponível. O anfitrião pode tê-lo removido."
         let cabecalho = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\n"
             + "Content-Length: \(corpo.utf8.count)\r\nConnection: close\r\n\r\n"
         var resposta = Data(cabecalho.utf8)

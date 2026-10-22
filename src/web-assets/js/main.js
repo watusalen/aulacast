@@ -56,7 +56,7 @@ export class AulaCastApp {
 
     this.chatManager = new ChatManager(
       (data) => this.socket.send(data),
-      () => (this.identidade ? this.identidade.name : 'Aluno'),
+      () => (this.identidade ? this.identidade.name : 'Participante'),
       // this.files só existe depois desta linha — a seta só lê a referência quando o
       // aluno de fato clica no aviso, já com a FilesList criada (mesmo padrão do nome
       // acima, lido só na hora de enviar).
@@ -280,7 +280,7 @@ export class AulaCastApp {
       // sistema). Sem este aviso o aluno ficaria olhando o último quadro congelado.
       case 'STREAM_ENDED':
         this.estadoDaTransmissao = 'ended';
-        this.ui.showStreamEnded(data.payload && data.payload.reason);
+        this.ui.showStreamEnded();
         this.videoPlayer?.stop();
         break;
     }
@@ -316,7 +316,7 @@ export class AulaCastApp {
         this.iniciarH264();
         break;
       case 'ended':
-        this.ui.showStreamEnded(payload.reason);
+        this.ui.showStreamEnded();
         this.videoPlayer?.stop();
         break;
       case 'live':

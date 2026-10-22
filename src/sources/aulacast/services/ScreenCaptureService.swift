@@ -189,7 +189,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             }
         } catch {
             await MainActor.run {
-                self.errorMessage = "Erro ao buscar fontes: \(error.localizedDescription)"
+                self.errorMessage = "Não foi possível listar as telas e janelas. Verifique a permissão de Gravação de Tela e toque em Atualizar."
             }
         }
     }
@@ -201,7 +201,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 
         guard let source = selectedSource else {
             await MainActor.run {
-                self.errorMessage = "Nenhuma fonte selecionada."
+                self.errorMessage = "Escolha uma tela ou janela para transmitir."
             }
             return
         }
@@ -223,7 +223,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             await MainActor.run {
                 self.errorMessage = PermissaoDeTela.ehNegada(error)
                     ? PermissaoDeTela.mensagemNegada
-                    : "Falha ao iniciar captura: \(error.localizedDescription)"
+                    : "Não foi possível começar a capturar a tela. Escolha a tela de novo e inicie a transmissão."
             }
         }
     }
@@ -387,7 +387,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             vigiarJanelaTransmitida()
             lifecycleObserver?.captureSourceIsAvailableAgain()
         } catch {
-            await relatarErro("Não foi possível trocar a fonte: \(error.localizedDescription)")
+            await relatarErro("Não foi possível trocar a tela ou janela. Escolha outra e tente de novo.")
         }
     }
 
@@ -441,7 +441,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
         do {
             try await stream.updateConfiguration(makeConfiguration(for: selectedSource))
         } catch {
-            await relatarErro("Não foi possível aplicar a qualidade: \(error.localizedDescription)")
+            await relatarErro("Não foi possível aplicar a qualidade. Tente de novo.")
         }
     }
 
@@ -451,7 +451,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
             try await stream.stopCapture()
         } catch {
             await MainActor.run {
-                self.errorMessage = "Erro ao interromper captura: \(error.localizedDescription)"
+                self.errorMessage = "Não foi possível encerrar a captura da tela. Feche o AulaCast e abra de novo se a tela continuar sendo capturada."
             }
         }
         await MainActor.run {
@@ -489,21 +489,23 @@ extension ScreenCaptureService: SCStreamOutput, SCStreamDelegate {
     }
     
     public nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
-        let erroDoSistema = error.localizedDescription
+        // O texto do sistema não é para o usuário: vai só para o log.
+        print("[ScreenCapture] captura parou: \(error.localizedDescription)")
+        let erroDoSistema = "A captura da tela parou. Escolha a tela de novo e inicie a transmissão."
         Task { @MainActor in
             self.vigiaDaJanela?.cancel()
             self.vigiaDaJanela = nil
 
             // Quando o aplicativo da janela transmitida fecha, o ScreenCaptureKit para com
             // um genérico "Falha ao encontrar telas ou janelas para capturar". Dizer qual
-            // janela sumiu e o que fazer é o que o professor precisa ler.
+            // janela sumiu e o que fazer é o que o anfitrião precisa ler.
             var reason = erroDoSistema
             if let fonte = self.selectedSource, let janela = fonte.scWindow,
                !Self.janelaExiste(janela.windowID) {
                 reason = "A janela “\(SourceNaming.title(fonte))” foi fechada. "
-                    + "Escolha outra fonte e clique em Iniciar Transmissão."
+                    + "Escolha outra tela ou janela e inicie a transmissão."
             }
-            self.errorMessage = "Transmissão interrompida: \(reason)"
+            self.errorMessage = "A transmissão foi interrompida. \(reason)"
             self.isRecording = false
             self.stream = nil
             // Avisa quem controla a sessão: sem isto o app continuaria anunciando

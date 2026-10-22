@@ -22,6 +22,7 @@ export class ChatManager {
 
     this.chatSendBtn = document.getElementById('chatSendBtn');
     this.chatEnabled = true;
+    this.placeholderPadrao = this.chatMessageInput.placeholder;
     this.visibilityText = document.getElementById('chatVisibilityText');
 
     this.fixada = document.getElementById('chatPinned');
@@ -59,6 +60,7 @@ export class ChatManager {
       this.chatMessageInput.value = '';
       this.chatMessageInput.blur();
     }
+    this.chatMessageInput.placeholder = enabled ? this.placeholderPadrao : 'O anfitrião desativou o chat';
   }
 
   /**
@@ -70,8 +72,8 @@ export class ChatManager {
   setVisibleToClass(visible) {
     if (!this.visibilityText) return;
     this.visibilityText.textContent = visible
-      ? 'Chat visível para a turma. Seus colegas veem as mensagens que você manda.'
-      : 'Conversa privada com o professor. Suas mensagens não são vistas pelos colegas.';
+      ? 'Chat visível para os participantes. Os outros participantes veem as mensagens que você manda.'
+      : 'Conversa privada com o anfitrião. Suas mensagens não são vistas pelos outros participantes.';
   }
 
   handleSubmit(e) {
@@ -123,7 +125,7 @@ export class ChatManager {
 
   /** O professor abaixou a mão do aluno: uma linha curta, no mesmo tom das de sistema. */
   mostrarMaoAbaixada() {
-    this.mostrarEvento('O professor abaixou sua mão', 'mao');
+    this.mostrarEvento('O anfitrião abaixou sua mão', 'mao');
   }
 
   /** Linha de sistema: texto e hora, centralizados, sem nada para clicar. */
@@ -180,7 +182,7 @@ export class ChatManager {
 
     const autor = document.createElement('span');
     autor.className = 'msg-autor';
-    // O servidor já manda "Professor" como remetente; prefixar "Prof." dava "Prof. Professor".
+    // O servidor já manda "Anfitrião" como remetente.
     autor.textContent = isOwn ? 'Você' : author;
 
     const hora = document.createElement('span');

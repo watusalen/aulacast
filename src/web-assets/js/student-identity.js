@@ -15,10 +15,10 @@ export function contarCaracteres(texto) {
 
 export function erroDoNome(bruto) {
   const texto = String(bruto || '').trim();
-  if (!texto) return 'Informe seu nome.';
+  if (!texto) return 'Digite seu nome para entrar.';
   const tamanho = contarCaracteres(texto);
-  if (tamanho < 2) return 'Nome muito curto.';
-  if (tamanho > TAMANHO_MAXIMO_NOME) return `Use no máximo ${TAMANHO_MAXIMO_NOME} caracteres.`;
+  if (tamanho < 2) return 'Digite pelo menos 2 letras.';
+  if (tamanho > TAMANHO_MAXIMO_NOME) return `Use até ${TAMANHO_MAXIMO_NOME} caracteres.`;
   return null;
 }
 

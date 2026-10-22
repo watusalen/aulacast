@@ -33,7 +33,7 @@ public final class ChatManagerService: ObservableObject {
     public func sendProfMessage(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let msg = ChatMessage(sender: "Professor", text: trimmed, isProf: true)
+        let msg = ChatMessage(sender: "Anfitrião", text: trimmed, isProf: true)
         addMessage(msg)
     }
 

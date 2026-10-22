@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Gera o AulaCast.dmg — a imagem de disco que se entrega a outro professor.
+# Gera o AulaCast.dmg — a imagem de disco que se entrega a outra pessoa.
 #
 # O .dmg é só uma embalagem: monta o AulaCast.app com o build-app.sh e o coloca numa imagem
 # junto de um atalho para /Applications, que é o gesto que todo mundo já conhece (arrastar o
@@ -8,7 +8,7 @@
 #
 # ATENÇÃO À ASSINATURA: o aplicativo é assinado de forma ad-hoc, não com Developer ID nem
 # notarizado (as duas coisas exigem conta paga da Apple). Isso não impede o uso, mas muda o
-# que o outro professor vê ao abrir — e o roteiro para contornar está impresso ao final da
+# que a outra pessoa vê ao abrir — e o roteiro para contornar está impresso ao final da
 # execução e documentado no README.
 #
 # Uso:  ./scripts/gerar-dmg.sh [pasta-de-saida]
@@ -33,7 +33,7 @@ fi
 # o mesmo número acabam discordando, e aí o nome do arquivo mente sobre o que há dentro.
 VERSAO="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
 # Build com o console de métricas (AULACAST_DEBUG_METRICS=1: só o console/broadcast; a coleta é permanente) leva "-debug" no nome: não é
-# o arquivo para distribuir a alunos.
+# o arquivo para distribuir a participantes.
 SUFIXO=""
 [ "${AULACAST_DEBUG_METRICS:-}" = "1" ] && SUFIXO="-debug"
 DMG="$SAIDA/AulaCast-$VERSAO$SUFIXO.dmg"
@@ -64,14 +64,14 @@ TAMANHO="$(du -h "$DMG" | cut -f1 | tr -d ' ')"
 echo
 echo "Pronto: $DMG  ($TAMANHO)"
 echo
-echo "Como entregar a outro professor:"
+echo "Como entregar a outra pessoa:"
 echo "  1. Mande o .dmg (pendrive, AirDrop, rede da escola)."
 echo "  2. Ele abre o .dmg e arrasta o AulaCast para a pasta Aplicativos."
 echo
 echo "IMPORTANTE — o app não é notarizado pela Apple. Ao abrir pela primeira vez,"
 echo "o macOS vai recusar dizendo que o aplicativo 'está danificado' ou que vem de"
 echo "um desenvolvedor não identificado. Isso é o Gatekeeper, não é defeito do app."
-echo "Para liberar, o professor roda uma vez no Terminal:"
+echo "Para liberar, a pessoa roda uma vez no Terminal:"
 echo
 echo "    xattr -dr com.apple.quarantine /Applications/AulaCast.app"
 echo

@@ -55,12 +55,12 @@ export class EntryGate {
   /** O servidor recusou (cliente adulterado ou nome vazio): traz a portaria de volta. */
   reabrirComErro(mensagem) {
     // Sem isto o nome recusado continuava salvo: cada recarga entrava sozinha com ele
-    // e era barrada de novo, sem o aluno conseguir corrigir.
+    // e era barrada de novo, sem o participante conseguir corrigir.
     esquecerIdentidade();
     this.gate.hidden = false;
     this.submitBtn.disabled = false;
-    this.submitBtn.textContent = 'Entrar na aula';
-    this.mostrarErro(mensagem || 'Não foi possível confirmar sua entrada.', this.nameInput);
+    this.submitBtn.textContent = 'Entrar na transmissão';
+    this.mostrarErro(mensagem || 'Não conseguimos confirmar sua entrada. Confira o nome e tente de novo.', this.nameInput);
   }
 
   mostrarErro(mensagem, campo) {

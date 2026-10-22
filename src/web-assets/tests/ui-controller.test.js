@@ -144,13 +144,14 @@ function aoVivoComQuadro(opcoes) {
 
 // MARK: - Vídeo e estados do palco
 
-test('Transmissão encerrada para de pedir vídeo e explica o motivo', () => {
+test('Transmissão encerrada para de pedir vídeo e avisa o participante', () => {
   const { ui, el, vigia } = aoVivoComQuadro();
   ui.showStreamEnded('Monitor desconectado.');
 
   assert.strictEqual(el.placeholder.hidden, false);
   assert.strictEqual(el.placeholder.querySelector('.placeholder-title').textContent, 'Transmissão encerrada');
-  assert.strictEqual(el.placeholder.querySelector('.placeholder-sub').textContent, 'Monitor desconectado.');
+  assert.strictEqual(el.placeholder.querySelector('.placeholder-sub').textContent,
+    'O anfitrião encerrou a transmissão. Esta página volta sozinha se ele transmitir de novo.');
   assert.strictEqual(vigia.chamadas.at(-1), 'stop');
   assert.strictEqual(el.placeholder.querySelector('.spinner').getAttribute('hidden'), '',
     'sem indicador de progresso: não vai voltar sozinha (atributo, porque é um <svg>)');
@@ -164,7 +165,7 @@ test('Aula que volta tira o aluno do aviso de encerrada sem recarregar a página
   ui.showStreaming();
   assert.strictEqual(vigia.chamadas.at(-1), 'start', 'o vídeo volta a ser pedido');
   assert.ok(el.videoStream.classList.contains('active'));
-  assert.strictEqual(el.placeholder.querySelector('.placeholder-title').textContent, 'Aguardando transmissão',
+  assert.strictEqual(el.placeholder.querySelector('.placeholder-title').textContent, 'Aguardando o anfitrião',
     'até o primeiro quadro, o palco diz que está aguardando');
   assert.strictEqual(el.placeholder.querySelector('.spinner').getAttribute('hidden'), null, 'com o indicador girando');
 
@@ -193,7 +194,7 @@ test('Reconectando: o último quadro fica na tela, com só um aviso pequeno por 
   assert.ok(el.videoStream.classList.contains('active'), 'a imagem continua no palco');
   assert.strictEqual(el.placeholder.hidden, true, 'sem tela vazia');
   assert.strictEqual(el.reconnectOverlay.hidden, false);
-  assert.strictEqual(el.reconnectAttempt.textContent, 'tentativa 3');
+  assert.strictEqual(el.reconnectAttempt.textContent, 'Sua rede pode estar instável. Aguarde um instante.');
   assert.match(el.connectionStatus.className, /reconectando/);
   assert.strictEqual(el.connectionStatus.querySelector('.status-text').textContent, 'Reconectando…');
 
@@ -438,5 +439,5 @@ test('O botão de tela cheia diz se entra ou sai', () => {
   globalThis.document.fullscreenElement = {};
   ui.atualizarBotaoDeTelaCheia();
   assert.strictEqual(el.fullscreenBtn.getAttribute('aria-pressed'), 'true');
-  assert.strictEqual(el.fullscreenBtn.getAttribute('aria-label'), 'Sair da tela cheia (F)');
+  assert.strictEqual(el.fullscreenBtn.getAttribute('aria-label'), 'Sair da tela cheia');
 });

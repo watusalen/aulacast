@@ -364,7 +364,7 @@ Continua mínima: cada informação tem um lugar só.
   - *Direita:* os botões dos painéis (Alunos, Chat, Arquivos), com contadores. O botão do painel aberto
     fica preenchido e troca o círculo por um quadrado arredondado: é o *shape morph* do M3 Expressive.
 - **Painel lateral, uma área por vez:** um cartão arredondado (28 pt) com título e botão de fechar. Clicar
-  no botão do painel já aberto fecha o painel, como no Meet. O painel "Apresentar" (escolha de tela ou
+  no botão do painel já aberto fecha o painel, como no Meet. O painel "Escolher tela" (escolha de tela ou
   janela) também fica ali. O painel e a aba abertos são lembrados, e ⌥⌘I abre e fecha.
 - **Não lidas:** as mensagens dos alunos que chegam com o chat fora de vista contam no botão do chat, num
   badge vermelho.

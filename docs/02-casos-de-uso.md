@@ -180,6 +180,6 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
 - **Pré-condição:** transmissão no ar e ao menos um aluno identificado (RF-21).
 - **Fluxo Principal:**
   1. O professor para a transmissão (ou a captura/servidor cai).
-  2. O sistema grava o CSV em `~/Documents/AulaCast/Chamadas/`.
-  3. Um aviso não modal mostra "Chamada salva (N alunos)" e "Mostrar no Finder"; some sozinho em ~8 s.
+  2. O sistema grava o CSV em `~/Documents/AulaCast/Listas de presença/`.
+  3. Um aviso não modal mostra "Lista de presença salva (N participantes)" e "Mostrar no Finder"; some sozinho em ~8 s.
 - **Fluxo Alternativo:** sem aluno identificado, nada é gravado; com erro de disco, o aviso é "Não foi possível salvar a chamada".

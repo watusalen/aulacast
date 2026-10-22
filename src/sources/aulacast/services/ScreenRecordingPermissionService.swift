@@ -9,7 +9,7 @@ public protocol ScreenRecordingPermissionProtocol {
     func isGranted() -> Bool
     func request()
     /// Tenta de fato uma captura: `CGPreflightScreenCaptureAccess` pode seguir falso no
-    /// processo em execução depois de o professor ligar a chave nos Ajustes.
+    /// processo em execução depois de o anfitrião ligar a chave nos Ajustes.
     func probe() async -> Bool
 }
 
@@ -20,9 +20,9 @@ extension ScreenRecordingPermissionProtocol {
 /// Regras puras da permissão (testáveis sem ScreenCaptureKit nem Ajustes do Sistema).
 public enum PermissaoDeTela {
     public static let mensagemNegada =
-        "Autorize o AulaCast em Gravação de Tela e reabra o app."
+        "Autorize em Ajustes do Sistema > Privacidade e Segurança > Gravação de Tela e reabra o app."
     public static let mensagemFalhaAoReabrir =
-        "Não foi possível reabrir. Feche e abra o AulaCast."
+        "Não foi possível reabrir. Feche e abra o AulaCast manualmente."
 
     /// `SCStreamError.userDeclined` (-3801): o usuário negou a Gravação de Tela.
     public static func ehNegada(_ erro: Error) -> Bool {

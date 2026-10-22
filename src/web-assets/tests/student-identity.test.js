@@ -4,9 +4,9 @@ import { erroDoNome, normalizarNome, salvarIdentidade, carregarIdentidade } from
 
 test('Nome é obrigatório e não pode ser trivial', () => {
   assert.strictEqual(erroDoNome('Ana Beatriz'), null);
-  assert.match(erroDoNome(''), /Informe seu nome/);
-  assert.match(erroDoNome('   '), /Informe seu nome/);
-  assert.match(erroDoNome('A'), /curto/);
+  assert.match(erroDoNome(''), /Digite seu nome/);
+  assert.match(erroDoNome('   '), /Digite seu nome/);
+  assert.match(erroDoNome('A'), /pelo menos 2/);
 });
 
 test('Espaços sobrando no nome não viram nomes diferentes na lista do professor', () => {

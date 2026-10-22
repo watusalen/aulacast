@@ -195,9 +195,9 @@ public final class MainViewModel: ObservableObject {
         case .vazia: return resultado
         case .salva(let arquivo, let alunos):
             chamadaJaSalva = true
-            avisoDaChamada = AvisoDaChamada(texto: alunos == 1 ? "Chamada salva (1 aluno)" : "Chamada salva (\(alunos) alunos)", arquivo: arquivo)
+            avisoDaChamada = AvisoDaChamada(texto: alunos == 1 ? "Lista de presença salva (1 participante)" : "Lista de presença salva (\(alunos) participantes)", arquivo: arquivo)
         case .falhou:
-            avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a chamada", arquivo: nil)
+            avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a lista de presença. Verifique o espaço em disco.", arquivo: nil)
         }
         return resultado
     }
@@ -420,7 +420,7 @@ public final class MainViewModel: ObservableObject {
                 if jaPediuPermissao {
                     // O aviso do macOS já apareceu nesta execução. Repeti-lo não muda nada:
                     // daqui em diante só reabrir o aplicativo resolve.
-                    self.streamErrorMessage = "Já autorizou? Reabra o app para valer."
+                    self.streamErrorMessage = "Já autorizou? Reabra o app para aplicar."
                 } else {
                     jaPediuPermissao = true
                     permission.request()
@@ -444,7 +444,7 @@ public final class MainViewModel: ObservableObject {
                     self.needsScreenRecordingPermission = true
                 }
                 self.streamErrorMessage = captureService.errorMessage
-                    ?? "Não foi possível iniciar a captura da tela."
+                    ?? "Não foi possível iniciar a captura da tela. Escolha a tela de novo e tente outra vez."
                 return
             }
 
@@ -465,7 +465,7 @@ public final class MainViewModel: ObservableObject {
                 mdnsService.start(ip: ipAtual)
                 ipDoNome = ipAtual
                 self.systemActivity.beginTransmission(
-                    reason: "Transmitindo a aula para os alunos na rede local"
+                    reason: "Transmitindo a tela para os participantes na rede local"
                 )
                 self.isStreaming = true
                 self.isSessionOpen = true
@@ -492,7 +492,7 @@ public final class MainViewModel: ObservableObject {
             } catch {
                 // O servidor não subiu: desfaz a captura em vez de deixá-la rodando à toa.
                 await captureService.stopCapture()
-                self.streamErrorMessage = "Não foi possível abrir o servidor na porta \(serverService.port)."
+                self.streamErrorMessage = "Outro aplicativo está usando a conexão necessária (porta \(serverService.port)). Feche-o e tente de novo."
             }
         }
     }

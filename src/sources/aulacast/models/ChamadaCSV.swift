@@ -1,10 +1,10 @@
 import Foundation
 
-/// Chamada em CSV (RF-21): uma linha por PESSOA identificada, para abrir no Excel/Planilhas.
+/// Lista de presença em CSV (RF-21): uma linha por PESSOA identificada, para abrir no Excel/Planilhas.
 /// Separador `;`, UTF-8 com BOM, linhas terminadas em CRLF, decimais com vírgula.
 public enum ChamadaCSV {
-    public static let cabecalho = ["Nome", "Presença", "Entrou", "Saiu", "Minutos na aula",
-                                   "Minutos com a aula à vista", "Percentual à vista"]
+    public static let cabecalho = ["Nome", "Presença", "Entrou", "Saiu", "Minutos na transmissão",
+                                   "Minutos vendo", "Percentual vendo"]
 
     /// `resumos` vem do `AttendanceLedger.todos` (só quem tem nome). Ordem alfabética sem
     /// diferenciar caixa nem acento. `fimDaSessao` vale como saída de quem ainda está conectado.
@@ -33,7 +33,7 @@ public enum ChamadaCSV {
         String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), valor).replacingOccurrences(of: ".", with: ",")
     }
 
-    /// Nome digitado pelo aluno: neutraliza fórmulas (`=`, `+`, `-`, `@`, tab, CR no começo viram
+    /// Nome digitado pelo participante: neutraliza fórmulas (`=`, `+`, `-`, `@`, tab, CR no começo viram
     /// texto com apóstrofo) e aplica aspas no estilo RFC 4180 se houver `;`, `"` ou quebra de linha.
     public static func campo(_ texto: String) -> String {
         var t = texto
@@ -50,7 +50,7 @@ public enum ResultadoDaChamada: Equatable {
     case falhou
 }
 
-/// Grava o CSV da chamada em `pasta/chamada-AAAA-MM-DD-HHmm.csv` (hora local), sem nunca
+/// Grava o CSV da chamada em `pasta/lista-de-presenca-AAAA-MM-DD-HHmm.csv` (hora local), sem nunca
 /// sobrescrever: se existir, tenta `-2`, `-3`... Erro de disco vira `.falhou`, nunca exceção.
 public enum ChamadaWriter {
     public static func salvar(resumos: [AttendanceSummary], fimDaSessao: Date, pasta: URL = PastasDoApp.chamadas,
@@ -60,7 +60,7 @@ public enum ChamadaWriter {
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = fuso
         f.dateFormat = "yyyy-MM-dd-HHmm"
-        let base = "chamada-\(f.string(from: fimDaSessao))"
+        let base = "lista-de-presenca-\(f.string(from: fimDaSessao))"
         let dados = ChamadaCSV.gerar(resumos: resumos, fimDaSessao: fimDaSessao, fuso: fuso)
         do {
             try FileManager.default.createDirectory(at: pasta, withIntermediateDirectories: true)

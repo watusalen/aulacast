@@ -18,7 +18,7 @@ public struct StudentListView: View {
             vazio
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                // O que importa saber de relance: quantos estão de fato com a aula à vista.
+                // O que importa saber de relance: quantos estão de fato vendo a transmissão.
                 HStack(spacing: 8) {
                     M3Icone(nome: "visibility", tamanho: 18, preenchido: true)
                         .foregroundColor(M3.tertiary)
@@ -27,7 +27,7 @@ public struct StudentListView: View {
                         .foregroundColor(M3.onSurfaceVariant)
                 }
                 .padding(.horizontal, 24)
-                .help("Olho aberto: com a aula à vista. Olho cortado: conectado, mas em outra janela ou aba.")
+                .help("Olho aberto: vendo a transmissão. Olho cortado: conectado, mas em outra janela ou aba.")
 
                 if maos > 0 {
                     HStack(spacing: 8) {
@@ -92,7 +92,7 @@ public struct StudentListView: View {
                 }
                 M3Icone(nome: aluno.aVista ? "visibility" : "visibility_off", tamanho: 20, preenchido: aluno.aVista)
                     .foregroundColor(aluno.aVista ? M3.tertiary : M3.outline)
-                    .help(aluno.ip)
+                    .help("IP \(aluno.ip)")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
@@ -112,7 +112,7 @@ public struct StudentListView: View {
             Text("Ninguém entrou ainda")
                 .m3(.titleMedium)
                 .foregroundColor(M3.onSurface)
-            Text("Peça à turma para digitar no navegador:")
+            Text("Peça aos participantes para digitar no navegador:")
                 .m3(.bodyMedium)
                 .foregroundColor(M3.onSurfaceVariant)
             Text(viewModel.displayAddress)
@@ -131,7 +131,7 @@ public struct StudentListView: View {
     }
 
     private func apoio(_ aluno: LinhaDoAluno) -> String {
-        let base = aluno.aVista ? "Com a aula à vista" : "Em outra janela ou aba"
+        let base = aluno.aVista ? "Vendo a transmissão" : "Em outra janela ou aba"
         return aluno.conexoes > 1 ? "\(base) · \(aluno.conexoes) conexões" : base
     }
 
@@ -139,9 +139,9 @@ public struct StudentListView: View {
         let total = alunos.count
         let vendo = alunos.filter(\.aVista).count
         if vendo == total {
-            return total == 1 ? "1 aluno, com a aula à vista" : "Todos os \(total) com a aula à vista"
+            return total == 1 ? "1 participante, vendo a transmissão" : "Todos os \(total) vendo a transmissão"
         }
-        return "\(vendo) de \(total) com a aula à vista"
+        return "\(vendo) de \(total) vendo a transmissão"
     }
 }
 

@@ -160,7 +160,7 @@ export class ManterTelaAcesa {
     video.setAttribute('webkit-playsinline', '');
     video.setAttribute('aria-hidden', 'true');
     video.setAttribute('tabindex', '-1');
-    video.setAttribute('title', 'Mantém a tela acesa durante a aula');
+    video.setAttribute('title', 'Mantém a tela acesa durante a transmissão');
     // Sem botão de AirPlay/Chromecast para um vídeo que ninguém vê.
     video.disableRemotePlayback = true;
     // NÃO pode ser `muted` nem `volume = 0`: nos dois navegadores medidos, vídeo mudo não

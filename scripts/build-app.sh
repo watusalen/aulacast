@@ -31,10 +31,10 @@ BUILD="${AULACAST_BUILD:-1}"
 MACOS_MINIMO="13.0"
 
 # A coleta de métricas e o arquivo ~/Documents/AulaCast/Metricas existem em TODO build (ADR-006).
-# Opt-in: só o CONSOLE no navegador do aluno (METRICS_TABLE, DEBUG_INFO, painel Debug).
+# Opt-in: só o CONSOLE no navegador do participante (METRICS_TABLE, DEBUG_INFO, painel Debug).
 EXTRA_SWIFT=()
 if [ "${AULACAST_DEBUG_METRICS:-}" = "1" ]; then
-  echo "==> AULACAST_DEBUG_METRICS=1: compilando COM o console de métricas no navegador do aluno (-DMETRICAS_DEBUG)"
+  echo "==> AULACAST_DEBUG_METRICS=1: compilando COM o console de métricas no navegador do participante (-DMETRICAS_DEBUG)"
   EXTRA_SWIFT=(-Xswiftc -DMETRICAS_DEBUG)
 fi
 
@@ -51,7 +51,7 @@ fi
 # Segunda arquitetura, para o aplicativo rodar também em Mac Intel.
 #
 # `swift build` sozinho gera só a arquitetura da máquina que compilou. Um .dmg feito num
-# Mac Apple Silicon simplesmente não abria num Intel — e é justamente numa sala de aula que
+# Mac Apple Silicon simplesmente não abria num Intel — e é justamente em locais com máquinas variadas que
 # se encontram máquinas dos dois tipos. O `--arch` duplo do SwiftPM exige o Xcode completo
 # (xcbuild); compilar cada fatia com `--triple` e juntar com `lipo` funciona só com as
 # Ferramentas de Linha de Comando, que é o que a maioria tem instalado.
@@ -95,7 +95,7 @@ fi
 
 # O cliente web precisa viajar junto: o WebAssetsPathResolver procura em
 # Bundle.main.resourceURL quando o app roda instalado. As fontes (web-assets/fonts)
-# vão junto e servem às duas telas, a do professor e a do aluno.
+# vão junto e servem às duas telas, a do anfitrião e a do participante.
 # Os testes do cliente ficam de fora — não têm utilidade para quem só usa o aplicativo.
 mkdir -p "$APP/Contents/Resources/web-assets"
 (cd "$RAIZ/src/web-assets" && \
@@ -130,9 +130,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 
     <!-- Exigido pelo macOS recente para servir na rede local da sala. -->
     <key>NSLocalNetworkUsageDescription</key>
-    <string>O AulaCast transmite a tela do professor para os computadores dos alunos na rede local da sala. Nada sai para a internet.</string>
+    <string>O AulaCast transmite a tela do anfitrião para os dispositivos dos participantes na rede local. Nada sai para a internet.</string>
 
-    <!-- Necessário para anunciar a sala por Bonjour, sem exigir que a turma saiba o IP. -->
+    <!-- Necessário para anunciar a transmissão por Bonjour, sem exigir que os participantes saibam o IP. -->
     <key>NSBonjourServices</key>
     <array>
         <string>_aulacast._tcp</string>

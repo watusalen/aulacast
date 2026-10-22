@@ -8,9 +8,9 @@ public enum AbaDoPainel: String, CaseIterable, Identifiable {
 
     var titulo: String {
         switch self {
-        case .apresentar: return "Apresentar"
-        case .alunos: return "Alunos"
-        case .chat: return "Chat da aula"
+        case .apresentar: return "Escolher tela"
+        case .alunos: return "Participantes"
+        case .chat: return "Chat da transmissão"
         case .arquivos: return "Arquivos"
         }
     }
