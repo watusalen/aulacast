@@ -158,7 +158,7 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
   2. Escolhe **Ocultar da transmissão**.
   3. O sistema tira esse app da captura (`ScreenCaptureService`, `hiddenBundleIDs` e `filtroDeMonitor`), mesmo em tela cheia, sem interromper a sessão.
 - **Fluxos Alternativos:**
-  - *FA-01 (Mostrar de novo):* O mesmo menu oferece **Mostrar na transmissão**; a seção **Apps ocultos (N)** do seletor lista cada app lembrado (mesmo fechado) com **Mostrar** e **Esquecer todos**.
+  - *FA-01 (Mostrar de novo):* O mesmo menu oferece **Mostrar na transmissão**. Um app lembrado como oculto aparece no seletor, enquanto estiver aberto, com o selo de olho cortado sobre o cartão; para mostrá-lo de novo, abra o app e use o menu.
   - *FA-02 (App oculto abre durante a transmissão):* O sistema refaz o filtro (após ~150 ms e de novo ~600 ms). O app pode aparecer por uma fração de segundo antes de o filtro ser refeito.
 - **Regra de negócio:** só vale com o monitor como fonte (com uma janela como fonte não há o que ocultar). A escolha é guardada entre execuções, por app (bundle ID) (RF-19, **Proposto**).
 
