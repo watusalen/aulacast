@@ -130,7 +130,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 
     <!-- Exigido pelo macOS recente para servir na rede local da sala. -->
     <key>NSLocalNetworkUsageDescription</key>
-    <string>O AulaCast transmite a tela do anfitrião para os dispositivos dos participantes na rede local. Nada sai para a internet.</string>
+    <string>O AulaCast transmite a tela do anfitrião para os dispositivos dos participantes na rede local</string>
 
     <!-- Necessário para anunciar a transmissão por Bonjour, sem exigir que os participantes saibam o IP. -->
     <key>NSBonjourServices</key>

@@ -151,7 +151,7 @@ test('Transmissão encerrada para de pedir vídeo e avisa o participante', () =>
   assert.strictEqual(el.placeholder.hidden, false);
   assert.strictEqual(el.placeholder.querySelector('.placeholder-title').textContent, 'Transmissão encerrada');
   assert.strictEqual(el.placeholder.querySelector('.placeholder-sub').textContent,
-    'O anfitrião encerrou a transmissão. Esta página volta sozinha se ele transmitir de novo.');
+    'O anfitrião encerrou a transmissão');
   assert.strictEqual(vigia.chamadas.at(-1), 'stop');
   assert.strictEqual(el.placeholder.querySelector('.spinner').getAttribute('hidden'), '',
     'sem indicador de progresso: não vai voltar sozinha (atributo, porque é um <svg>)');

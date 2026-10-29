@@ -263,7 +263,7 @@ export class UIController {
 
   mostrarAguardando() {
     this.definirPalcoVazio(ICONE_AGUARDANDO, 'Aguardando o anfitrião',
-      'Assim que ele começar a transmitir, a tela aparece aqui. Não precisa recarregar a página.', true);
+      'Assim que ele começar a transmitir, a tela aparece aqui', true);
   }
 
   /** Nem H.264 nem MJPEG abriram neste navegador. */
@@ -301,7 +301,7 @@ export class UIController {
     this.videoStream.classList.remove('active');
     this.teveQuadro = false;
     this.definirPalcoVazio(ICONE_ENCERRADA, 'Transmissão encerrada',
-      'O anfitrião encerrou a transmissão. Esta página volta sozinha se ele transmitir de novo.', false);
+      'O anfitrião encerrou a transmissão', false);
     this.atualizarChip();
   }
 
