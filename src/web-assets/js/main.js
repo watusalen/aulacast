@@ -9,6 +9,7 @@ import { FilesList } from './files-list.js';
 import { MaoLevantada } from './raise-hand.js';
 import { ManterTelaAcesa } from './manter-tela-acesa.js';
 import { VideoStreamPlayer, mediaSourceSuportado } from './video-stream-player.js';
+import { RetornoAoH264 } from './h264-return.js';
 
 /** Exportada para que o despachante de mensagens possa ser exercitado pelos testes. */
 export class AulaCastApp {
@@ -28,8 +29,15 @@ export class AulaCastApp {
     const suporteAH264 = Boolean(videoElementoMP4)
       && mediaSourceSuportado(typeof window !== 'undefined' ? window : undefined);
 
-    /** Depois do fallback para MJPEG, o H.264 não é tentado de novo nesta página (banda dobrada). */
+    /** Em MJPEG depois de um fallback; `RetornoAoH264` tenta voltar ao H.264. */
     this.h264Desistiu = false;
+    this.retorno = new RetornoAoH264({
+      // Em MJPEG a prova pede o H.264 a quem o servidor só entrega com a transmissão no ar:
+      // pausada (só o init segment) ela nunca tocaria, e aba oculta não reproduz vídeo mudo.
+      tentar: () => (this.h264Desistiu ? this.videoPlayer?.tentarDeNovo() : true),
+      podeTentar: () => this.estadoDaTransmissao === 'live'
+        && globalThis.document?.visibilityState !== 'hidden'
+    });
     this.ui = new UIController({ criarVigia, mjpegSuprimido: suporteAH264 });
     this.identidade = null;
     /** `DebugPanel`, criado só com o aviso `metricas` do servidor. */
@@ -41,13 +49,31 @@ export class AulaCastApp {
           // Mesmo mecanismo que já liga/desliga o "aguardando" e o aviso de reconexão para o
           // MJPEG (`aoMudarEstadoDoVideo`) — o H.264 é só outra fonte do mesmo estado.
           onEstado: (estado) => this.ui.aoMudarEstadoDoVideo(estado),
+          onRecuperou: () => {
+            // A prova de volta tocou estável: o H.264 reassume e o MJPEG é desligado.
+            this.h264Desistiu = false;
+            this.retorno.recuperou();
+            console.info('Vídeo H.264 de volta; MJPEG desligado.');
+            globalThis.AulaCastDebug?.log('rota', 'volta MJPEG -> H.264');
+            globalThis.AulaCastMetricas?.evento('rota', { de: 'MJPEG', para: 'H.264', motivo: 'prova de volta' });
+            this.ui.desativarMJPEG();
+          },
           onFallback: (motivo) => {
-            // Daqui em diante esta página é MJPEG: nenhum caminho volta a ligar o H.264.
+            // Esta página passa a ser MJPEG, mas o H.264 é tentado de novo sozinho, com espera
+            // crescente (`RetornoAoH264`): o MJPEG gasta bem mais banda e não deve ser o fim.
+            // Prova de volta que falhou: o MJPEG nunca saiu do ar, então nada a religar nem a
+            // registrar de novo (religar com o WebSocket caído quebraria o contrato do vigia).
+            const jaEmMJPEG = this.h264Desistiu;
             this.h264Desistiu = true;
-            console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
-            globalThis.AulaCastDebug?.log('rota', `fallback H.264 -> MJPEG: ${motivo}`);
-            globalThis.AulaCastMetricas?.evento('rota', { de: 'H.264', para: 'MJPEG', motivo: String(motivo) });
-            this.ui.ativarFallbackMJPEG();
+            if (!jaEmMJPEG) {
+              console.warn(`Vídeo H.264 indisponível (${motivo}); usando MJPEG.`);
+              globalThis.AulaCastDebug?.log('rota', `fallback H.264 -> MJPEG: ${motivo}`);
+              globalThis.AulaCastMetricas?.evento('rota', { de: 'H.264', para: 'MJPEG', motivo: String(motivo) });
+              this.ui.ativarFallbackMJPEG();
+            } else {
+              globalThis.AulaCastDebug?.log('rota', `prova de volta ao H.264 falhou: ${motivo}`);
+            }
+            if (!this.videoPlayer?.semSuporte) this.retorno.agendar();
           }
         })
       : null;
@@ -286,9 +312,12 @@ export class AulaCastApp {
     }
   }
 
-  /** Liga o H.264 — salvo se ele já desistiu nesta página e o MJPEG está de pé. */
+  /** Liga o H.264. Em MJPEG depois de um fallback, só garante que o retorno está marcado. */
   iniciarH264() {
-    if (this.h264Desistiu) return;
+    if (this.h264Desistiu) {
+      if (!this.videoPlayer?.semSuporte) this.retorno.agendar();
+      return;
+    }
     this.videoPlayer?.start();
   }
 

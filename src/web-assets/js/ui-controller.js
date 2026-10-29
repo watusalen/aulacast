@@ -240,6 +240,16 @@ export class UIController {
     this.streamWatchdog.start();
   }
 
+  /**
+   * O H.264 voltou a tocar de verdade (depois de um fallback): desliga o MJPEG para não gastar
+   * banda com as duas rotas. O `<video>` já cobre o palco; a imagem do MJPEG só sai de cena.
+   */
+  desativarMJPEG() {
+    this.mjpegSuprimido = true;
+    this.streamWatchdog.stop();
+    this.videoStream.classList.remove('active');
+  }
+
   aoChegarQuadro() {
     this.teveQuadro = true;
     if (this.transmissao !== 'encerrada') this.placeholder.hidden = true;

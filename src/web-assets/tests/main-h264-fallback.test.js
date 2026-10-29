@@ -94,7 +94,9 @@ function criarDubles() {
     pausas: [],
     start() { videoPlayer.chamadas.push('start'); },
     stop() { videoPlayer.chamadas.push('stop'); },
-    definirPausado(p) { videoPlayer.pausas.push(p); }
+    definirPausado(p) { videoPlayer.pausas.push(p); },
+    semSuporte: false,
+    tentarDeNovo() { videoPlayer.chamadas.push('tentarDeNovo'); return true; }
   };
   return { vigia, videoPlayer };
 }
@@ -185,4 +187,131 @@ test('item 2/5: pausa e retomada chegam ao player (pausada não é queda; entrar
   assert.deepStrictEqual(videoPlayer.pausas, [true]);
   assert.strictEqual(elementos.pausedOverlay.hidden, false, 'quem entra pausado vê o aviso de pausa');
   assert.strictEqual(elementos.placeholder.hidden, false, 'e o palco de aguardando, não um <video> preto');
+});
+
+// ---- Volta ao H.264 depois do fallback ----
+
+/** Troca o relógio do retorno por um que o teste dispara na mão. */
+function comRelogioFalso(app) {
+  const marcados = [];
+  app.retorno.setTimer = (fn, ms) => { const t = { fn, ms }; marcados.push(t); return t; };
+  app.retorno.clearTimer = () => {};
+  app.retorno.sorteio = () => 0;
+  return marcados;
+}
+
+test('cair para o MJPEG agenda a volta ao H.264, e ao disparar o player tenta de novo', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+
+  assert.strictEqual(marcados.length, 1);
+  assert.strictEqual(marcados[0].ms, 30_000);
+  marcados[0].fn();
+  assert.ok(videoPlayer.chamadas.includes('tentarDeNovo'));
+});
+
+test('sem suporte a MediaSource, não agenda volta nenhuma', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  videoPlayer.semSuporte = true;
+  videoPlayer.opcoesRecebidas.onFallback('sem suporte a MediaSource/fetch neste navegador');
+  assert.strictEqual(marcados.length, 0);
+});
+
+test('prova que deu certo (onRecuperou) desliga o MJPEG e religa o H.264 como rota normal', () => {
+  const { app, vigia, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  assert.strictEqual(app.h264Desistiu, true);
+
+  videoPlayer.opcoesRecebidas.onRecuperou();
+
+  assert.strictEqual(app.h264Desistiu, false);
+  assert.strictEqual(vigia.chamadas[vigia.chamadas.length - 1], 'stop', 'MJPEG desligado');
+  assert.strictEqual(app.retorno.tentativas, 0, 'a espera recomeça da primeira');
+  assert.strictEqual(app.retorno.timer, null, 'nada de relógio pendente depois que o H.264 voltou');
+  assert.ok(marcados.length >= 1);
+
+  // E se cair de novo mais tarde, o MJPEG é religado como na primeira vez.
+  const religados = vigia.chamadas.filter((c) => c === 'start').length;
+  videoPlayer.opcoesRecebidas.onFallback('caiu de novo');
+  assert.strictEqual(vigia.chamadas.filter((c) => c === 'start').length, religados + 1);
+});
+
+test('prova que falha NÃO religa o MJPEG nem repete o evento de rota (ele nunca saiu do ar)', () => {
+  const { app, vigia, videoPlayer } = novoApp();
+  comRelogioFalso(app);
+  const eventos = [];
+  globalThis.AulaCastMetricas = { evento: (...a) => eventos.push(a) };
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  const starts = vigia.chamadas.filter((c) => c === 'start').length;
+
+  videoPlayer.opcoesRecebidas.onFallback('prova: sem reproduzir em 15 s');
+  videoPlayer.opcoesRecebidas.onFallback('prova: rede caiu');
+
+  assert.strictEqual(vigia.chamadas.filter((c) => c === 'start').length, starts, 'MJPEG não é religado a cada prova');
+  assert.strictEqual(eventos.length, 1, 'só a primeira queda vira evento de rota');
+  delete globalThis.AulaCastMetricas;
+});
+
+test('transmissão pausada: a prova não roda (o servidor não manda quadros) e não gasta tentativa', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  app.handleServerMessage({ type: 'STREAM_PAUSED' });
+
+  marcados[0].fn();
+
+  assert.strictEqual(videoPlayer.chamadas.includes('tentarDeNovo'), false);
+  assert.strictEqual(app.retorno.tentativas, 0);
+  assert.strictEqual(marcados.length, 2);
+
+  app.handleServerMessage({ type: 'STREAM_RESUMED' });
+  marcados[1].fn();
+  assert.ok(videoPlayer.chamadas.includes('tentarDeNovo'), 'retomada: volta a tentar');
+});
+
+test('aba oculta: não faz a prova (vídeo mudo em segundo plano não toca)', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  globalThis.document.visibilityState = 'hidden';
+  marcados[0].fn();
+  globalThis.document.visibilityState = 'visible';
+
+  assert.strictEqual(videoPlayer.chamadas.includes('tentarDeNovo'), false);
+  assert.strictEqual(app.retorno.tentativas, 0);
+});
+
+test('transmissão encerrada: o relógio dispara mas não tenta H.264 (e fica marcado para depois)', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  app.handleServerMessage({ type: 'STREAM_ENDED', payload: {} });
+
+  marcados[0].fn();
+
+  assert.strictEqual(videoPlayer.chamadas.includes('tentarDeNovo'), false);
+  assert.strictEqual(marcados.length, 2, 'marcou outra tentativa');
+});
+
+test('reconexão do WebSocket em MJPEG garante que a volta está marcada, sem ligar o H.264 direto', () => {
+  const { app, videoPlayer } = novoApp();
+  const marcados = comRelogioFalso(app);
+  app.handleServerMessage({ type: 'STREAM_STARTED' });
+  videoPlayer.opcoesRecebidas.onFallback('caiu demais');
+  marcados[0].fn();
+  const aposTentativa = marcados.length;
+
+  app.handleServerMessage({ type: 'CONNECTED', payload: { stream: 'live' } });
+
+  assert.strictEqual(marcados.length, aposTentativa + 1);
+  assert.deepStrictEqual(videoPlayer.chamadas.filter((c) => c === 'start'), ['start'], 'nenhum start() novo');
 });

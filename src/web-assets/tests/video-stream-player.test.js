@@ -701,3 +701,90 @@ test('item 8: fetch abortado de uma tentativa já trocada não conta como queda'
   assert.strictEqual(player.tentativas, 0);
   player.stop();
 });
+
+// ---------------------------------------------------------------------------------------
+// Volta ao H.264 depois do fallback (prova curta): ver `tentarDeNovo()`.
+// ---------------------------------------------------------------------------------------
+
+/** Cai para o MJPEG e deixa os relógios sob controle do teste. */
+function emFallbackComRelogio(t, opcoes = {}) {
+  const recuperou = [];
+  const ctx = montar({ opcoes: { onRecuperou: () => recuperou.push(1), ...opcoes } });
+  ctx.player.start();
+  ctx.player.cairParaFallback('queda de teste');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  return { ...ctx, recuperou };
+}
+
+async function abrirProva(ctx) {
+  assert.strictEqual(ctx.player.tentarDeNovo(), true);
+  ctx.MSClasse.instanciaMaisRecente.dispatch('sourceopen');
+  await aguardar();
+  await aguardar();
+}
+
+test('prova: sem ter caído antes, não há o que tentar', () => {
+  const ctx = montar();
+  assert.strictEqual(ctx.player.tentarDeNovo(), false);
+});
+
+test('prova: navegador sem MediaSource não tenta de novo (semSuporte)', () => {
+  const janela = janelaFake({});
+  const player = new VideoStreamPlayer(criarVideo(), { janela, fetchImpl: fetchComPedacos([]), urlImpl: urlImplFake() });
+  player.start();
+  assert.strictEqual(player.semSuporte, true);
+  assert.strictEqual(player.tentarDeNovo(), false);
+});
+
+test('prova: tocando estável por 5 s chama onRecuperou', async (t) => {
+  const ctx = emFallbackComRelogio(t);
+  await abrirProva(ctx);
+  ctx.video.dispatch('playing');
+  assert.strictEqual(ctx.recuperou.length, 0, 'ainda não: precisa ficar estável');
+  t.mock.timers.tick(5_000);
+  assert.strictEqual(ctx.recuperou.length, 1);
+  assert.strictEqual(ctx.player.emProva, false);
+  ctx.player.stop();
+});
+
+test('prova: queda durante a prova volta ao MJPEG na hora e avisa onFallback de novo', async (t) => {
+  const ctx = emFallbackComRelogio(t);
+  assert.strictEqual(ctx.motivos.length, 1);
+  await abrirProva(ctx);
+  ctx.player.aoQuedaDeConexao('rede caiu');
+  assert.strictEqual(ctx.motivos.length, 2);
+  assert.match(ctx.motivos[1], /prova/);
+  assert.strictEqual(ctx.recuperou.length, 0);
+  assert.strictEqual(ctx.player.emProva, false);
+});
+
+test('prova: cair depois de tocar, antes dos 5 s, cancela a recuperação', async (t) => {
+  const ctx = emFallbackComRelogio(t);
+  await abrirProva(ctx);
+  ctx.video.dispatch('playing');
+  ctx.player.aoQuedaDeConexao('rede caiu');
+  t.mock.timers.tick(10_000);
+  assert.strictEqual(ctx.recuperou.length, 0);
+  assert.strictEqual(ctx.motivos.length, 2);
+});
+
+test('prova: 15 s sem tocar desiste e avisa onFallback de novo', async (t) => {
+  const ctx = emFallbackComRelogio(t);
+  await abrirProva(ctx);
+  t.mock.timers.tick(14_000);
+  assert.strictEqual(ctx.motivos.length, 1, 'ainda dentro do prazo');
+  t.mock.timers.tick(1_000);
+  assert.strictEqual(ctx.motivos.length, 2);
+  assert.strictEqual(ctx.recuperou.length, 0);
+});
+
+test('prova: stop() no meio devolve o player ao estado de fallback e permite tentar depois', async (t) => {
+  const ctx = emFallbackComRelogio(t);
+  await abrirProva(ctx);
+  ctx.player.stop();
+  assert.strictEqual(ctx.player.emProva, false);
+  t.mock.timers.tick(30_000);
+  assert.strictEqual(ctx.recuperou.length, 0, 'os relógios da prova foram limpos');
+  assert.strictEqual(ctx.player.tentarDeNovo(), true, 'continua apto a nova prova');
+  ctx.player.stop();
+});

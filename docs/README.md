@@ -42,3 +42,4 @@ Nunca se apaga um ADR: quando a decisão muda, cria-se outro e o antigo fica "Su
 | [ADR-006](adr/ADR-006-metricas-permanentes.md) | Métricas permanentes em todo build; console/broadcast só em depuração | Proposto |
 | [ADR-007](adr/ADR-007-distribuicao-mac-app-store-sandbox.md) | Distribuição pela Mac App Store (sandbox); checklist em [app-store-checklist.md](app-store-checklist.md) | Proposto |
 | [ADR-008](adr/ADR-008-vocabulario-neutro.md) | Vocabulário neutro: anfitrião e participante, sem termos de escola | Proposto |
+| [ADR-009](adr/ADR-009-retorno-automatico-ao-h264.md) | Volta automática ao H.264 depois de cair para MJPEG (prova curta, espera crescente) | Proposto |

@@ -1,7 +1,7 @@
 # ADR-004: H.264 em fMP4 como transmissão principal; MJPEG como compatibilidade
 
 - **Status:** Proposto (implementado na branch `integracao-teste`, **ainda não medido em sala**)
-- **Relaciona:** RNF-10, US-13, ADR-001 (substitui em parte)
+- **Relaciona:** RNF-10, US-13, ADR-001 (substitui em parte), ADR-009 (substitui em parte: volta ao H.264)
 
 ## Contexto
 O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 40 alunos no Wi-Fi a banda não fecha. Meta do usuário (RNF-10): o máximo de quadros, a menor latência e a menor banda por aluno, só no navegador. Broadcast/multicast fica fora (o navegador não recebe UDP).
@@ -9,7 +9,7 @@ O MJPEG manda um JPEG completo por quadro e uma cópia por aluno (ADR-001): com 
 ## Decisão
 - Codificar em H.264 por hardware (VideoToolbox, Baseline, baixa latência) e empacotar em fMP4 servido por HTTP puro em `GET /stream.mp4`; o aluno usa `MediaSource` (`ManagedMediaSource` no iPhone).
 - Taxa de bits com teto: `clamp(largura × altura × fps × 0,04, 1,2–4 Mbps)` (~2,5 Mbps em 1080p30), quadro-chave a cada 2 s no máximo. **Valores a calibrar com a medição.**
-- O MJPEG continua como alternativa: se o H.264 não for suportado ou cair repetidamente, a página cai para ele e **não volta** ao H.264 naquela carga. Os dois não correm juntos.
+- O MJPEG continua como alternativa: se o H.264 não for suportado ou cair repetidamente, a página cai para ele. ~~e **não volta** ao H.264 naquela carga~~ **Substituído em parte pelo ADR-009:** depois de cair, a página tenta o H.264 de novo sozinha, com espera crescente, e desliga o MJPEG quando o H.264 toca estável. Os dois não correm juntos, **exceto** nas provas curtas de volta ao H.264 (ADR-009).
 - Em pausa nenhum codificador recebe quadro, e a retomada força um quadro-chave (evita "fantasma" da tela mostrada na pausa).
 - `[Métricas]` no log soma as duas rotas (`H.264 n / MJPEG m`).
 

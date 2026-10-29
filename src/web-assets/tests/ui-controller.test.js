@@ -441,3 +441,17 @@ test('O botão de tela cheia diz se entra ou sai', () => {
   assert.strictEqual(el.fullscreenBtn.getAttribute('aria-pressed'), 'true');
   assert.strictEqual(el.fullscreenBtn.getAttribute('aria-label'), 'Sair da tela cheia');
 });
+
+// MARK: - Volta ao H.264 desliga o MJPEG
+
+test('desativarMJPEG para o vigia, tira a imagem do palco e suprime o MJPEG', () => {
+  const ctx = aoVivoComQuadro();
+  ctx.ui.ativarFallbackMJPEG();
+  assert.strictEqual(ctx.el.videoStream.classList.contains('active'), true);
+  ctx.ui.desativarMJPEG();
+  assert.strictEqual(ctx.vigia.chamadas[ctx.vigia.chamadas.length - 1], 'stop');
+  assert.strictEqual(ctx.el.videoStream.classList.contains('active'), false);
+  assert.strictEqual(ctx.ui.mjpegSuprimido, true);
+  ctx.ui.iniciarVideo();
+  assert.strictEqual(ctx.vigia.chamadas[ctx.vigia.chamadas.length - 1], 'stop', 'iniciarVideo não religa o MJPEG');
+});

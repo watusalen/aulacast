@@ -11,6 +11,11 @@ const tipoMp4 = (codec) => `video/mp4; codecs="${codec}"`;
 /** Desiste (e cai para o MJPEG) depois de tantas quedas REAIS seguidas de `/stream.mp4`. */
 const MAX_TENTATIVAS_DE_RECONEXAO = 5;
 
+/** Prova de volta ao H.264 (depois de um fallback): sem tocar em tanto tempo, desiste de novo. */
+const PROVA_SEM_TOCAR_MS = 15_000;
+/** Tocando sem cair por tanto tempo, a prova vale: o MJPEG pode ser desligado. */
+const PROVA_ESTAVEL_MS = 5_000;
+
 /** Atraso do ao vivo: entre o mínimo e o máximo, acelera suavemente; acima do máximo, pula. */
 const ATRASO_MINIMO_S = 0.3;
 const ATRASO_MAXIMO_S = 2;
@@ -98,6 +103,8 @@ export class VideoStreamPlayer {
     this.video = videoElement;
     this.onFallback = opcoes.onFallback || (() => {});
     this.onEstado = opcoes.onEstado || (() => {});
+    /** A prova de volta ao H.264 deu certo (ver `tentarDeNovo()`). */
+    this.onRecuperou = opcoes.onRecuperou || (() => {});
     this.janela = opcoes.janela || (typeof window !== 'undefined' ? window : undefined);
     this.fetchImpl = opcoes.fetchImpl || (this.janela && this.janela.fetch ? this.janela.fetch.bind(this.janela) : undefined);
     this.urlImpl = opcoes.urlImpl || (this.janela ? this.janela.URL : undefined);
@@ -125,6 +132,12 @@ export class VideoStreamPlayer {
     this.emFallback = false;
     /** Desistiu do H.264: nenhum `start()` seguinte tenta de novo nesta página (banda). */
     this.desistiu = false;
+    /** O navegador não tem MediaSource: tentar de novo não adianta. */
+    this.semSuporte = false;
+    /** Está numa prova de volta ao H.264: uma queda ou demora já a encerra. */
+    this.emProva = false;
+    this.provaTimer = null;
+    this.estavelTimer = null;
     /** O professor pausou: o servidor não manda nada, então parar de avançar é esperado. */
     this.pausado = false;
     /** Última posição vista do vídeo e quando: base da detecção de reprodução parada. */
@@ -157,6 +170,7 @@ export class VideoStreamPlayer {
   start() {
     if (this.querTransmitir || this.desistiu) return;
     if (!mediaSourceSuportado(this.janela) || !this.fetchImpl) {
+      this.semSuporte = true;
       this.cairParaFallback('sem suporte a MediaSource/fetch neste navegador');
       return;
     }
@@ -167,8 +181,32 @@ export class VideoStreamPlayer {
     this.conectar();
   }
 
+  /**
+   * Depois do fallback para MJPEG: uma prova curta de voltar ao H.264. Falha rápido (uma queda,
+   * ou 15 s sem tocar) e volta a avisar `onFallback`; se tocar estável por 5 s, chama
+   * `onRecuperou` e quem instanciou desliga o MJPEG. Durante a prova as duas conexões coexistem,
+   * por poucos segundos. Devolve `false` se não havia o que tentar.
+   */
+  tentarDeNovo() {
+    if (!this.emFallback || this.semSuporte || this.querTransmitir) return false;
+    this.emFallback = false;
+    this.desistiu = false;
+    this.emProva = true;
+    globalThis.AulaCastDebug?.log('rota', 'H.264: prova de volta depois do MJPEG');
+    this.provaTimer = setTimeout(() => this.aoFalhar(`prova: sem reproduzir em ${PROVA_SEM_TOCAR_MS / 1000} s`), PROVA_SEM_TOCAR_MS);
+    this.start();
+    return true;
+  }
+
   /** Encerra de propósito (aula parada/terminada) — não é uma queda para tentar de novo. */
   stop() {
+    // Parada no meio de uma prova: volta ao estado de fallback, para o retorno poder tentar depois.
+    if (this.emProva) {
+      this.emProva = false;
+      this.emFallback = true;
+      this.desistiu = true;
+    }
+    this.limparTemposDaProva();
     this.querTransmitir = false;
     this.pausado = false;
     this.limparTimer();
@@ -492,6 +530,27 @@ export class VideoStreamPlayer {
     this.mostrouVideo = true;
     this.video.classList.add('active');
     this.onEstado('ao-vivo');
+    if (this.emProva) {
+      clearTimeout(this.provaTimer);
+      this.provaTimer = null;
+      this.estavelTimer = setTimeout(() => this.concluirProva(), PROVA_ESTAVEL_MS);
+    }
+  }
+
+  /** Tocou estável: o H.264 voltou. */
+  concluirProva() {
+    this.estavelTimer = null;
+    if (!this.emProva || !this.querTransmitir) return;
+    this.emProva = false;
+    globalThis.AulaCastDebug?.log('rota', 'H.264: prova concluída, de volta ao H.264');
+    this.onRecuperou();
+  }
+
+  limparTemposDaProva() {
+    clearTimeout(this.provaTimer);
+    clearTimeout(this.estavelTimer);
+    this.provaTimer = null;
+    this.estavelTimer = null;
   }
 
   aoMudarVisibilidade() {
@@ -526,6 +585,10 @@ export class VideoStreamPlayer {
     globalThis.AulaCastDebug?.log('rota', `queda do /stream.mp4: ${motivo}`);
     this.encerrarConexaoAtual();
     this.esconderVideo();
+    if (this.emProva) {
+      this.aoFalhar(`prova: ${motivo}`);
+      return;
+    }
     this.tentativas += 1;
     if (this.tentativas > MAX_TENTATIVAS_DE_RECONEXAO) {
       this.aoFalhar(`desistiu depois de ${this.tentativas - 1} tentativa(s) (${motivo})`);
@@ -551,6 +614,8 @@ export class VideoStreamPlayer {
     const primeiraVez = !this.emFallback;
     this.emFallback = true;
     this.desistiu = true;
+    this.emProva = false;
+    this.limparTemposDaProva();
     this.querTransmitir = false;
     this.limparTimer();
     this.pararVerificador();
