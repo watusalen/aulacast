@@ -145,7 +145,7 @@ public final class StaticFileProviderService {
     }
     
     private func send404(connection: NWConnection) {
-        let body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><title>AulaCast</title><h1>Página não encontrada</h1><p>Confira o endereço que o anfitrião passou.</p>"
+        let body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width\"><title>AulaCast</title><h1>Página não encontrada</h1><p>Confira o endereço que o anfitrião passou</p>"
         let header = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n"
         var responseData = Data(header.utf8)
         responseData.append(Data(body.utf8))

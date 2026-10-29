@@ -20,7 +20,7 @@ extension ScreenRecordingPermissionProtocol {
 /// Regras puras da permissão (testáveis sem ScreenCaptureKit nem Ajustes do Sistema).
 public enum PermissaoDeTela {
     public static let mensagemNegada =
-        "Autorize em Ajustes do Sistema > Privacidade e Segurança > Gravação de Tela e reabra o app."
+        "Autorize em Ajustes do Sistema > Privacidade e Segurança > Gravação de Tela e reabra o app"
     public static let mensagemFalhaAoReabrir =
         "Não foi possível reabrir. Feche e abra o AulaCast manualmente."
 

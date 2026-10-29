@@ -201,7 +201,7 @@ public final class ScreenCaptureService: NSObject, ScreenCaptureProtocol {
 
         guard let source = selectedSource else {
             await MainActor.run {
-                self.errorMessage = "Escolha uma tela ou janela para transmitir."
+                self.errorMessage = "Escolha uma tela ou janela para transmitir"
             }
             return
         }

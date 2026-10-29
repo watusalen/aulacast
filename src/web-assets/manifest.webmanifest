@@ -1,7 +1,7 @@
 {
   "name": "AulaCast",
   "short_name": "AulaCast",
-  "description": "Veja a tela do anfitrião e converse na transmissão.",
+  "description": "Veja a tela do anfitrião e converse na transmissão",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

@@ -667,13 +667,13 @@ public final class WebSocketHandlerService {
             // Revalida no servidor: confiar só na checagem do navegador deixaria a lista
             // da turma aceitar qualquer coisa vinda de um cliente adulterado.
             guard nome.count >= 2 else {
-                let motivo = nome.isEmpty ? "Digite seu nome para entrar." : "Digite pelo menos 2 letras."
+                let motivo = nome.isEmpty ? "Digite seu nome para entrar" : "Digite pelo menos 2 letras"
                 let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"\(motivo)\"}}"
                 sendTextFrame(connection: connection, text: recusaJSON)
                 return
             }
             guard nome.count <= Self.maxNameLength else {
-                let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"Use até \(Self.maxNameLength) caracteres.\"}}"
+                let recusaJSON = "{\"type\":\"IDENTIFY_REJECTED\",\"payload\":{\"reason\":\"Use até \(Self.maxNameLength) caracteres\"}}"
                 sendTextFrame(connection: connection, text: recusaJSON)
                 return
             }

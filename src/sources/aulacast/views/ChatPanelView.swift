@@ -73,7 +73,7 @@ public struct ChatPanelView: View {
                     Text("Nenhuma mensagem ainda")
                         .m3(.titleMedium)
                         .foregroundColor(M3.onSurface)
-                    Text("As perguntas dos participantes aparecem aqui.")
+                    Text("As perguntas dos participantes aparecem aqui")
                         .m3(.bodyMedium)
                         .foregroundColor(M3.onSurfaceVariant)
                 }

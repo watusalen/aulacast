@@ -41,7 +41,7 @@ public struct SharedFilesPanelView: View {
                     Text("Nenhum arquivo ainda")
                         .m3(.titleMedium)
                         .foregroundColor(M3.onSurface)
-                    Text("Arraste arquivos para cá.")
+                    Text("Arraste arquivos para cá")
                         .m3(.bodyMedium)
                         .foregroundColor(M3.onSurfaceVariant)
                         .multilineTextAlignment(.center)
@@ -165,7 +165,7 @@ public struct SharedFilesPanelView: View {
         painel.canChooseDirectories = false
         painel.allowsMultipleSelection = true
         painel.prompt = "Compartilhar"
-        painel.message = "Escolha os arquivos que os participantes vão poder baixar."
+        painel.message = "Escolha os arquivos que os participantes vão poder baixar"
         guard painel.runModal() == .OK else { return }
         viewModel.shareFiles(painel.urls)
     }
