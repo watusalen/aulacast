@@ -18,8 +18,6 @@ Itens **Proposto** ainda esperam aprovação do usuário.
 | [03-historias-de-usuario.md](03-historias-de-usuario.md) | US-01..US-15 |
 | [04-arquitetura-e-design.md](04-arquitetura-e-design.md) | Componentes, protocolo WebSocket, medições, limite de escala (4.1.1), estrutura de arquivos |
 | [padroes.md](padroes.md) | Padrões de projeto presentes no código |
-| [feedback-tela-do-aluno.md](feedback-tela-do-aluno.md) | Feedback da turma e o que foi feito |
-| [relatorio-mudanca-sync-docs.md](relatorio-mudanca-sync-docs.md) | Relatório da sincronização de 14/10/2026 |
 
 ## Itens criados ou alterados na sincronização de 14/10/2026
 - **RF-17** Compartilhamento de Arquivos (renumerado; era um segundo RF-16).

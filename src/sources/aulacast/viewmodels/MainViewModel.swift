@@ -137,7 +137,7 @@ public final class MainViewModel: ObservableObject {
     nonisolated(unsafe) public let serverService: NetworkServerProtocol
 
     /// Caminho H.264/fMP4 em paralelo ao MJPEG (`encoderService`), enquanto o cliente não
-    /// decide sozinho qual dos dois usar — ver PLANO-COMPRESSAO-DE-VIDEO.md. Os dois recebem o
+    /// decide sozinho qual dos dois usar — ver ADR-004. Os dois recebem o
     /// mesmo `CMSampleBuffer`; o aluno é quem escolhe a rota (`/stream` ou `/stream.mp4`), então
     /// o servidor mantém as duas alimentadas o tempo todo.
     nonisolated(unsafe) private let h264EncoderService = H264FrameEncoder()

@@ -9,7 +9,7 @@ import VideoToolbox
 ///
 /// Diferença central para o MJPEG: aqui cada quadro pode ser uma predição sobre o anterior
 /// (P-frame), não um JPEG independente. Para conteúdo de tela parada/scroll/texto, isso é o
-/// que reduz o tráfego de verdade — ver PLANO-COMPRESSAO-DE-VIDEO.md na raiz do repositório.
+/// que reduz o tráfego de verdade — ver ADR-004.
 public final class H264FrameEncoder: VideoEncoderProtocol {
     /// Mantido só para satisfazer `VideoEncoderProtocol` (o ponto de extensão onde
     /// `MainViewModel` pluga o encoder ativo). Este encoder não produz JPEG, então nunca chama
@@ -258,7 +258,7 @@ public final class H264FrameEncoder: VideoEncoderProtocol {
         guard status == noErr, let novaSessao else { return nil }
 
         // Baseline: é o perfil com decodificação garantida em qualquer navegador/SO (ver
-        // seção 3.4 do PLANO-COMPRESSAO-DE-VIDEO.md) — H.265/AV1 ficam de fora por isso.
+        // ADR-004) — H.265/AV1 ficam de fora por isso.
         // Nível 4.0 cobre 1080p30; acima disso (ex.: 1080p60) deixa o VideoToolbox escolher.
         let fps = max(1, framesPerSecond)
         vooLock.lock()

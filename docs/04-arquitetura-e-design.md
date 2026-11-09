@@ -402,7 +402,7 @@ e [movimento](https://m3.material.io/styles/motion/overview/how-it-works) no m3.
 
 A página do aluno foi refeita com os mesmos tokens do professor (cores claro/escuro, tipos,
 formas, fontes), servidos pelo próprio app, sem internet. O que mudou, e por quê (feedback da
-turma, triado de forma enxuta em `docs/feedback-tela-do-aluno.md`):
+turma):
 
 - **Palco + barra + painel, como no Meet:** a imagem num palco escuro; embaixo, o estado ("Ao
   vivo", "Pausada", "Reconectando…") e o nome com que o aluno entrou à esquerda, e os botões
@@ -455,7 +455,6 @@ AulaCast/
 │   ├── 02-casos-de-uso.md
 │   ├── 03-historias-de-usuario.md
 │   ├── 04-arquitetura-e-design.md
-│   ├── feedback-tela-do-aluno.md
 │   ├── README.md                          # Índice (RF, RNF, UC, US, ADR)
 │   ├── padroes.md
 │   └── adr/                               # Decisões de arquitetura

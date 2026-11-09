@@ -2693,7 +2693,7 @@ struct AulaCastTestRunner {
         }
 
         // TESTE 34: pipeline H.264 + fMP4 (H264FrameEncoder, FMP4Packager, MP4StreamerService).
-        // Ver PLANO-COMPRESSAO-DE-VIDEO.md na raiz do repositório para o porquê de cada peça.
+        // Ver ADR-004 na raiz do repositório para o porquê de cada peça.
         print("\n--- [34/35] Testes: codificação H.264 e empacotamento fMP4 ---")
 
         final class ColetorDeAccessUnits: H264AccessUnitReceiverProtocol, @unchecked Sendable {
@@ -2717,7 +2717,7 @@ struct AulaCastTestRunner {
             // Conteúdo tem que MUDAR de um quadro para o outro: um encoder com predição entre
             // quadros pode legitimamente não gerar saída nenhuma para um quadro idêntico ao
             // anterior (é exatamente o ganho de banda que justifica trocar o MJPEG por isto —
-            // ver PLANO-COMPRESSAO-DE-VIDEO.md) — quadros em branco repetidos testariam esse
+            // ver ADR-004) — quadros em branco repetidos testariam esse
             // comportamento, não a entrega de "vários quadros".
             CVPixelBufferLockBaseAddress(buffer, [])
             if let base = CVPixelBufferGetBaseAddress(buffer) {

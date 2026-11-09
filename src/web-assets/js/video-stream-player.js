@@ -2,7 +2,7 @@ import { STREAM_RETRY_BASE_MS, STREAM_RETRY_MAX_MS } from './config.js';
 
 /**
  * Perfil Baseline: é o único com decodificação garantida em qualquer navegador/SO (ver
- * PLANO-COMPRESSAO-DE-VIDEO.md, seção 3.4). `avc1.42E01E` é Baseline, nível 3.0. Serve para
+ * ADR-004). `avc1.42E01E` é Baseline, nível 3.0. Serve para
  * checar o suporte ao iniciar e como reserva quando o `avcC` do init segment não é legível.
  */
 const CODEC_PADRAO = 'avc1.42E01E';
@@ -83,7 +83,7 @@ export function mediaSourceSuportado(janela = typeof window !== 'undefined' ? wi
  * Player de `/stream.mp4` (H.264 em fMP4) via `MediaSource`/`ManagedMediaSource`.
  *
  * Não sabe nada sobre o `StreamWatchdog` nem sobre o `<img>` do MJPEG — de propósito: os
- * dois convivem sem se acoplar (ver PLANO-COMPRESSAO-DE-VIDEO.md, seção 8.4). Este player só
+ * dois convivem sem se acoplar (ver ADR-004). Este player só
  * cuida do próprio `<video>`, escondido por padrão, e mostrado quando o primeiro quadro
  * decodificável entra no `SourceBuffer`. Se em algum ponto isto não for possível — sem
  * suporte, uma falha de inicialização, ou a conexão cair repetidas vezes — ele se esconde de

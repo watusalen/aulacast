@@ -17,7 +17,7 @@ export class AulaCastApp {
    * @param {{ criarVigia?: Function, telaAcesa?: object }} opcoes dublês para os testes
    */
   constructor({ criarVigia, telaAcesa, criarVideoPlayer } = {}) {
-    // H.264/fMP4 em cima do MJPEG existente (ver PLANO-COMPRESSAO-DE-VIDEO.md): decidido uma
+    // H.264/fMP4 em cima do MJPEG existente (ver ADR-004): decidido uma
     // vez, aqui, com a mesma checagem que `VideoStreamPlayer.start()` vai fazer sozinho — para
     // as duas nunca discordarem sobre qual caminho está de pé.
     //

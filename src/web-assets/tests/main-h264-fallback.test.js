@@ -4,7 +4,7 @@ import assert from 'node:assert';
 /**
  * Exercita a decisão de qual vídeo usar (H.264/fMP4 vs MJPEG) em `AulaCastApp`: as duas
  * conexões não podem ficar de pé ao mesmo tempo — é exatamente o desperdício de banda que a
- * troca de codec existe para evitar (ver PLANO-COMPRESSAO-DE-VIDEO.md). Complementa
+ * troca de codec existe para evitar (ver ADR-004). Complementa
  * `main-messages.test.js` (que roda com `videoStreamMP4` ausente, e portanto sempre no modo
  * MJPEG puro) e `video-stream-player.test.js` (o player H.264 isolado, sem o `UIController`).
  */
