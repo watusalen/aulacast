@@ -195,6 +195,22 @@ public final class MainViewModel: ObservableObject {
         return resultado
     }
 
+    /// Fotografia dos tempos de agora (rápida), ou `nil` se não há o que salvar. O arquivo só é
+    /// gravado depois, por `gravarChamada`, quando a transmissão já parou na tela.
+    private func fotografiaDaChamada(em fim: Date) -> [AttendanceSummary]? {
+        (isSessionOpen || isStreaming) && !chamadaJaSalva ? ledger.todos(agora: fim) : nil
+    }
+
+    /// Grava o CSV fora da thread principal e só então mostra o aviso.
+    private func gravarChamada(_ resumos: [AttendanceSummary]?, fim: Date) async {
+        guard let resumos else { return }
+        let pasta = pastaDasChamadas
+        let resultado = await Task.detached(priority: .utility) {
+            ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta)
+        }.value
+        publicarChamada(resultado)
+    }
+
     /// Marca a lista como salva e mostra o aviso (snackbar) correspondente ao resultado.
     private func publicarChamada(_ resultado: ResultadoDaChamada) {
         switch resultado {
@@ -515,8 +531,7 @@ public final class MainViewModel: ObservableObject {
         // transmissão parar, fora da thread principal: encerrar não espera o disco, e o aviso
         // de "lista salva" aparece depois que a tela já mostra tudo encerrado.
         let fim = Date()
-        let resumos = (isSessionOpen || isStreaming) && !chamadaJaSalva ? ledger.todos(agora: fim) : nil
-        let pasta = pastaDasChamadas
+        let resumos = fotografiaDaChamada(em: fim)
         Task {
             await captureService.stopCapture()
             // Antes de parar o servidor: um quadro-chave em voo entre os dois resets gravaria um
@@ -539,11 +554,7 @@ public final class MainViewModel: ObservableObject {
             self.streamStartedAt = nil
             self.latestPreviewImage = nil
 
-            guard let resumos else { return }
-            let resultado = await Task.detached(priority: .utility) {
-                ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta)
-            }.value
-            self.publicarChamada(resultado)
+            await self.gravarChamada(resumos, fim: fim)
         }
     }
 
@@ -770,7 +781,9 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         // minuto depois da queda, o Mac dormia, todas as conexões caíam e os alunos iam
         // para "Reconectando" enquanto o professor ainda estava lendo o aviso do erro.
         // Quem encerra a sessão de verdade é "Parar Transmissão", e é lá que ela é liberada.
-        salvarChamada()
+        // A tela passa a mostrar "parou" primeiro; o arquivo é gravado depois, sem travar a interface.
+        let fim = Date()
+        let resumos = fotografiaDaChamada(em: fim)
         ledger.setAccruing(false)
         isStreaming = false
         isPaused = false
@@ -778,6 +791,7 @@ extension MainViewModel: CaptureLifecycleObserverProtocol {
         streamState.reset()
         streamStartedAt = nil
         latestPreviewImage = nil
+        Task { await gravarChamada(resumos, fim: fim) }
     }
 
     public func captureDidReportError(_ message: String) {
