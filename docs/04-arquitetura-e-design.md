@@ -431,13 +431,12 @@ turma, triado de forma enxuta em `docs/feedback-tela-do-aluno.md`):
   último quadro num `<canvas>` por cima até chegar o quadro novo. Medido no Chrome 153 e no
   WebKit: nenhum quadro vazio na troca; antes, cerca de 1,85 s de área vazia. Com a conexão
   caída o aluno vê a imagem parada com um aviso pequeno, e não mais uma tela preta.
-- **Tela que não apaga:** a Wake Lock API só existe em `https://`, e a aula é `http://`. O
-  módulo `manter-tela-acesa.js` usa a API quando pode e, fora disso, a técnica do NoSleep.js
-  (MIT): um vídeo minúsculo em laço, iniciado no gesto de "Entrar na aula". Medido com `pmset
-  -g assertions`: Chrome e WebKit seguram a tela acordada. O vídeo **não pode ser mudo**
-  (`muted` não segura a tela em nenhum dos dois), precisa estar no DOM (fora da tela, 1 px)
-  e custa 3 a 4 pontos de CPU no Chrome. No celular, por ter trilha de áudio (silenciosa), pode
-  pausar a música de outro app.
+- **Tela que não apaga:** o módulo `manter-tela-acesa.js` pede a Screen Wake Lock API, que só
+  existe em contexto seguro (`https://` ou localhost). A página é `http://` num IP da rede
+  local, então na prática **a tela do participante apaga por inatividade**, como em qualquer
+  página. O truque do NoSleep.js (vídeo escondido, com som, em laço) foi **removido** por
+  decisão do usuário: aparecia como "tocando áudio" na aba, podia pausar a música de outro app
+  e custava CPU. Só voltaria com HTTPS no servidor.
 
 #### Permissão de Gravação de Tela
 - A decisão não usa só `CGPreflightScreenCaptureAccess`: se ele der falso, `probe()` tenta uma consulta real ao ScreenCaptureKit antes de bloquear.
@@ -530,8 +529,7 @@ AulaCast/
         │   ├── presence-reporter.js           # Presença na tela
         │   ├── socket-client.js               # WebSocket + reconexão
         │   ├── stream-watchdog.js             # Vigia o MJPEG; segura o último quadro
-        │   ├── manter-tela-acesa.js           # Wake Lock ou vídeo em laço (NoSleep.js)
-        │   ├── vendor/nosleep-media.js        # Vídeos do NoSleep.js (MIT)
+        │   ├── manter-tela-acesa.js           # Screen Wake Lock (só em contexto seguro)
         │   ├── chat-manager.js
         │   ├── links.js                       # Links clicáveis, montados com DOM
         │   ├── raise-hand.js                  # Mão levantada

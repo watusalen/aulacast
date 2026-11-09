@@ -264,8 +264,7 @@ Projeto acadêmico desenvolvido no IFPI — Campus Piripiri.
 
 Componentes de terceiros incluídos, com as licenças junto:
 - **Google Sans Flex**, © Google, [SIL Open Font License 1.1](src/web-assets/fonts/GoogleSansFlex-OFL.txt);
-- **Material Symbols Rounded**, © Google, [Apache License 2.0](src/web-assets/fonts/MaterialSymbols-LICENSE.txt);
-- **NoSleep.js** (os vídeos em laço que mantêm a tela do aluno acesa), © Rich Tibbett, licença MIT, no topo de `src/web-assets/js/vendor/nosleep-media.js`.
+- **Material Symbols Rounded**, © Google, [Apache License 2.0](src/web-assets/fonts/MaterialSymbols-LICENSE.txt).
 
 As fontes foram reduzidas aos caracteres e ícones usados pelo app e servem às duas telas.
 
