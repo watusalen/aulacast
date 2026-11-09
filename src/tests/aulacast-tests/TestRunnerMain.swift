@@ -3056,14 +3056,13 @@ struct AulaCastTestRunner {
             close(fdMeio)
 
             // Corrida: publica sem parar enquanto conexões novas chegam; o primeiro byte tem que ser o cabeçalho.
-            let parar = NSLock()
-            nonisolated(unsafe) var continuar = true
+            let sinal = SinalDeParada()
+            let fragmentoDaCorrida = fragmentoMarcado("KEY-R")
+            nonisolated(unsafe) let servidorDaCorrida = servidorOrdem
             let publicador = DispatchQueue(label: "teste.publicador")
             publicador.async {
-                while true {
-                    parar.lock(); let seguir = continuar; parar.unlock()
-                    if !seguir { break }
-                    servidorOrdem.broadcastVideoFragment(fragmentoMarcado("KEY-R"), isInitSegment: false, isKeyFrame: true)
+                while !sinal.deveParar {
+                    servidorDaCorrida.broadcastVideoFragment(fragmentoDaCorrida, isInitSegment: false, isKeyFrame: true)
                     usleep(300)
                 }
             }
@@ -3075,7 +3074,7 @@ struct AulaCastTestRunner {
                 if posicao("HTTP/1.1 200", em: r) != 0 { todosComCabecalhoPrimeiro = false }
                 close(fd)
             }
-            parar.lock(); continuar = false; parar.unlock()
+            sinal.parar()
             assertTest(todosComCabecalhoPrimeiro, "Com publicação concorrente, 'HTTP/1.1 200' sempre sai antes do init/fragmentos")
             servidorOrdem.stop()
         } catch {

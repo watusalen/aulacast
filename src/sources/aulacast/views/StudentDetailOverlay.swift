@@ -157,15 +157,15 @@ private struct StudentDetailCard: View {
             }
         }
         .padding(.top, 4)
-        // Folga para o anel do pulso (5 pt para cada lado da bolinha) não ser cortado pela lista.
-        .padding(.leading, 5)
+        // Folga para o anel do pulso (4 pt para cada lado da bolinha) não ser cortado pela lista.
+        .padding(.leading, 4)
     }
 
     /// Altura própria do item; o conector é um fundo que desce até o próximo ponto (item + 12 pt
     /// de vão), então não há espaço sobrando nem depois do último.
     private func itemDaLinhaDoTempo(_ n: ConexaoDaPessoa, ultimo: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            PontoDeConexao(ativa: n.ativa).padding(.top, 4)
+            PontoDeConexao(ativa: n.ativa).padding(.top, 5)
             VStack(alignment: .leading, spacing: 2) {
                 Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
                 // Hora de entrada e, se o ENV já chegou, o navegador e o aparelho (um palpite).
@@ -178,7 +178,7 @@ private struct StudentDetailCard: View {
         .background(alignment: .topLeading) {
             if !ultimo {
                 Rectangle().fill(M3.outlineVariant).frame(width: 2)
-                    .padding(.top, 14).padding(.leading, 4).padding(.bottom, -12)
+                    .padding(.top, 13).padding(.leading, 3).padding(.bottom, -12)
             }
         }
         .accessibilityElement(children: .combine)
@@ -215,7 +215,7 @@ private struct StudentDetailCard: View {
 /// O pulso é do Core Animation, não do SwiftUI: uma animação `repeatForever` do SwiftUI
 /// redesenhava a lista a cada quadro e a rolagem engasgava. No Core Animation ela roda no
 /// processo de desenho do sistema, sem custo para o SwiftUI. O anel cresce até 2x, então a
-/// área do anel é de 20 pt (a bolinha tem 10) e a lista deixa folga para ele não ser cortado.
+/// área do anel é de 16 pt (a bolinha tem 8) e a lista deixa folga para ele não ser cortado.
 private struct PontoDeConexao: View {
     let ativa: Bool
 
@@ -224,16 +224,16 @@ private struct PontoDeConexao: View {
             if ativa {
                 if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                     AnelPulsante(cor: NSColor(M3.primary))
-                        .frame(width: 20, height: 20)
+                        .frame(width: 16, height: 16)
                         .allowsHitTesting(false)
                 }
                 Circle().fill(M3.primary)
             } else {
                 Circle().fill(M3.surface)
-                Circle().strokeBorder(M3.outline, lineWidth: 2)
+                Circle().strokeBorder(M3.outline, lineWidth: 1.5)
             }
         }
-        .frame(width: 10, height: 10)
+        .frame(width: 8, height: 8)
     }
 }
 
@@ -251,14 +251,22 @@ private final class VistaDoAnel: NSView {
 
     init(cor: NSColor) {
         self.cor = cor
-        super.init(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        super.init(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
         wantsLayer = true
         layer?.masksToBounds = false
-        anel.frame = CGRect(x: 5, y: 5, width: 10, height: 10)   // no centro dos 20 pt
-        anel.cornerRadius = 5
+        anel.frame = CGRect(x: 4, y: 4, width: 8, height: 8)   // no centro dos 16 pt
+        anel.cornerRadius = 4
         anel.opacity = 0
         layer?.addSublayer(anel)
         pintar()
+    }
+
+    /// O Core Animation descarta animações de uma camada que sai da janela (a lista rola, a vista
+    /// é reaproveitada): por isso ela é criada de novo toda vez que a vista entra numa janela.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        anel.removeAnimation(forKey: "pulso")
+        guard window != nil else { return }
 
         let escala = CABasicAnimation(keyPath: "transform.scale")
         escala.fromValue = 1
