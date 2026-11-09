@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- O AulaCast não rastreia ninguém e não envia dado nenhum para fora da rede local. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!-- Nada é coletado pelo desenvolvedor: nome, IP, navegador e métricas ficam no Mac do
+         anfitrião (lista de presença e arquivo da sessão em Documentos). -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- APIs da lista "required reason" da Apple que o app usa:
+         UserDefaults guarda só a escolha de apps ocultos do próprio app (HiddenAppsStore). -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

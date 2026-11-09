@@ -58,6 +58,10 @@ AULACAST_APPSTORE=1 "$RAIZ/scripts/build-app.sh" "$SAIDA"
 ARQS="$(lipo -archs "$APP/Contents/MacOS/AulaCast")"
 case "$ARQS" in *arm64*x86_64*|*x86_64*arm64*) ;; *) falta "binário não é universal (só: $ARQS). A segunda arquitetura não compilou." ;; esac
 
+# A Apple recusa (ou avisa) upload sem o manifesto de privacidade para APIs "required reason".
+[ -f "$APP/Contents/Resources/PrivacyInfo.xcprivacy" ] || falta "PrivacyInfo.xcprivacy não foi embutido no app."
+plutil -lint "$APP/Contents/Resources/PrivacyInfo.xcprivacy" >/dev/null || falta "PrivacyInfo.xcprivacy inválido."
+
 echo "==> Embutindo o perfil de provisionamento"
 cp "$AULACAST_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
 

@@ -102,6 +102,9 @@ mkdir -p "$APP/Contents/Resources/web-assets"
   find . -type f -not -path "./tests/*" -not -name ".DS_Store" \
     -exec ditto "{}" "$APP/Contents/Resources/web-assets/{}" \;)
 
+# Manifesto de privacidade exigido pela Apple (APIs "required reason", sem rastreamento).
+cp "$RAIZ/scripts/PrivacyInfo.xcprivacy" "$APP/Contents/Resources/PrivacyInfo.xcprivacy"
+
 echo "==> Gerando o ícone"
 ICONE="$SAIDA/AppIcon.icns"
 swift "$RAIZ/scripts/gerar-icone.swift" "$ICONE" >/dev/null

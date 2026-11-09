@@ -9,7 +9,7 @@ Ver [ADR-007](adr/ADR-007-distribuicao-mac-app-store-sandbox.md). Status: **Prop
 3. **Perfil de provisionamento** "Mac App Store Connect" para esse App ID, baixado como `.provisionprofile` (variável `AULACAST_PROVISIONING_PROFILE`).
 4. **Registro do app no App Store Connect**: nome, idioma principal (português do Brasil), Bundle ID, SKU.
 5. **Conformidade de exportação**: o Info.plist já traz `ITSAppUsesNonExemptEncryption = false` (HTTP/WebSocket local sem criptografia própria). Confirmar com o professor; se a escola entender que se aplica, a resposta muda.
-6. **Categoria**: Educação (já no Info.plist: `public.app-category.education`).
+6. **Categoria**: hoje o Info.plist traz Educação (`public.app-category.education`). O app foi pensado para qualquer pessoa, não só para sala de aula; **decidir com o professor** se a categoria deve ser Produtividade ou Utilitários (`LSApplicationCategoryType` em `scripts/build-app.sh` e a escolha no App Store Connect precisam combinar).
 7. **Classificação etária** (questionário). Há chat entre participantes opcional (ADR-003): responder conforme o questionário, a confirmar.
 8. **Metadados**: descrição, palavras-chave, capturas de tela (Mac, tamanhos exigidos pela Apple), ícone, URL de suporte, versão 1.0.0.
 9. **URL da política de privacidade** (obrigatória). Precisa existir uma página pública. **A confirmar com o responsável/IFPI** quem é o responsável pelo texto.
@@ -46,7 +46,7 @@ O app sai assinado ad-hoc **com** os entitlements, e o sandbox vale. Marque cada
 - [ ] O pedido de Gravação de Tela aparece, a permissão é concedida, "Encerrar e Reabrir" reabre o app, e a captura funciona.
 - [ ] Chat entre participantes (se ligado) funciona.
 - [ ] Compartilhar arquivos (botão e arrastar) e o participante baixa.
-- [ ] Ao encerrar, a lista de presença em CSV é salva e o aviso "Mostrar no Finder" seleciona o arquivo.
+- [ ] Ao encerrar, a tela mostra a transmissão parada na hora; depois aparece o aviso "Lista dos participantes salva" (3 s, o mouse em cima o segura) e **clicar nele** seleciona o arquivo no Finder.
 - [ ] A métrica `sessao-*.jsonl` é gravada.
 - [ ] Menu Arquivo > "Mostrar pasta de dados no Finder" (Shift+Cmd+D) abre `~/Library/Containers/<id>/Data/Documents/AulaCast`.
 - [ ] Wi-Fi do Mac (RSSI) aparece nas métricas, ou some sem erro (ver a validar).
@@ -69,5 +69,6 @@ Se algo falhar, veja o motivo: `log stream --predicate 'subsystem == "com.apple.
 | Dados do anfitrião ficam no contêiner | Métricas e listas de presença passam a ficar em `Library/Containers/<id>/Data/Documents/AulaCast`. Quem já usa a versão sem sandbox não vê os arquivos antigos; não há migração. Atalho no menu. |
 | Relançar o app (permissão de tela) | Trocado de `Process`+`/usr/bin/open` para `NSWorkspace.openApplication`. **A validar** que reabre. |
 | Revisão da Apple | Risco de pedirem justificativa do servidor local e da captura de tela. Mitigação: notas de revisão acima. |
+| Manifesto de privacidade (`PrivacyInfo.xcprivacy`) | Incluído no app por `build-app.sh` (sem rastreamento, nada coletado, só `UserDefaults` com o motivo `CA92.1`); `gerar-appstore.sh` recusa o pacote sem ele. **A validar:** que o upload não aponte outra API da lista "required reason" (a busca no código achou só `UserDefaults`). |
 | Política de privacidade e App Privacy | Texto e responsável **a confirmar com o responsável/IFPI**. |
 | Pasta de dados com nome de participante (LGPD) | Decisão do IFPI, fora do código. |

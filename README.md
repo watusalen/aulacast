@@ -1,54 +1,73 @@
 # AulaCast
 
-Transmissão de tela em rede local, para qualquer pessoa. Criada para o **Instituto Federal do Piauí — Campus Piripiri**.
+Transmissão de tela em rede local, para qualquer pessoa: aula, reunião, suporte, apresentação.
 
-O anfitrião transmite a própria tela e os participantes assistem pelo navegador, **sem instalar nada** e **sem depender da internet**. Tudo trafega pela rede local.
+O **anfitrião** transmite a própria tela num Mac, e os **participantes** assistem pelo navegador,
+**sem instalar nada** e **sem depender da internet**. Tudo trafega pela rede local.
 
-## O problema
-
-Nas aulas de programação do IFPI, três coisas atrapalham ao mesmo tempo:
-
-1. **O projetor é ruim** — baixa resolução e pouco contraste, então quem senta no fundo não consegue ler código no editor nem no terminal.
-2. **A internet é instável.**
-3. **O firewall da instituição bloqueia** Meet, Zoom, Discord e Teams.
-
-O AulaCast contorna os três: opera só na LAN (Ethernet ou Wi-Fi da sala), em portas HTTP comuns, **100% offline**.
+> **Origem.** O AulaCast nasceu nas aulas de programação do **Instituto Federal do Piauí — Campus
+> Piripiri**, onde o projetor ruim, a internet instável e o firewall que bloqueia Meet, Zoom,
+> Discord e Teams atrapalhavam ao mesmo tempo. Por isso ele opera só na LAN (Ethernet ou Wi-Fi),
+> em portas HTTP comuns, 100% offline. O nome vem daí, mas o uso não se limita à sala de aula.
 
 ## Como funciona
 
 ```
-   Mac do professor                          Computadores dos alunos
-┌──────────────────────┐                  ┌──────────────────────────┐
-│  ScreenCaptureKit    │   HTTP + MJPEG   │  Navegador               │
-│         ↓            │ ───────────────► │  (Chrome, Firefox,       │
-│  Codificação JPEG    │                  │   Safari, Edge)          │
-│         ↓            │   WebSocket      │                          │
-│  Servidor local      │ ◄──────────────► │  Chat · Arquivos         │
-└──────────────────────┘                  └──────────────────────────┘
-        Bonjour (_aulacast._tcp) na rede local
+   Mac do anfitrião                           Navegadores dos participantes
+┌───────────────────────┐                   ┌──────────────────────────────┐
+│  ScreenCaptureKit     │  H.264 (fMP4)     │  Chrome, Firefox, Safari,    │
+│          ↓            │ ────────────────► │  Edge: MediaSource           │
+│  Codificador          │  (reserva: MJPEG) │                              │
+│  (VideoToolbox)       │   WebSocket       │  Chat · Arquivos · Mão       │
+│  Servidor HTTP local  │ ◄───────────────► │  levantada                   │
+└───────────────────────┘                   └──────────────────────────────┘
+        Bonjour (_aulacast._tcp) e aulacast.local na rede local
 ```
 
-- **Anfitrião:** app nativo macOS em Swift/SwiftUI.
-- **Participantes:** página web servida pelo próprio Mac do anfitrião — basta digitar `aulacast.local:8080` no navegador (o `http://` é opcional). Durante a sessão o painel mostra só esse nome; o IP (`<ip-do-anfitriao>:8080`), para quem não resolve `.local`, sai pelo botão "Copiar link".
+- **Anfitrião:** app nativo macOS em Swift/SwiftUI, no estilo Material 3 Expressive.
+- **Participantes:** página web servida pelo próprio Mac. Basta digitar `aulacast.local:8080` no
+  navegador (o `http://` é opcional). Para quem não resolve `.local`, o botão "Copiar link" do app
+  entrega o endereço pelo IP (`<ip-do-anfitrião>:8080`).
+- **Vídeo:** H.264 em fMP4 (codificação por hardware, taxa-alvo calculada pela resolução e pelos quadros por segundo), tocado com
+  `MediaSource`. Se o navegador não suporta ou a conexão cai repetidamente, a página cai para
+  **MJPEG** (`<img>`, funciona em qualquer navegador) e **tenta voltar ao H.264 sozinha**, com
+  espera crescente e sorteada, para a volta não derrubar a rede (ADR-004 e ADR-009).
 
 ## Funcionalidades
 
-- Transmissão do monitor inteiro ou de uma janela específica, **trocável durante a transmissão** sem derrubar a transmissão
-- Qualidade ajustável ao vivo (720p/1080p, 15/30/45 fps)
-- Pausar a transmissão sem encerrar a sessão
-- Entrada identificada: o participante informa o **nome** antes de assistir
-- Lista de presença mostrando quem está **realmente vendo a transmissão** (não apenas conectado)
-- Compartilhamento de arquivos de qualquer tipo: o anfitrião escolhe (ou arrasta) e os participantes baixam pelo mesmo link da transmissão, sem internet
-- Conversa reservada entre cada participante e o anfitrião (participantes não veem mensagens uns dos outros), com links clicáveis e uma **mensagem fixada** pelo anfitrião no topo
-- **Levantar a mão** pelo chat; o anfitrião vê quem levantou primeiro e pode abaixar
-- Página do participante em Material 3, no desenho do Google Meet, feita para computador e celular: tela cheia pela tecla **F**, "Adicionar à Tela de Início" no iPhone, e a tela do participante não apaga durante a transmissão
-- Reconexão automática do vídeo e do chat quando a rede oscila, com o último quadro na tela (sem tela preta)
+**Transmissão**
+- Monitor inteiro ou uma janela, **trocável durante a transmissão**, sem derrubar ninguém
+- **Ocultar apps**: com o monitor como fonte, o botão direito num app o tira da transmissão (mesmo em
+  tela cheia). A escolha é lembrada; o selo de olho cortado no cartão mostra o que está oculto
+- Qualidade ajustável ao vivo: 720p ou 1080p, 15, 30 ou 45 fps (padrão: 720p e 15 fps)
+- Pausar sem encerrar; se a janela transmitida some, a transmissão pausa sozinha
+- Encerrar mostra a transmissão parada na hora; a limpeza acontece em seguida
+
+**Participantes**
+- Entrada identificada: o participante informa o **nome** antes de assistir (revalidado no servidor)
+- Lista com **uma linha por pessoa** (o mesmo IP é sempre a mesma pessoa), com o ícone de olho
+  para quem está **vendo de fato** a transmissão, e não só conectado
+- Clicar numa pessoa abre o **perfil**: tempo na transmissão, tempo vendo, saídas e os nomes que
+  ela já usou
+- **Lista de presença** em CSV ao encerrar (veja "Dados e privacidade")
+- **Chat** reservado entre cada participante e o anfitrião (opcional: visível a todos), com links
+  clicáveis e uma **mensagem fixada**
+- **Levantar a mão**: o anfitrião vê quem levantou primeiro e abaixa com um clique
+- **Compartilhar arquivos**: o anfitrião escolhe ou arrasta, e os participantes baixam pelo mesmo
+  link da transmissão, sem internet
+
+**Página do participante**
+- Material 3, no desenho do Google Meet, para computador e celular; tela cheia pela tecla **F**;
+  "Adicionar à Tela de Início" no iPhone
+- Reconexão automática do vídeo e do chat, com o último quadro na tela (sem tela preta)
+- A tela do participante **pode apagar por inatividade**: a Wake Lock só existe em `https://`, e a
+  página é servida por `http://` na rede local
 
 ## Requisitos
 
-- macOS 13 (Ventura) ou superior
-- Swift 5.9+
+- macOS 13 (Ventura) ou superior, Swift 5.9+
 - Permissão de **Gravação de Tela** (o app orienta como conceder)
+- Para rodar os testes do cliente web: Node.js recente (a v26 funciona; a v20 não carrega os módulos)
 
 ## Como executar
 
@@ -59,96 +78,95 @@ swift run AulaCast
 
 Ao iniciar a transmissão, o app mostra o endereço para passar aos participantes.
 
-## Gerando o aplicativo e o instalador
+## Gerando o aplicativo, o instalador e o pacote da loja
 
 ```bash
-./scripts/build-app.sh    # monta build/AulaCast.app
-./scripts/gerar-dmg.sh    # monta o .app e o embala em build/AulaCast-1.0.0.dmg
-AULACAST_SANDBOX_TESTE=1 ./scripts/gerar-appstore.sh /tmp/aulacast-sandbox  # app ad-hoc COM App Sandbox, para testar localmente
-./scripts/gerar-appstore.sh   # pacote .pkg para a Mac App Store (variáveis e passos em docs/app-store-checklist.md)
+./scripts/build-app.sh      # monta build/AulaCast.app (universal: Apple Silicon e Intel)
+./scripts/gerar-dmg.sh      # monta o .app e o embala em build/AulaCast-1.0.0.dmg
+AULACAST_SANDBOX_TESTE=1 ./scripts/gerar-appstore.sh /tmp/aulacast-sandbox   # teste local do sandbox
+./scripts/gerar-appstore.sh # pacote .pkg para a Mac App Store (variáveis em docs/app-store-checklist.md)
 ```
 
-O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos — quem recebe só arrasta um
-para o outro.
+- `AULACAST_BUILD=<n>` define o número do build (precisa crescer a cada envio à loja); a versão
+  (`CFBundleShortVersionString`) é a `1.0.0`, definida em `scripts/build-app.sh`.
+- `AULACAST_DEBUG_METRICS=1 ./scripts/gerar-dmg.sh` gera a variante de **depuração** (console de
+  métricas no navegador do participante). Ela **nunca** vai para a loja: `gerar-appstore.sh` recusa.
+- O `.dmg` traz o aplicativo e um atalho para a pasta Aplicativos. Para conferir a arquitetura:
+  `lipo -archs build/AulaCast.app/Contents/MacOS/AulaCast` (deve mostrar `x86_64 arm64`).
+- Para desenvolver, `swift run AulaCast` é o caminho mais liso: não esbarra na permissão de Gravação
+  de Tela, porque o macOS atribui a captura ao Terminal, que já tem a permissão.
 
-O aplicativo sai **universal** (Apple Silicon e Intel). O `swift build` sozinho gera apenas a
-arquitetura da máquina que compilou, e um `.dmg` feito num Mac Apple Silicon não abria num
-Intel — o que em muitos lugares acontece o tempo todo. O script compila as duas fatias e as
-junta com `lipo`; se a segunda não compilar, ele avisa e segue com a arquitetura local.
-Para conferir o que saiu:
+### Publicar na Mac App Store
 
-```bash
-lipo -archs build/AulaCast.app/Contents/MacOS/AulaCast   # x86_64 arm64
-```
+O app tem **App Sandbox** (`scripts/AulaCast.entitlements`), categoria, conformidade de exportação
+(`ITSAppUsesNonExemptEncryption = false`) e **manifesto de privacidade** (`scripts/PrivacyInfo.xcprivacy`,
+sem rastreamento e sem coleta). Quem publica é o titular da conta Apple Developer: o certificado
+de distribuição e o perfil de provisionamento ficam no Mac dele, **nunca no repositório**.
 
-Para desenvolver, `swift run AulaCast` é o caminho mais liso — inclusive porque não esbarra na
-permissão de Gravação de Tela (veja a seção abaixo). O `.app` é o que se instala e se entrega.
+Passo a passo completo (App ID, certificados, App Store Connect, privacidade, notas para a revisão,
+envio pelo Transporter) e a lista de riscos em [`docs/app-store-checklist.md`](docs/app-store-checklist.md);
+a decisão em [ADR-007](docs/adr/ADR-007-distribuicao-mac-app-store-sandbox.md).
+
+> **Ainda não verificado com um build assinado de distribuição:** o comportamento sob sandbox do
+> servidor na porta 8080, do nome `aulacast.local`, da captura de tela e do Wi-Fi do Mac. O
+> checklist traz o teste local (`AULACAST_SANDBOX_TESTE=1`) para fazer antes de enviar.
 
 ### A permissão de Gravação de Tela pede autorização a cada build
 
-Se você recompilar e o macOS voltar a pedir a autorização, não é defeito do aplicativo. Sem
-certificado, o `codesign` assina de forma ad-hoc e a identidade do app fica sendo o **hash do
-binário**:
+Sem certificado, o `codesign` assina de forma ad-hoc e a identidade do app vira o **hash do
+binário**. Qualquer mudança no código muda esse hash, o macOS não reconhece mais o app e a
+permissão precisa ser concedida de novo. Não é defeito do aplicativo.
 
-```
-$ codesign -d -r- build/AulaCast.app
-# designated => cdhash H"d8d04e3247cb83e91edfc6848f75f4509b3b05f4"
-```
+**Como resolver de vez, sem conta paga da Apple:** crie um certificado de assinatura de código no
+seu Mac. Em **Acesso às Chaves**: *Assistente de Certificado > Criar um certificado…*, nome
+`AulaCast Local`, identidade **Autoassinado raiz**, tipo **Assinatura de código**. O
+`build-app.sh` detecta e passa a usar esse certificado (outro nome: `AULACAST_CODESIGN_ID`). A
+permissão passa a valer entre builds.
 
-Qualquer mudança no código muda esse hash, o macOS deixa de reconhecer o app e a permissão
-precisa ser concedida de novo.
+Mantenha **uma única cópia** do app (em `/Applications`): cópias com o mesmo identificador, mas
+assinaturas diferentes, entram em conflito na permissão.
 
-> É por isso que `swift run AulaCast` nunca pede nada: ali o binário roda solto, sem bundle
-> próprio, e o macOS atribui a captura ao processo responsável — o Terminal, que já tem a
-> permissão. O aplicativo empacotado tem identidade própria e precisa da sua.
+### O aviso do Gatekeeper (instalação fora da loja)
 
-**Como resolver de vez, sem conta paga da Apple:** crie um certificado de assinatura de código
-no seu próprio Mac.
-
-1. Abra o **Acesso às Chaves** (Keychain Access).
-2. Menu **Acesso às Chaves > Assistente de Certificado > Criar um certificado…**
-3. Nome: `AulaCast Local` · Tipo de identidade: **Autoassinado raiz** · Tipo de certificado:
-   **Assinatura de código**. Confirme.
-4. Rode `./scripts/build-app.sh` de novo — ele detecta o certificado e passa a usá-lo.
-
-A identidade do app deixa de ser o hash e passa a ser o certificado mais o identificador do
-bundle, que não mudam entre builds. Você autoriza a Gravação de Tela **uma vez** e pronto.
-
-Se preferir outro nome para o certificado, exporte `AULACAST_CODESIGN_ID` antes de compilar.
-
-### O aviso do Gatekeeper
-
-O aplicativo é assinado de forma **ad-hoc**, não com Developer ID nem notarizado — as duas
-coisas exigem conta paga da Apple. Na prática, o macOS de quem receber o `.dmg` vai recusar a
-primeira abertura, dizendo que o app "está danificado" ou que veio de um desenvolvedor não
-identificado. Não é defeito do aplicativo: é o Gatekeeper reagindo à marca de quarentena que o
-sistema põe em tudo que chega de fora.
-
-Para liberar, uma vez só:
+O `.dmg` é assinado de forma **ad-hoc**, sem Developer ID nem notarização (as duas exigem conta
+paga). O macOS de quem receber vai recusar a primeira abertura. Para liberar, uma vez:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/AulaCast.app
 ```
 
-Depois disso o app abre normalmente e basta autorizar a Gravação de Tela em Ajustes do Sistema
-> Privacidade e Segurança.
+Depois, basta autorizar a Gravação de Tela em Ajustes do Sistema > Privacidade e Segurança.
+(Clicar com o botão direito > Abrir não resolve em Macs Apple Silicon.)
 
-> Clicar com o botão direito > Abrir, o truque de sempre, **não resolve** aqui: em Macs Apple
-> Silicon o sistema exige assinatura notarizada quando o arquivo está em quarentena, e não
-> apenas a confirmação do usuário. Só a remoção do atributo resolve.
+## Dados e privacidade
+
+Tudo fica no Mac do anfitrião; o app não envia nada para a internet nem para o desenvolvedor.
+
+- **Lista de presença:** ao encerrar, um CSV em `~/Documents/AulaCast/Listas de presença/`
+  (`lista-de-presenca-AAAA-MM-DD-HHmm.csv`; separador `;`, UTF-8 com BOM; colunas `Nome`, `Presença`,
+  `Entrou`, `Saiu`, `Minutos na transmissão`, `Minutos vendo`, `Percentual vendo`). O aviso "Lista dos
+  participantes salva" leva ao arquivo ao ser clicado.
+- **Métricas da sessão:** `~/Documents/AulaCast/Metricas/sessao-*.jsonl`, com nome, IP, navegador e a
+  qualidade da conexão de cada participante (fps, banda, quadros perdidos), mais o estado do Mac.
+  Nunca grava o texto do chat nem títulos de janela. O arquivo se explica sozinho (a primeira linha
+  é a legenda) e pode ser entregue a uma IA para gerar gráficos (ADR-006).
+- Com o App Sandbox, essas pastas ficam no contêiner do app; o menu **Arquivo > Mostrar pasta de
+  dados no Finder** (⇧⌘D) abre a pasta certa.
+- Os nomes dos participantes são visíveis ao anfitrião e, se o chat visível estiver ligado, aos
+  demais. Quem publica o app define a política de privacidade e as respostas de App Privacy.
 
 ## Testes
 
-O projeto tem duas suítes, ambas sem dependências externas.
+Duas suítes, sem dependências externas:
 
 ```bash
-# Swift, modo core (padrão): só lógica pura, sem rede real nem codificador H.264 de hardware
+# Swift, modo core (padrão): só lógica pura, sem rede real nem codificador de hardware (298 testes)
 cd src
 swift run AulaCastTestRunner
-# Swift, tudo: inclui portas reais, WebSocket ponta a ponta e H.264
+# Swift, tudo: inclui portas reais, WebSocket ponta a ponta e H.264 de hardware (demora e custa mais)
 swift run AulaCastTestRunner --tudo
 
-# Cliente web (Node.js)
+# Cliente web (237 testes)
 cd src/web-assets
 node --test "tests/*.test.js"
 ```
@@ -158,29 +176,42 @@ node --test "tests/*.test.js"
 ```
 src/
   sources/aulacast/         # Núcleo (AulaCastCore)
-    core/                   # Protocolos — captura, rede, codificação, observadores
-    models/                 # Aluno conectado, mensagem, fonte de captura
-    managers/               # Estado da turma e do chat
-    services/               # ScreenCaptureKit, servidor HTTP/WebSocket, MJPEG, Bonjour
+    core/                   # Protocolos: captura, rede, codificação, observadores
+    models/                 # Pessoas e presença, mensagens, fontes, lista de presença (CSV)
+    managers/               # Estado dos participantes e do chat
+    services/               # ScreenCaptureKit, servidor HTTP/WebSocket, H.264/fMP4, MJPEG, Bonjour, mDNS
     viewmodels/             # MainViewModel
-    views/                  # Telas SwiftUI
+    views/                  # Telas SwiftUI e tokens Material 3 (views/Material)
   sources/aulacast-app/     # Ponto de entrada do app
-  tests/aulacast-tests/     # Suíte de testes
-  web-assets/               # Cliente web do aluno (HTML/CSS/JS, sem framework) e as fontes
-scripts/                    # build-app.sh, gerar-dmg.sh, gerar-icone.swift
+  tests/aulacast-tests/     # Suíte de testes Swift
+  web-assets/               # Cliente web do participante (HTML/CSS/JS sem framework) e as fontes
+scripts/                    # build-app.sh, gerar-dmg.sh, gerar-appstore.sh, entitlements, PrivacyInfo.xcprivacy, ícone
 docs/                       # Índice (docs/README.md), requisitos, casos de uso, histórias, arquitetura, ADRs e padrões
 ```
 
+A documentação segue o índice em [`docs/README.md`](docs/README.md), com glossário (anfitrião,
+participante, transmissão, lista de presença) e as decisões de arquitetura (ADR-001 a ADR-009).
+
 ## Decisões de projeto
 
-- **MJPEG em vez de H.264** — sem negociação nem dependência de codec no cliente; qualquer navegador exibe com uma tag `<img>`, o que sustenta o requisito de zero instalação. Com turmas grandes no Wi-Fi o custo é uma cópia por aluno (RNF-10, ainda sem metas); H.264/fMP4 está em estudo (`docs/04`, seção 4.1.1).
-- **Sem framework no cliente** — os computadores do laboratório são modestos; JavaScript puro carrega rápido e não exige build.
-- **Servidor HTTP/WebSocket próprio** (`Network.framework`) — mantém o projeto sem dependências externas, alinhado ao uso offline.
-- **JPEG direto do buffer da captura** (`CIContext.jpegRepresentation`) — 6x menos CPU por quadro que o caminho via `NSBitmapImageRep`; o app transmitindo caiu de ~31% para ~16% de um núcleo. Números e fontes em `docs/04-arquitetura-e-design.md`, seção 4.1.
-- **Captura na proporção da fonte** — sem faixas pretas e sem janela encostada no canto.
-- **Último quadro repetido uma vez quando a imagem para** — o Safari só desenha um quadro quando o próximo chega; sem isso a turma via o quadro anterior.
-- **Identificação revalidada no servidor** — a lista de presença não pode confiar apenas na checagem do navegador.
-- **As duas telas em Material 3 Expressive, no desenho do Google Meet** — palco com a imagem, controles numa barra embaixo, um painel lateral por vez. Do lado do professor, os tokens (cores, tipos, formas, movimento) foram escritos em SwiftUI, porque não há biblioteca Material mantida para macOS; do lado do aluno, em CSS, com as mesmas fontes servidas pelo próprio app. Detalhes em `docs/04-arquitetura-e-design.md`, seções 4.2 e 4.3.
+- **H.264/fMP4 como vídeo principal, MJPEG como reserva** (ADR-004, ADR-009). O MJPEG manda um JPEG
+  inteiro por quadro e uma cópia por participante, o que não fecha em turmas grandes no Wi-Fi. O
+  H.264 reduz a banda; o MJPEG fica para o que não suporta H.264, e a página volta ao H.264 sozinha.
+- **Sem framework no cliente.** Os computadores costumam ser modestos; JavaScript puro carrega rápido
+  e não exige build.
+- **Servidor HTTP/WebSocket próprio** (`Network.framework`), sem dependências externas, alinhado ao
+  uso offline.
+- **Nome na rede por mDNS próprio** (`aulacast.local`), com renomeação automática se houver conflito
+  (ADR-002); o IP continua disponível pelo botão "Copiar link".
+- **Captura na proporção da fonte**, sem faixas pretas.
+- **Identificação revalidada no servidor.** A lista de presença não confia só na checagem do navegador.
+- **Métricas e lista de presença permanentes** em todo build; só o console de métricas no navegador é
+  exclusivo da variante de depuração (ADR-006).
+- **Vocabulário neutro** (anfitrião e participante), para não prender o app à sala de aula (ADR-008).
+- **As duas telas em Material 3 Expressive, no desenho do Google Meet:** palco com a imagem,
+  controles numa barra embaixo, um painel lateral por vez. No Mac, os tokens (cores, tipos, formas,
+  movimento) foram escritos em SwiftUI, porque não há biblioteca Material mantida para macOS; no
+  navegador, em CSS, com as mesmas fontes servidas pelo próprio app (`docs/04`, seções 4.2 e 4.3).
 
 ## Sobre o desenvolvimento: pair programming com IA
 
@@ -267,7 +298,3 @@ Componentes de terceiros incluídos, com as licenças junto:
 - **Material Symbols Rounded**, © Google, [Apache License 2.0](src/web-assets/fonts/MaterialSymbols-LICENSE.txt).
 
 As fontes foram reduzidas aos caracteres e ícones usados pelo app e servem às duas telas.
-
-## Métricas e lista de presença
-- A coleta de métricas por aluno e o arquivo da sessão (`~/Documents/AulaCast/Metricas/`) existem em todo build (ADR-006). `AULACAST_DEBUG_METRICS=1 scripts/build-app.sh` agora só liga o console de métricas no navegador do aluno (`METRICS_TABLE`, `DEBUG_INFO`, painel Debug).
-- Ao encerrar a transmissão, a lista de presença é salva em `~/Documents/AulaCast/Listas de presença/lista-de-presenca-AAAA-MM-DD-HHmm.csv` (RF-21).
