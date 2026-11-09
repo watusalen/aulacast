@@ -199,11 +199,11 @@ public final class MainViewModel: ObservableObject {
     private func publicarChamada(_ resultado: ResultadoDaChamada) {
         switch resultado {
         case .vazia: return
-        case .salva(let arquivo, let alunos):
+        case .salva(let arquivo, _):
             chamadaJaSalva = true
-            avisoDaChamada = AvisoDaChamada(texto: alunos == 1 ? "Lista de presença salva (1 participante)" : "Lista de presença salva (\(alunos) participantes)", arquivo: arquivo)
+            avisoDaChamada = AvisoDaChamada(texto: "Lista dos participantes salva", arquivo: arquivo)
         case .falhou:
-            avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a lista de presença. Verifique o espaço em disco.", arquivo: nil)
+            avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a lista dos participantes. Verifique o espaço em disco.", arquivo: nil)
         }
     }
 

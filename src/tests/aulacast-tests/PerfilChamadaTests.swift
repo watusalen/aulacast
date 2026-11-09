@@ -131,7 +131,7 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     assertTest(vm.alunoAberto == nil, "VM: abrirPerfil(clientId:) de conexão que saiu não faz nada (o perfil abre pela linha ativa)")
     let resultadoVM = vm.salvarChamada(em: fim)
     assertTest({ if case .salva = resultadoVM { return true } else { return false } }()
-               && vm.avisoDaChamada?.texto == "Lista de presença salva (1 participante)" && vm.avisoDaChamada?.arquivo != nil, "VM: chamada salva mostra o aviso com o arquivo")
+               && vm.avisoDaChamada?.texto == "Lista dos participantes salva" && vm.avisoDaChamada?.arquivo != nil, "VM: chamada salva mostra o aviso com o arquivo")
     vm.avisoDaChamada = nil
     assertTest(vm.salvarChamada(em: fim) == .vazia && vm.avisoDaChamada == nil, "VM: a chamada é salva uma vez por sessão")
     let vmRuim = MainViewModel(captureService: FakeCaptureService(), encoderService: FakeEncoder(), serverService: FakeServer(),
@@ -141,7 +141,7 @@ func testesPerfilEChamada(_ assertTest: (Bool, String) -> Void) async {
     vmRuim.ledger.connected(clientId: "w", ip: "1.2.3.4")
     vmRuim.ledger.identified(clientId: "w", name: "Dani")
     vmRuim.salvarChamada(em: fim)
-    assertTest(vmRuim.avisoDaChamada?.texto == "Não foi possível salvar a lista de presença. Verifique o espaço em disco." && vmRuim.avisoDaChamada?.arquivo == nil, "VM: falha de disco vira aviso, sem travar")
+    assertTest(vmRuim.avisoDaChamada?.texto == "Não foi possível salvar a lista dos participantes. Verifique o espaço em disco." && vmRuim.avisoDaChamada?.arquivo == nil, "VM: falha de disco vira aviso, sem travar")
 
     // MARK: Métricas permanentes: dois modos (injetável)
     let conexao = NWConnection(host: "127.0.0.1", port: 9, using: .tcp) // nunca iniciada: sem rede

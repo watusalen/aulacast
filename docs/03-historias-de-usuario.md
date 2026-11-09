@@ -273,5 +273,5 @@ Cenário: Encerrar com alunos identificados
   Dado que Ana e Bia se identificaram na aula
   Quando o professor para a transmissão
   Então o arquivo lista-de-presenca-AAAA-MM-DD-HHmm.csv aparece em ~/Documents/AulaCast/Listas de presença
-  E um aviso mostra "Lista de presença salva (2 participantes)" com o botão "Mostrar no Finder".
+  E um aviso (sem botão) mostra "Lista dos participantes salva", e clicar nele mostra o arquivo no Finder.
 ```

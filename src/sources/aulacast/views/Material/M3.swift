@@ -95,6 +95,9 @@ enum M3 {
     static let surfaceContainerHigh = Color.dynamic(light: 0xE9EEF6, dark: 0x282A2C)
     static let surfaceContainerHighest = Color.dynamic(light: 0xDDE3EA, dark: 0x333537)
     static let onSurface = Color.dynamic(light: 0x1F1F1F, dark: 0xE3E3E3)
+    /// Snackbar: escuro no tema claro e claro no escuro.
+    static let inverseSurface = Color.dynamic(light: 0x303030, dark: 0xE3E3E3)
+    static let inverseOnSurface = Color.dynamic(light: 0xF2F2F2, dark: 0x303030)
     static let onSurfaceVariant = Color.dynamic(light: 0x444746, dark: 0xC4C7C5)
     static let outline = Color.dynamic(light: 0x747775, dark: 0x8E918F)
     static let outlineVariant = Color.dynamic(light: 0xC4C7C5, dark: 0x444746)

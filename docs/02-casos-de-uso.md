@@ -181,5 +181,5 @@ Foi retirado e voltou a pedido da turma, como um ícone pequeno ao lado do campo
 - **Fluxo Principal:**
   1. O professor para a transmissão (ou a captura/servidor cai).
   2. O sistema grava o CSV em `~/Documents/AulaCast/Listas de presença/`.
-  3. Um aviso não modal mostra "Lista de presença salva (N participantes)" e "Mostrar no Finder"; some sozinho em ~8 s.
+  3. Um aviso não modal (snackbar, sem botão) mostra "Lista dos participantes salva"; clicar nele mostra o arquivo no Finder, e o mouse em cima o mantém na tela; some sozinho em ~8 s (3 s depois de o mouse sair).
 - **Fluxo Alternativo:** sem aluno identificado, nada é gravado; com erro de disco, o aviso é "Não foi possível salvar a chamada".
