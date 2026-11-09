@@ -14,7 +14,7 @@ public final class BonjourAdvertiserService: ServiceAdvertiserProtocol {
     private weak var servidor: BonjourHostProtocol?
     private let serviceName: String
 
-    public init(servidor: BonjourHostProtocol, serviceName: String = "AulaCast - IFPI") {
+    public init(servidor: BonjourHostProtocol, serviceName: String = "AulaCast") {
         self.servidor = servidor
         self.serviceName = serviceName
     }
