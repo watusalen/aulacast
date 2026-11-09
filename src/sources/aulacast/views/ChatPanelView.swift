@@ -46,7 +46,7 @@ public struct ChatPanelView: View {
                 .padding(.top, 6)
 
             // Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet.
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 M3Icone(nome: "info", tamanho: 18)
                 Text(viewModel.isStudentChatVisibleToClass
                     ? "Suas mensagens vão para todos os participantes. As deles também."

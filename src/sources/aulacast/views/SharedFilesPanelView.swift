@@ -24,7 +24,7 @@ public struct SharedFilesPanelView: View {
             .padding(.horizontal, 16)
 
             if let aviso = viewModel.sharedFilesNotice {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .center, spacing: 8) {
                     M3Icone(nome: "warning", tamanho: 18, preenchido: true)
                     Text(aviso).m3(.bodySmall).fixedSize(horizontal: false, vertical: true)
                 }
