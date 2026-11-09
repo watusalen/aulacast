@@ -157,8 +157,6 @@ private struct StudentDetailCard: View {
             }
         }
         .padding(.top, 4)
-        // Folga para o anel do pulso (4 pt para cada lado da bolinha) não ser cortado pela lista.
-        .padding(.leading, 4)
     }
 
     /// Altura própria do item; o conector é um fundo que desce até o próximo ponto (item + 12 pt
@@ -209,80 +207,73 @@ private struct StudentDetailCard: View {
 
 /// Barra de progresso linear ondulada do Material 3 Expressive: a parte feita é uma onda que
 /// anda devagar; o resto é uma linha reta. Parada com "Reduzir movimento".
-/// Bolinha da conexão: azul com pulso suave enquanto conectada, vazia depois que saiu.
-/// Com "Reduzir movimento" ligado, fica o azul parado.
+/// Bolinha da conexão: azul que "respira" enquanto conectada, vazia depois que saiu. As duas têm
+/// o MESMO tamanho (8 pt): o pulso é só a opacidade indo de cheia a fraca e voltando, sem anel que
+/// cresça (um anel faria a azul parecer maior e seria cortado pela lista). Com "Reduzir movimento"
+/// ligado, fica o azul parado.
 ///
-/// O pulso é do Core Animation, não do SwiftUI: uma animação `repeatForever` do SwiftUI
-/// redesenhava a lista a cada quadro e a rolagem engasgava. No Core Animation ela roda no
-/// processo de desenho do sistema, sem custo para o SwiftUI. O anel cresce até 2x, então a
-/// área do anel é de 16 pt (a bolinha tem 8) e a lista deixa folga para ele não ser cortado.
+/// A animação é do Core Animation, não do SwiftUI: uma `repeatForever` do SwiftUI redesenhava a
+/// lista a cada quadro e a rolagem engasgava. Medido num teste à parte: as duas bolinhas ocupam
+/// 16x16 px (8 pt) e a opacidade da azul varia entre 0,3 e 1 em ciclos de 2,4 s.
 private struct PontoDeConexao: View {
     let ativa: Bool
 
     var body: some View {
-        ZStack {
+        Group {
             if ativa {
-                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    AnelPulsante(cor: NSColor(M3.primary))
-                        .frame(width: 16, height: 16)
-                        .allowsHitTesting(false)
-                }
-                Circle().fill(M3.primary)
+                PontoAzul(cor: NSColor(M3.primary), pulsa: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
             } else {
-                Circle().fill(M3.surface)
-                Circle().strokeBorder(M3.outline, lineWidth: 1.5)
+                ZStack {
+                    Circle().fill(M3.surface)
+                    Circle().strokeBorder(M3.outline, lineWidth: 1.5)
+                }
             }
         }
         .frame(width: 8, height: 8)
     }
 }
 
-/// O anel do pulso: uma camada que cresce de 1x a 2x e some (opacidade de 0,55 a 0), a cada 2 s.
-private struct AnelPulsante: NSViewRepresentable {
+private struct PontoAzul: NSViewRepresentable {
     let cor: NSColor
+    let pulsa: Bool
 
-    func makeNSView(context: Context) -> VistaDoAnel { VistaDoAnel(cor: cor) }
-    func updateNSView(_ vista: VistaDoAnel, context: Context) { vista.cor = cor }
+    func makeNSView(context: Context) -> VistaDoPonto { VistaDoPonto(cor: cor, pulsa: pulsa) }
+    func updateNSView(_ vista: VistaDoPonto, context: Context) { vista.cor = cor }
 }
 
-private final class VistaDoAnel: NSView {
+private final class VistaDoPonto: NSView {
     var cor: NSColor { didSet { pintar() } }
-    private let anel = CALayer()
+    private let pulsa: Bool
+    private let ponto = CALayer()
 
-    init(cor: NSColor) {
+    init(cor: NSColor, pulsa: Bool) {
         self.cor = cor
-        super.init(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+        self.pulsa = pulsa
+        super.init(frame: NSRect(x: 0, y: 0, width: 8, height: 8))
         wantsLayer = true
-        layer?.masksToBounds = false
-        anel.frame = CGRect(x: 4, y: 4, width: 8, height: 8)   // no centro dos 16 pt
-        anel.cornerRadius = 4
-        anel.opacity = 0
-        layer?.addSublayer(anel)
+        ponto.frame = CGRect(x: 0, y: 0, width: 8, height: 8)
+        ponto.cornerRadius = 4
+        layer?.addSublayer(ponto)
         pintar()
     }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     /// O Core Animation descarta animações de uma camada que sai da janela (a lista rola, a vista
     /// é reaproveitada): por isso ela é criada de novo toda vez que a vista entra numa janela.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        anel.removeAnimation(forKey: "pulso")
-        guard window != nil else { return }
-
-        let escala = CABasicAnimation(keyPath: "transform.scale")
-        escala.fromValue = 1
-        escala.toValue = 2
-        let opacidade = CABasicAnimation(keyPath: "opacity")
-        opacidade.fromValue = 0.55
-        opacidade.toValue = 0
-        let pulso = CAAnimationGroup()
-        pulso.animations = [escala, opacidade]
-        pulso.duration = 2
-        pulso.repeatCount = .infinity
-        pulso.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        anel.add(pulso, forKey: "pulso")
+        ponto.removeAnimation(forKey: "respirar")
+        guard window != nil, pulsa else { return }
+        let respirar = CABasicAnimation(keyPath: "opacity")
+        respirar.fromValue = 1
+        respirar.toValue = 0.3
+        respirar.duration = 1.2
+        respirar.autoreverses = true
+        respirar.repeatCount = .infinity
+        respirar.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        ponto.add(respirar, forKey: "respirar")
     }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     /// A cor muda com o tema claro/escuro: resolvida de novo quando a aparência muda.
     override func viewDidChangeEffectiveAppearance() {
@@ -292,7 +283,7 @@ private final class VistaDoAnel: NSView {
 
     private func pintar() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            anel.backgroundColor = cor.cgColor
+            ponto.backgroundColor = cor.cgColor
         }
     }
 }
