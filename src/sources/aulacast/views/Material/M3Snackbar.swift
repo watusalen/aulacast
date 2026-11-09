@@ -16,6 +16,11 @@ struct M3Snackbar: View {
 
     @State private var mouseSobre = false
 
+    /// Curvas "emphasized" do M3, mais longas que o padrão (era rápido demais): 500 ms para
+    /// entrar (decelerate) e 300 ms para sair (accelerate).
+    private static let entrada = Animation.timingCurve(0.05, 0.7, 0.1, 1, duration: 0.5)
+    private static let saida = Animation.timingCurve(0.3, 0, 0.8, 0.15, duration: 0.3)
+
     /// Muda quando o aviso troca ou o mouse entra/sai: reinicia a contagem.
     private struct Contagem: Equatable {
         let aviso: MainViewModel.AvisoDaChamada?
@@ -32,7 +37,11 @@ struct M3Snackbar: View {
                         mouseSobre = false
                     }
                     .padding(.bottom, 96)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    // Entra devagar e de pouco longe; sai mais rápido, só apagando.
+                    .transition(.asymmetric(
+                        insertion: AnyTransition.offset(y: 16).combined(with: .opacity).animation(Self.entrada),
+                        removal: AnyTransition.opacity.animation(Self.saida)
+                    ))
                     .task(id: Contagem(aviso: aviso, sobre: mouseSobre)) {
                         // O mouse em cima segura o aviso; ao sair, ele some em instantes.
                         if mouseSobre { return }
@@ -43,7 +52,7 @@ struct M3Snackbar: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .animation(M3.Mola.padrao, value: viewModel.avisoDaChamada)
+        .animation(Self.entrada, value: viewModel.avisoDaChamada)
         .allowsHitTesting(viewModel.avisoDaChamada != nil)
         .onChange(of: viewModel.avisoDaChamada) { _ in
             mouseSobre = false
@@ -57,12 +66,12 @@ struct M3Snackbar: View {
     @ViewBuilder
     private func balao(_ aviso: MainViewModel.AvisoDaChamada) -> some View {
         let conteudo = Text(aviso.texto)
-            .m3(.bodyMedium)
+            .m3(.bodySmall)
             .multilineTextAlignment(.center)
             .foregroundColor(M3.inverseOnSurface)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(minWidth: 344, maxWidth: 672, minHeight: 48)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 420, minHeight: 40)
             .fixedSize(horizontal: false, vertical: true)
             .background(
                 RoundedRectangle(cornerRadius: M3.Canto.extraPequeno, style: .continuous)
