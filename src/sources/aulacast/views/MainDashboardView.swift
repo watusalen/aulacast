@@ -344,7 +344,7 @@ public struct MainDashboardView: View {
                 M3Botao(titulo: "Iniciar transmissão", icone: "play_arrow", variante: .preenchido, altura: 48) {
                     viewModel.startStream()
                 }
-                .disabled(viewModel.isStarting)
+                .disabled(viewModel.isStarting || viewModel.isStopping)
             }
         }
         .animation(M3.Mola.padrao, value: viewModel.isStreaming)

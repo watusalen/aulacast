@@ -10,7 +10,7 @@ import AppKit
 struct M3Snackbar: View {
     @ObservedObject var viewModel: MainViewModel
     /// Segundos até sumir sozinho, contados do aparecimento.
-    var duracao: TimeInterval = 8
+    var duracao: TimeInterval = 3
     /// Segundos até sumir depois que o mouse sai de cima.
     var duracaoAposSair: TimeInterval = 3
 

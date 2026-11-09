@@ -70,6 +70,9 @@ public final class MainViewModel: ObservableObject {
     /// Um início em andamento (esperando a permissão, o sistema e o ScreenCaptureKit).
     /// O botão fica desabilitado nesse meio-tempo: um duplo clique criava dois streams.
     @Published public private(set) var isStarting: Bool = false
+    /// A tela já mostra tudo parado, mas a limpeza (captura, servidor, nome na rede) ainda corre:
+    /// "Iniciar" fica bloqueado até ela acabar.
+    @Published public private(set) var isStopping: Bool = false
 
     /// A pausa atual foi posta pelo app porque a janela transmitida sumiu, e não pelo
     /// professor. Só essa pausa é desfeita sozinha quando a janela volta.
@@ -416,7 +419,7 @@ public final class MainViewModel: ObservableObject {
     }
 
     public func startStream() {
-        guard !isStarting, !isStreaming else { return }
+        guard !isStarting, !isStreaming, !isStopping else { return }
         isStarting = true
         Task {
             defer { self.isStarting = false }
@@ -530,29 +533,51 @@ public final class MainViewModel: ObservableObject {
         // Só a fotografia dos tempos é tirada aqui (rápido); o arquivo é gravado DEPOIS de a
         // transmissão parar, fora da thread principal: encerrar não espera o disco, e o aviso
         // de "lista salva" aparece depois que a tela já mostra tudo encerrado.
+        guard !isStopping else { return }
         let fim = Date()
         let resumos = fotografiaDaChamada(em: fim)
+
+        // O que a tela mostra muda NA HORA do clique: nenhuma das esperas abaixo (parar a captura
+        // do sistema, o servidor, o nome na rede) segura o painel em "ao vivo".
+        isStopping = true
+        ledger.setAccruing(false)
+        isStreaming = false
+        isPaused = false
+        pausadoPorqueAJanelaSumiu = false
+        latestPreviewImage = nil
+
         Task {
+            // Tempo de cada etapa no console (`/Applications/AulaCast.app/Contents/MacOS/AulaCast`
+            // no Terminal): mostra qual espera é a lenta.
+            let relogio = ContinuousClock()
+            var marca = relogio.now
+            func etapa(_ nome: String) {
+                let ms = Int((relogio.now - marca) / .milliseconds(1))
+                marca = relogio.now
+                print("[Parada] \(nome): \(ms) ms")
+            }
+
             await captureService.stopCapture()
+            etapa("captura")
             // Antes de parar o servidor: um quadro-chave em voo entre os dois resets gravaria um
             // segmento de inicialização velho no servidor.
             self.fmp4Packager.reset()
             serverService.stop()
+            etapa("servidor")
             advertiserService.stopAdvertising()
+            etapa("bonjour")
             mdnsService.stop()
+            etapa("mdns")
             self.mdnsHostname = nil
             self.ipDoNome = nil
             // Sessão seguinte começa do zero (o empacotador já foi zerado acima).
             self.h264EncoderService.forceNextKeyFrame()
             self.systemActivity.endTransmission()
-            self.ledger.setAccruing(false)
-            self.isStreaming = false
             self.isSessionOpen = false
-            self.isPaused = false
-            self.pausadoPorqueAJanelaSumiu = false
             self.streamState.reset()
             self.streamStartedAt = nil
-            self.latestPreviewImage = nil
+            self.isStopping = false
+            etapa("estado")
 
             await self.gravarChamada(resumos, fim: fim)
         }
