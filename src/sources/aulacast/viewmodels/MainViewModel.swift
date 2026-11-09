@@ -880,6 +880,10 @@ extension MainViewModel: StudentPresenceObserverProtocol {
             self.ledger.visibility(clientId: clientId, visible: isWatching)
         }
     }
+
+    public nonisolated func didReceiveEnvironment(clientId: String, userAgent: String) {
+        Task { @MainActor in self.ledger.environment(clientId: clientId, userAgent: userAgent) }
+    }
 }
 
 // MARK: - ClientObserverProtocol

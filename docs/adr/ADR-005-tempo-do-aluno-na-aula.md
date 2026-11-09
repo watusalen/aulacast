@@ -11,6 +11,7 @@ O professor quer ver quanto tempo cada aluno ficou na aula e com ela à vista. U
 - **Relógio:** conta só com a transmissão no ar e sem pausa (inclusive a pausa automática quando a janela some). Começa em Iniciar, congela na pausa, para ao parar ou quando a captura cai. Iniciar de novo zera os números e mantém quem está conectado.
 - **"À vista"** = aba visível e em foco (`visibilitychange`/foco do navegador). **Não é rastreio do olhar**: o aluno pode estar com a aba aberta e olhando para outro lugar.
 - **Nomes usados:** cada pessoa tem um id estável (`pessoaId`) e guarda até 20 nomes (nome, primeira e última vez, `viaIP` quando o nome foi ligado a uma pessoa reconhecida pelo IP com nome diferente). A busca por nome olha todos os nomes que qualquer pessoa já usou na aula (normalizado; homônimo como acima). O perfil abre por `pessoaId` e continua consultável depois que a pessoa sai; a chamada em CSV (RF-21) usa uma linha por pessoa.
+- **Lista por conexão:** o perfil lista uma linha por conexão (até 20 por pessoa; sai primeiro a mais antiga já encerrada): nome usado, hora de entrada e, logo depois, navegador e aparelho. Bolinha azul pulsante = conectada agora (duas abas abertas = duas linhas azuis); vazia = já saiu. O navegador é um palpite tirado do User-Agent do `ENV` (`NavegadorDetectado`; iPad em modo desktop aparece como Mac); desconhecido = sem texto. Não altera os tempos nem o CSV.
 - Implementação: `AttendanceLedger`, sem histórico por evento (memória O(1) por pessoa).
 
 ## Consequências

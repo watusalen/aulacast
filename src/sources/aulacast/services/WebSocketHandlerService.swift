@@ -702,6 +702,7 @@ public final class WebSocketHandlerService {
             lock.lock()
             if let ua = amb.userAgent { infoDaConexao[clientId]?.userAgent = ua }
             lock.unlock()
+            if let ua = amb.userAgent { presenceObserver?.didReceiveEnvironment(clientId: clientId, userAgent: ua) }
             emitirEntrada(clientId: clientId)
 
         case "EVENT":

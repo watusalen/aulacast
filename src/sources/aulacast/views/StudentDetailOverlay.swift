@@ -92,14 +92,16 @@ private struct StudentDetailCard: View {
                 linha("Saídas (aba ou janela)", "\(r.saidas)")
                 linha("Maior tempo seguido", formatarDuracao(r.maiorTrecho))
                 linha("Desconexões e voltas", "\(r.desconexoes)")
-                if r.nomes.count > 1 { nomesUsados(r.nomes) }
+                // Conectadas primeiro (pela hora de entrada), depois as que já saíram, da mais recente
+                // para a mais antiga. `sorted` é estável: no máximo 20 itens por pessoa.
+                if r.conexoes.count > 1 { nomesUsados(Self.ativasPrimeiro(r.conexoes)) }
             }
         }
         .padding(24)
     }
 
     /// Última linha: "Nomes usados (N)" expande uma linha do tempo, do primeiro nome ao atual.
-    private func nomesUsados(_ nomes: [NomeUsado]) -> some View {
+    private func nomesUsados(_ nomes: [ConexaoDaPessoa]) -> some View {
         VStack(spacing: 0) {
             M3Divisor()
             Button { withAnimation(M3.Mola.padrao) { nomesAbertos.toggle() } } label: {
@@ -137,11 +139,18 @@ private struct StudentDetailCard: View {
         .animation(M3.Mola.padrao, value: nomesAbertos)
     }
 
+    /// Conectadas primeiro, pela hora de entrada; depois as que saíram, a mais recente em cima.
+    static func ativasPrimeiro(_ lista: [ConexaoDaPessoa]) -> [ConexaoDaPessoa] {
+        let ativas = lista.filter { $0.ativa }.sorted { $0.entrouAs < $1.entrouAs }
+        let saidas = lista.filter { !$0.ativa }.sorted { $0.entrouAs > $1.entrouAs }
+        return ativas + saidas
+    }
+
     /// Até quantos nomes cabem sem rolar, e a altura da área quando passa disso.
     private static let limiteSemRolagem = 4
     private static let alturaComRolagem: CGFloat = 4 * 48
 
-    private func listaDeNomes(_ nomes: [NomeUsado]) -> some View {
+    private func listaDeNomes(_ nomes: [ConexaoDaPessoa]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(nomes.enumerated()), id: \.offset) { i, n in
                 itemDaLinhaDoTempo(n, ultimo: i == nomes.count - 1)
@@ -152,13 +161,13 @@ private struct StudentDetailCard: View {
 
     /// Altura própria do item; o conector é um fundo que desce até o próximo ponto (item + 12 pt
     /// de vão), então não há espaço sobrando nem depois do último.
-    private func itemDaLinhaDoTempo(_ n: NomeUsado, ultimo: Bool) -> some View {
+    private func itemDaLinhaDoTempo(_ n: ConexaoDaPessoa, ultimo: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Circle().fill(n.atual ? M3.primary : M3.outline).frame(width: 10, height: 10).padding(.top, 4)
+            PontoDeConexao(ativa: n.ativa).padding(.top, 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
-                // Só quando entrou com esse nome: quanto tempo ficou, o professor calcula.
-                Text("entrou às \(Self.hora.string(from: n.primeiraVez))")
+                // Hora de entrada e, se o ENV já chegou, o navegador e o aparelho (um palpite).
+                Text(["entrou às \(Self.hora.string(from: n.entrouAs))", n.descricao].compactMap { $0 }.joined(separator: " · "))
                     .m3(.bodySmall).foregroundColor(M3.onSurfaceVariant).monospacedDigit()
             }
             Spacer(minLength: 0)
@@ -198,6 +207,31 @@ private struct StudentDetailCard: View {
 
 /// Barra de progresso linear ondulada do Material 3 Expressive: a parte feita é uma onda que
 /// anda devagar; o resto é uma linha reta. Parada com "Reduzir movimento".
+/// Bolinha da conexão: azul com pulso suave enquanto conectada, vazia depois que saiu.
+/// Com "Reduzir movimento" ligado, fica o azul parado.
+private struct PontoDeConexao: View {
+    let ativa: Bool
+    @State private var pulsando = false
+
+    var body: some View {
+        ZStack {
+            if ativa {
+                if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                    Circle().fill(M3.primary)
+                        .scaleEffect(pulsando ? 2.4 : 1).opacity(pulsando ? 0 : 0.55)
+                        .animation(.easeOut(duration: 2).repeatForever(autoreverses: false), value: pulsando)
+                }
+                Circle().fill(M3.primary)
+            } else {
+                Circle().fill(M3.surface)
+                Circle().strokeBorder(M3.outline, lineWidth: 2)
+            }
+        }
+        .frame(width: 10, height: 10)
+        .onAppear { pulsando = true }
+    }
+}
+
 struct WavyProgress: View {
     let fracao: Double
     @Environment(\.accessibilityReduceMotion) private var reduzirMovimento

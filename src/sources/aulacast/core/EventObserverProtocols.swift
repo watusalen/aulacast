@@ -25,6 +25,12 @@ public protocol StudentPresenceObserverProtocol: AnyObject {
     func didIdentifyStudent(clientId: String, name: String)
     /// A aba do aluno passou a estar (ou deixou de estar) visível na tela dele.
     func didChangeWatching(clientId: String, isWatching: Bool)
+    /// O navegador contou de si (mensagem `ENV`): o User-Agent.
+    func didReceiveEnvironment(clientId: String, userAgent: String)
+}
+
+public extension StudentPresenceObserverProtocol {
+    func didReceiveEnvironment(clientId: String, userAgent: String) {}
 }
 
 /// Interface segregada para avisar que a captura parou sem ninguém ter pedido —
