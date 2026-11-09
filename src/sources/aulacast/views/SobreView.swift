@@ -41,17 +41,15 @@ struct SobreView: View {
 
             Text(versao)
                 .m3(.labelMedium)
-                .foregroundColor(M3.onPrimaryContainer)
+                .foregroundColor(M3.onSurfaceVariant)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .background(Capsule(style: .continuous).fill(M3.surface.opacity(0.75)))
+                .background(Capsule(style: .continuous).fill(M3.surfaceContainer))
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 44)
         .padding(.bottom, 28)
-        .background(
-            LinearGradient(colors: [M3.primaryContainer, M3.surface], startPoint: .top, endPoint: .bottom)
-        )
+        .background(M3.surface)
     }
 
     // MARK: - Corpo
@@ -62,7 +60,7 @@ struct SobreView: View {
                 Text("Transmissão de tela em rede local")
                     .m3(.titleMedium)
                     .foregroundColor(M3.onSurface)
-                Text("O anfitrião transmite a própria tela, e os participantes assistem pelo navegador, tudo dentro da mesma rede.")
+                Text("O anfitrião transmite a própria tela e os participantes assistem pelo navegador, tudo dentro da mesma rede.")
                     .m3(.bodyMedium)
                     .foregroundColor(M3.onSurfaceVariant)
                     .multilineTextAlignment(.center)
@@ -70,15 +68,14 @@ struct SobreView: View {
             }
 
             VStack(spacing: 10) {
-                destaque(icone: "wifi_off", titulo: "Funciona sem internet", detalhe: "Tudo trafega pela rede local")
-                destaque(icone: "web_asset", titulo: "Nada para instalar", detalhe: "Os participantes assistem direto no navegador")
-                destaque(icone: "group", titulo: "Presença, chat e arquivos", detalhe: "Lista de participantes, mão levantada e compartilhamento")
+                destaque(icone: "wifi_off", titulo: "Funciona sem internet", detalhe: "Tudo na rede local")
+                destaque(icone: "web_asset", titulo: "Nada para instalar", detalhe: "Assista direto no navegador")
+                destaque(icone: "group", titulo: "Chat e arquivos", detalhe: "Mão levantada e compartilhamento")
             }
 
             Rectangle().fill(M3.outlineVariant).frame(height: 1)
 
             VStack(spacing: 4) {
-                Text("Projeto acadêmico do IFPI — Campus Piripiri")
                 Text("Fontes: Google Sans Flex (SIL OFL 1.1) e Material Symbols Rounded (Apache 2.0)")
                 if let copyright { Text(copyright) }
             }
