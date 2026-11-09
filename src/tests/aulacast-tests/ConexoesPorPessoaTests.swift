@@ -63,4 +63,45 @@ func testesConexoesPorPessoa(_ assertTest: (Bool, String) -> Void) async {
         assertTest(r?.conexoes.count == AttendanceLedger.maxNomes && r?.conexoes.contains { $0.id == "c5" } == false,
                    "Conexões: teto de 20, sai primeiro a mais antiga já encerrada")
     }
+
+    // Reconexões do mesmo navegador não criam linhas novas (dois navegadores que reconectam
+    // várias vezes continuam sendo duas linhas).
+    do {
+        let uaChrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        let l = AttendanceLedger(clock: { t0 })
+        l.setAccruing(true, at: t0)
+        func entrar(_ id: String, _ ua: String, _ s: TimeInterval) {
+            l.connected(clientId: id, ip: "10.0.0.5", at: depois(s))
+            l.identified(clientId: id, name: "Ana", at: depois(s))
+            l.environment(clientId: id, userAgent: ua)
+        }
+        entrar("s1", ua, 0)           // Safari
+        entrar("c1", uaChrome, 5)     // Chrome ao mesmo tempo
+        for k in 0..<3 {              // as duas abas perdem a conexão e voltam, três vezes
+            let base = TimeInterval(60 + k * 60)
+            l.disconnected(clientId: k == 0 ? "s1" : "s\(k + 1)", at: depois(base))
+            l.disconnected(clientId: k == 0 ? "c1" : "c\(k + 1)", at: depois(base))
+            entrar("s\(k + 2)", ua, base + 2)
+            entrar("c\(k + 2)", uaChrome, base + 3)
+        }
+        let id = l.pessoaId(clientId: "s4")!
+        let r = l.resumo(pessoaId: id, agora: depois(300))
+        assertTest(r?.conexoes.count == 2, "Reconexões: 2 navegadores que reconectam 3 vezes seguem sendo 2 linhas (\(r?.conexoes.count ?? -1))")
+        assertTest(r?.conexoes.allSatisfy { $0.ativa } == true, "Reconexões: as duas linhas voltam a ficar ativas")
+        assertTest(r?.conexoes.map { $0.entrouAs }.sorted() == [depois(0), depois(5)], "Reconexões: cada linha conserva a hora da primeira entrada")
+        assertTest(Set(r?.conexoes.compactMap { $0.descricao } ?? []) == ["Safari no Mac", "Chrome no Mac"], "Reconexões: Safari e Chrome continuam separados")
+        assertTest(r?.desconexoes == 3, "Reconexões: o contador de desconexões e voltas segue contando (\(r?.desconexoes ?? -1))")
+    }
+    // Duas abas abertas ao mesmo tempo no mesmo navegador NÃO se fundem (só registros encerrados são reaproveitados).
+    do {
+        let l = AttendanceLedger(clock: { t0 })
+        l.setAccruing(true, at: t0)
+        for (k, id) in ["x1", "x2"].enumerated() {
+            l.connected(clientId: id, ip: "10.0.0.6", at: depois(TimeInterval(k)))
+            l.identified(clientId: id, name: "Beto", at: depois(TimeInterval(k)))
+            l.environment(clientId: id, userAgent: ua)
+        }
+        let r = l.resumo(pessoaId: l.pessoaId(clientId: "x1")!, agora: depois(10))
+        assertTest(r?.conexoes.count == 2 && r?.conexoes.allSatisfy { $0.ativa } == true, "Reconexões: duas abas ao mesmo tempo seguem sendo duas linhas ativas")
+    }
 }

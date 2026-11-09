@@ -157,6 +157,8 @@ private struct StudentDetailCard: View {
             }
         }
         .padding(.top, 4)
+        // Folga para o anel do pulso (5 pt para cada lado da bolinha) não ser cortado pela lista.
+        .padding(.leading, 5)
     }
 
     /// Altura própria do item; o conector é um fundo que desce até o próximo ponto (item + 12 pt
@@ -209,17 +211,21 @@ private struct StudentDetailCard: View {
 /// anda devagar; o resto é uma linha reta. Parada com "Reduzir movimento".
 /// Bolinha da conexão: azul com pulso suave enquanto conectada, vazia depois que saiu.
 /// Com "Reduzir movimento" ligado, fica o azul parado.
+///
+/// O pulso é do Core Animation, não do SwiftUI: uma animação `repeatForever` do SwiftUI
+/// redesenhava a lista a cada quadro e a rolagem engasgava. No Core Animation ela roda no
+/// processo de desenho do sistema, sem custo para o SwiftUI. O anel cresce até 2x, então a
+/// área do anel é de 20 pt (a bolinha tem 10) e a lista deixa folga para ele não ser cortado.
 private struct PontoDeConexao: View {
     let ativa: Bool
-    @State private var pulsando = false
 
     var body: some View {
         ZStack {
             if ativa {
                 if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                    Circle().fill(M3.primary)
-                        .scaleEffect(pulsando ? 2.4 : 1).opacity(pulsando ? 0 : 0.55)
-                        .animation(.easeOut(duration: 2).repeatForever(autoreverses: false), value: pulsando)
+                    AnelPulsante(cor: NSColor(M3.primary))
+                        .frame(width: 20, height: 20)
+                        .allowsHitTesting(false)
                 }
                 Circle().fill(M3.primary)
             } else {
@@ -228,7 +234,58 @@ private struct PontoDeConexao: View {
             }
         }
         .frame(width: 10, height: 10)
-        .onAppear { pulsando = true }
+    }
+}
+
+/// O anel do pulso: uma camada que cresce de 1x a 2x e some (opacidade de 0,55 a 0), a cada 2 s.
+private struct AnelPulsante: NSViewRepresentable {
+    let cor: NSColor
+
+    func makeNSView(context: Context) -> VistaDoAnel { VistaDoAnel(cor: cor) }
+    func updateNSView(_ vista: VistaDoAnel, context: Context) { vista.cor = cor }
+}
+
+private final class VistaDoAnel: NSView {
+    var cor: NSColor { didSet { pintar() } }
+    private let anel = CALayer()
+
+    init(cor: NSColor) {
+        self.cor = cor
+        super.init(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        wantsLayer = true
+        layer?.masksToBounds = false
+        anel.frame = CGRect(x: 5, y: 5, width: 10, height: 10)   // no centro dos 20 pt
+        anel.cornerRadius = 5
+        anel.opacity = 0
+        layer?.addSublayer(anel)
+        pintar()
+
+        let escala = CABasicAnimation(keyPath: "transform.scale")
+        escala.fromValue = 1
+        escala.toValue = 2
+        let opacidade = CABasicAnimation(keyPath: "opacity")
+        opacidade.fromValue = 0.55
+        opacidade.toValue = 0
+        let pulso = CAAnimationGroup()
+        pulso.animations = [escala, opacidade]
+        pulso.duration = 2
+        pulso.repeatCount = .infinity
+        pulso.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        anel.add(pulso, forKey: "pulso")
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// A cor muda com o tema claro/escuro: resolvida de novo quando a aparência muda.
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        pintar()
+    }
+
+    private func pintar() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            anel.backgroundColor = cor.cgColor
+        }
     }
 }
 
@@ -240,7 +297,9 @@ struct WavyProgress: View {
         if reduzirMovimento {
             barra(fase: 0)
         } else {
-            TimelineView(.animation) { contexto in
+            // 30 quadros por segundo bastam para uma onda lenta; a cada quadro da tela (60 a 120)
+            // o pop-up inteiro competia com a rolagem da lista.
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { contexto in
                 barra(fase: contexto.date.timeIntervalSinceReferenceDate * 2)
             }
         }

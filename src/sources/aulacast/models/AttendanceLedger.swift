@@ -137,6 +137,26 @@ public final class AttendanceLedger {
                                            saiuAs: saiuAs ?? r.saiuAs, descricao: descricao ?? r.descricao)
         }
 
+        /// Reconexão do MESMO navegador (mesmo nome e mesma descrição, já encerrado): em vez de
+        /// uma linha nova, o registro antigo volta a ficar ativo com o id da conexão nova, e
+        /// conserva a hora da primeira entrada. Abas em segundo plano perdem a conexão e voltam
+        /// sozinhas, e sem isto dois navegadores viravam cinco linhas. Dois navegadores
+        /// abertos ao mesmo tempo continuam sendo duas linhas (só registros ENCERRADOS são
+        /// reaproveitados). O(n), com n no máximo `maxNomes`.
+        func reaproveitarRegistroEncerrado(para id: String) {
+            guard let i = registros.firstIndex(where: { $0.id == id }),
+                  let descricao = registros[i].descricao else { return }
+            let novo = registros[i]
+            let chave = AttendanceLedger.normalizar(novo.nome)
+            let candidatos = registros.enumerated().filter { _, r in
+                !r.ativa && r.descricao == descricao && AttendanceLedger.normalizar(r.nome) == chave
+            }
+            guard let (j, antigo) = candidatos.max(by: { ($0.element.saiuAs ?? .distantPast) < ($1.element.saiuAs ?? .distantPast) })
+                    .map({ ($0.offset, $0.element) }) else { return }
+            registros[j] = ConexaoDaPessoa(id: id, nome: novo.nome, entrouAs: antigo.entrouAs, saiuAs: nil, descricao: descricao)
+            registros.remove(at: i)
+        }
+
         /// Chamado depois de `visiveis` mudar: sem aba visível o trecho contínuo termina.
         func perdeuAVista() {
             saidas += 1
@@ -282,6 +302,7 @@ public final class AttendanceLedger {
         guard let conexao = conexoes[clientId],
               let texto = NavegadorDetectado.descrever(userAgent: userAgent) else { return }
         conexao.pessoa.alterarConexao(clientId, descricao: texto)
+        conexao.pessoa.reaproveitarRegistroEncerrado(para: clientId)
     }
 
     public func pessoaId(clientId: String) -> String? {
