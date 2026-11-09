@@ -191,15 +191,20 @@ public final class MainViewModel: ObservableObject {
     public func salvarChamada(em fim: Date = Date()) -> ResultadoDaChamada {
         guard !chamadaJaSalva else { return .vazia }
         let resultado = ChamadaWriter.salvar(resumos: ledger.todos(agora: fim), fimDaSessao: fim, pasta: pastaDasChamadas)
+        publicarChamada(resultado)
+        return resultado
+    }
+
+    /// Marca a lista como salva e mostra o aviso (snackbar) correspondente ao resultado.
+    private func publicarChamada(_ resultado: ResultadoDaChamada) {
         switch resultado {
-        case .vazia: return resultado
+        case .vazia: return
         case .salva(let arquivo, let alunos):
             chamadaJaSalva = true
             avisoDaChamada = AvisoDaChamada(texto: alunos == 1 ? "Lista de presença salva (1 participante)" : "Lista de presença salva (\(alunos) participantes)", arquivo: arquivo)
         case .falhou:
             avisoDaChamada = AvisoDaChamada(texto: "Não foi possível salvar a lista de presença. Verifique o espaço em disco.", arquivo: nil)
         }
-        return resultado
     }
 
     private var cancellables = Set<AnyCancellable>()
@@ -506,7 +511,12 @@ public final class MainViewModel: ObservableObject {
     }
 
     public func stopStream() {
-        if isSessionOpen || isStreaming { salvarChamada() }
+        // Só a fotografia dos tempos é tirada aqui (rápido); o arquivo é gravado DEPOIS de a
+        // transmissão parar, fora da thread principal: encerrar não espera o disco, e o aviso
+        // de "lista salva" aparece depois que a tela já mostra tudo encerrado.
+        let fim = Date()
+        let resumos = (isSessionOpen || isStreaming) && !chamadaJaSalva ? ledger.todos(agora: fim) : nil
+        let pasta = pastaDasChamadas
         Task {
             await captureService.stopCapture()
             // Antes de parar o servidor: um quadro-chave em voo entre os dois resets gravaria um
@@ -528,6 +538,12 @@ public final class MainViewModel: ObservableObject {
             self.streamState.reset()
             self.streamStartedAt = nil
             self.latestPreviewImage = nil
+
+            guard let resumos else { return }
+            let resultado = await Task.detached(priority: .utility) {
+                ChamadaWriter.salvar(resumos: resumos, fimDaSessao: fim, pasta: pasta)
+            }.value
+            self.publicarChamada(resultado)
         }
     }
 
