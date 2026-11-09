@@ -1323,10 +1323,6 @@ input {
   gap: 4px;
 }
 
-.chat-arquivo .file-link {
-  background: var(--surface-container);
-}
-
 /* Campo de mensagem em pílula, com a mão ao lado. */
 .chat-form {
   flex: none;
@@ -1432,10 +1428,14 @@ input {
   padding: 4px 8px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Cada arquivo é um cartão, como na conversa, com espaço entre eles. */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* Item de lista do Material: ícone num quadrado tonal, nome e tamanho. O item inteiro
-   é o link: um único jeito de baixar. */
+/* Cartão do arquivo, o mesmo na aba Arquivos e na conversa: ícone num quadrado tonal, nome
+   e tamanho, sobre `surface-container`. O cartão inteiro é o link: um único jeito de baixar. */
 .file-link {
   position: relative;
   display: flex;
@@ -1444,6 +1444,7 @@ input {
   min-height: 64px;
   padding: 8px 12px;
   border-radius: var(--canto-g);
+  background: var(--surface-container);
   color: var(--on-surface);
   text-decoration: none;
 }
