@@ -567,7 +567,7 @@ input {
 
 .entry-error {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   padding: 6px 16px 0;
   font-size: 12px;
@@ -1183,7 +1183,7 @@ input {
 /* Quem vê o quê, dito uma vez, como o aviso cinza no topo do chat do Meet. */
 .sys-msg {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   padding: 12px;
   margin: 0 -8px;
