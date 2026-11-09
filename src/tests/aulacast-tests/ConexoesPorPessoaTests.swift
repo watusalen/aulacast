@@ -104,4 +104,27 @@ func testesConexoesPorPessoa(_ assertTest: (Bool, String) -> Void) async {
         let r = l.resumo(pessoaId: l.pessoaId(clientId: "x1")!, agora: depois(10))
         assertTest(r?.conexoes.count == 2 && r?.conexoes.allSatisfy { $0.ativa } == true, "Reconexões: duas abas ao mesmo tempo seguem sendo duas linhas ativas")
     }
+
+    // Conectada e olhando x conectada em outra aba: o registro da conexão acompanha a visibilidade.
+    do {
+        let l = AttendanceLedger(clock: { t0 })
+        l.setAccruing(true, at: t0)
+        l.connected(clientId: "v1", ip: "10.0.0.7", visible: true, at: t0)
+        l.identified(clientId: "v1", name: "Carla", at: t0)
+        l.connected(clientId: "v2", ip: "10.0.0.7", visible: false, at: depois(5))
+        l.identified(clientId: "v2", name: "Carla", at: depois(5))
+        let id = l.pessoaId(clientId: "v1")!
+        func registro(_ cid: String) -> ConexaoDaPessoa? { l.resumo(pessoaId: id, agora: depois(100))?.conexoes.first { $0.id == cid } }
+        assertTest(registro("v1")?.visivel == true && registro("v2")?.visivel == false,
+                   "Visibilidade: cada conexão nasce com o estado da sua aba")
+        l.visibility(clientId: "v1", visible: false, at: depois(20))
+        assertTest(registro("v1")?.visivel == false && registro("v1")?.ativa == true,
+                   "Visibilidade: sair da aba deixa a conexão ativa, só não mais à vista")
+        l.visibility(clientId: "v2", visible: true, at: depois(30))
+        assertTest(registro("v2")?.visivel == true && registro("v1")?.visivel == false,
+                   "Visibilidade: voltar à aba volta a ficar à vista, sem mexer na outra conexão")
+        // Antes de o ENV chegar, a visibilidade já vale; o tempo "vendo" da pessoa não muda por causa disto.
+        let r = l.resumo(pessoaId: id, agora: depois(100))
+        assertTest(r?.naAula == 100, "Visibilidade: o tempo na aula segue contando (\(r?.naAula ?? -1))")
+    }
 }

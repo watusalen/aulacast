@@ -163,7 +163,7 @@ private struct StudentDetailCard: View {
     /// de vão), então não há espaço sobrando nem depois do último.
     private func itemDaLinhaDoTempo(_ n: ConexaoDaPessoa, ultimo: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            PontoDeConexao(ativa: n.ativa).padding(.top, 5)
+            PontoDeConexao(ativa: n.ativa, olhando: n.visivel).padding(.top, 5)
             VStack(alignment: .leading, spacing: 2) {
                 Text(n.nome).m3(.titleSmall).foregroundColor(M3.onSurface).lineLimit(1)
                 // Hora de entrada e, se o ENV já chegou, o navegador e o aparelho (um palpite).
@@ -207,8 +207,8 @@ private struct StudentDetailCard: View {
 
 /// Barra de progresso linear ondulada do Material 3 Expressive: a parte feita é uma onda que
 /// anda devagar; o resto é uma linha reta. Parada com "Reduzir movimento".
-/// Bolinha da conexão: azul que "respira" enquanto conectada, vazia depois que saiu. As duas têm
-/// o MESMO tamanho (8 pt): o pulso é só a opacidade indo de cheia a fraca e voltando, sem anel que
+/// Bolinha da conexão, três estados: azul que "respira" (conectada e olhando), azul parado e mais
+/// claro (conectada, em outra aba) e vazia (saiu). Todas têm o MESMO tamanho (8 pt): o pulso é só a opacidade indo de cheia a fraca e voltando, sem anel que
 /// cresça (um anel faria a azul parecer maior e seria cortado pela lista). Com "Reduzir movimento"
 /// ligado, fica o azul parado.
 ///
@@ -217,11 +217,16 @@ private struct StudentDetailCard: View {
 /// 16x16 px (8 pt) e a opacidade da azul varia entre 0,3 e 1 em ciclos de 2,4 s.
 private struct PontoDeConexao: View {
     let ativa: Bool
+    /// A aba está à vista (a pessoa está olhando). Conectada e olhando: azul que respira;
+    /// conectada, mas em outra aba ou janela: azul parado e mais claro; saiu: vazia.
+    let olhando: Bool
 
     var body: some View {
         Group {
-            if ativa {
+            if ativa && olhando {
                 PontoAzul(cor: NSColor(M3.primary), pulsa: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+            } else if ativa {
+                Circle().fill(M3.primary).opacity(0.45)
             } else {
                 ZStack {
                     Circle().fill(M3.surface)

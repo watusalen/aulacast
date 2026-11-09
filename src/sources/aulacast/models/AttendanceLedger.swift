@@ -20,6 +20,8 @@ public struct ConexaoDaPessoa: Equatable {
     public let entrouAs: Date
     public let saiuAs: Date?
     public let descricao: String?
+    /// A aba está visível e em foco (a pessoa está olhando). Só importa enquanto a conexão está `ativa`.
+    public let visivel: Bool
     public var ativa: Bool { saiuAs == nil }
 }
 
@@ -117,24 +119,25 @@ public final class AttendanceLedger {
 
         /// Cria ou atualiza o registro da conexão. Teto de `maxNomes`: sai a mais antiga já encerrada
         /// (ou a mais antiga, se todas estão ativas). O(maxNomes).
-        func registrarConexao(_ id: String, nome: String, entrouAs: Date) {
+        func registrarConexao(_ id: String, nome: String, entrouAs: Date, visivel: Bool) {
             if let i = registros.firstIndex(where: { $0.id == id }) {
                 let r = registros[i]
-                registros[i] = ConexaoDaPessoa(id: id, nome: nome, entrouAs: r.entrouAs, saiuAs: r.saiuAs, descricao: r.descricao)
+                registros[i] = ConexaoDaPessoa(id: id, nome: nome, entrouAs: r.entrouAs, saiuAs: r.saiuAs, descricao: r.descricao, visivel: visivel)
                 return
             }
-            registros.append(ConexaoDaPessoa(id: id, nome: nome, entrouAs: entrouAs, saiuAs: nil, descricao: nil))
+            registros.append(ConexaoDaPessoa(id: id, nome: nome, entrouAs: entrouAs, saiuAs: nil, descricao: nil, visivel: visivel))
             registros.sort { $0.entrouAs < $1.entrouAs }
             if registros.count > AttendanceLedger.maxNomes {
                 registros.remove(at: registros.firstIndex(where: { !$0.ativa }) ?? 0)
             }
         }
 
-        func alterarConexao(_ id: String, saiuAs: Date? = nil, descricao: String? = nil) {
+        func alterarConexao(_ id: String, saiuAs: Date? = nil, descricao: String? = nil, visivel: Bool? = nil) {
             guard let i = registros.firstIndex(where: { $0.id == id }) else { return }
             let r = registros[i]
             registros[i] = ConexaoDaPessoa(id: id, nome: r.nome, entrouAs: r.entrouAs,
-                                           saiuAs: saiuAs ?? r.saiuAs, descricao: descricao ?? r.descricao)
+                                           saiuAs: saiuAs ?? r.saiuAs, descricao: descricao ?? r.descricao,
+                                           visivel: visivel ?? r.visivel)
         }
 
         /// Reconexão do MESMO navegador (mesmo nome e mesma descrição, já encerrado): em vez de
@@ -153,7 +156,7 @@ public final class AttendanceLedger {
             }
             guard let (j, antigo) = candidatos.max(by: { ($0.element.saiuAs ?? .distantPast) < ($1.element.saiuAs ?? .distantPast) })
                     .map({ ($0.offset, $0.element) }) else { return }
-            registros[j] = ConexaoDaPessoa(id: id, nome: novo.nome, entrouAs: antigo.entrouAs, saiuAs: nil, descricao: descricao)
+            registros[j] = ConexaoDaPessoa(id: id, nome: novo.nome, entrouAs: antigo.entrouAs, saiuAs: nil, descricao: descricao, visivel: novo.visivel)
             registros.remove(at: i)
         }
 
@@ -243,7 +246,7 @@ public final class AttendanceLedger {
             pessoa = fundir(pessoa, em: outra)
         }
         pessoa.registrarNome(name, chave: chave, em: instante, viaIP: viaIP)
-        pessoa.registrarConexao(clientId, nome: name, entrouAs: conexao.desde)
+        pessoa.registrarConexao(clientId, nome: name, entrouAs: conexao.desde, visivel: conexao.visivel)
         pessoa.nome = name
         pessoa.chaves.insert(chave)
         // Homônimo conectado de outro IP: quem chegou antes continua dono do nome.
@@ -258,6 +261,7 @@ public final class AttendanceLedger {
         pessoa.somar(ate: acumulado)
         conexao.visivel = visible
         conexoes[clientId] = conexao
+        pessoa.alterarConexao(clientId, visivel: visible)
         if visible {
             pessoa.visiveis += 1
         } else {
