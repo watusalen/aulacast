@@ -186,6 +186,7 @@ src/
   tests/aulacast-tests/     # Suíte de testes Swift
   web-assets/               # Cliente web do participante (HTML/CSS/JS sem framework) e as fontes
 scripts/                    # build-app.sh, gerar-dmg.sh, gerar-appstore.sh, entitlements, PrivacyInfo.xcprivacy, ícone
+CLAUDE.md                   # Guia para publicar na Mac App Store (para quem for publicar, com ou sem Claude)
 docs/                       # Índice (docs/README.md), requisitos, casos de uso, histórias, arquitetura, ADRs e padrões
 ```
 

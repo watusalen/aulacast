@@ -124,6 +124,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key> <string>$VERSAO</string>
     <key>CFBundleVersion</key>         <string>$BUILD</string>
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
+    <!-- Português do Brasil: sem isto o macOS mostra os menus do sistema em inglês ("Window"). -->
+    <key>CFBundleDevelopmentRegion</key> <string>pt-BR</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>pt-BR</string>
+        <string>pt</string>
+    </array>
     <key>LSMinimumSystemVersion</key>  <string>$MACOS_MINIMO</string>
     <key>NSHighResolutionCapable</key> <true/>
     <key>LSApplicationCategoryType</key> <string>public.app-category.education</string>
